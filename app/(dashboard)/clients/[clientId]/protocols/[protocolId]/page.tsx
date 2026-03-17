@@ -1,0 +1,421 @@
+﻿'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { useParams } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft, Download, Mail, Loader2, CheckCircle } from 'lucide-react'
+
+type Protocol = {
+  id: string; name: string; protocol_type: string; stage: string
+  generation_state: string | null; effective_date: string
+  sessions_per_week: number | null; complexity_ceiling: number | null
+  volume_target: string | null; calorie_target: number | null
+  protein_target_g: number | null; carb_target_g: number | null
+  fat_target_g: number | null; notes: string | null
+  protocol_payload: Record<string, unknown>
+}
+
+type Client = { full_name: string; email: string }
+
+type ExerciseRow = {
+  exerciseName: string; sets: number; reps: string
+  tempo?: string; loadGuidance?: string; coachingCue?: string; swapOption?: string
+}
+
+type MealSlot = { foods: string; protein: string; carbs: string; fats: string; timing: string; notes: string }
+
+function SectionHeader({ title, color }: { title: string; color: string }) {
+  return (
+    <div style={{ borderLeft: `4px solid ${color}`, paddingLeft: '12px', marginBottom: '16px' }}>
+      <div style={{ fontSize: '14px', fontWeight: '800', color, textTransform: 'uppercase', letterSpacing: '1px' }}>{title}</div>
+    </div>
+  )
+}
+
+function ExerciseTable({ title, exercises }: { title: string; exercises: ExerciseRow[] }) {
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <div style={{ fontSize: '9px', fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '6px' }}>{title}</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+        <thead>
+          <tr style={{ background: '#f5f5f5' }}>
+            {['Exercise', 'Sets', 'Reps', 'Tempo', 'Load', 'Coaching Cue'].map(h => (
+              <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontSize: '9px', color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #eee' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {exercises.map((ex, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+              <td style={{ padding: '7px 8px', fontWeight: '600', color: '#333' }}>
+                {ex.exerciseName}
+                {ex.swapOption && <div style={{ fontSize: '9px', color: '#888', marginTop: '2px' }}>→ {ex.swapOption}</div>}
+              </td>
+              <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '700', color: '#555' }}>{ex.sets}</td>
+              <td style={{ padding: '7px 8px', textAlign: 'center', color: '#555' }}>{ex.reps}</td>
+              <td style={{ padding: '7px 8px', textAlign: 'center', color: '#888' }}>{ex.tempo ?? '—'}</td>
+              <td style={{ padding: '7px 8px', color: '#b5451b', fontSize: '10px' }}>{ex.loadGuidance ?? '—'}</td>
+              <td style={{ padding: '7px 8px', color: '#666', fontSize: '10px' }}>{ex.coachingCue ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function BSLDSTable({ bsldsTemplate }: { bsldsTemplate: Record<string, unknown> }) {
+  const days = [
+    { key: 'trainingDay', label: 'Training Day' },
+    { key: 'restDay', label: 'Rest Day' },
+  ]
+  const slots = [
+    { key: 'breakfast', label: 'B — Breakfast' },
+    { key: 'morningSnack', label: 'S — Snack' },
+    { key: 'lunch', label: 'L — Lunch' },
+    { key: 'dinner', label: 'D — Dinner' },
+    { key: 'eveningSnack', label: 'S — Eve Snack' },
+  ]
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <div style={{ fontSize: '10px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+        BSLDS Meal Structure
+      </div>
+      {days.map(day => {
+        const dayData = bsldsTemplate[day.key] as Record<string, MealSlot> | undefined
+        if (!dayData) return null
+        return (
+          <div key={day.key} style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '10px', fontWeight: '700', color: '#b5451b', textTransform: 'uppercase', marginBottom: '4px' }}>{day.label}</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+              <thead>
+                <tr style={{ background: '#fff8f5' }}>
+                  {['Meal', 'Foods', 'Protein', 'Carbs', 'Fats', 'Timing', 'Notes'].map(h => (
+                    <th key={h} style={{ padding: '5px 6px', textAlign: 'left', fontSize: '8px', color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #fde0d0' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {slots.map((slot, i) => {
+                  const meal = dayData[slot.key]
+                  if (!meal) return null
+                  return (
+                    <tr key={slot.key} style={{ borderBottom: '1px solid #fafafa', background: i % 2 === 0 ? '#fff' : '#fff8f5' }}>
+                      <td style={{ padding: '6px', fontWeight: '600', color: '#b5451b', whiteSpace: 'nowrap' }}>{slot.label}</td>
+                      <td style={{ padding: '6px', color: '#333' }}>{meal.foods}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: '700', color: '#2d6a4f' }}>{meal.protein}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: '700', color: '#b8860b' }}>{meal.carbs}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: '700', color: '#1a5276' }}>{meal.fats}</td>
+                      <td style={{ padding: '6px', color: '#888', whiteSpace: 'nowrap' }}>{meal.timing}</td>
+                      <td style={{ padding: '6px', color: '#aaa', fontSize: '9px' }}>{meal.notes || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export default function ProtocolPDFPage() {
+  const params = useParams<{ clientId: string; protocolId: string }>()
+  const printRef = useRef<HTMLDivElement>(null)
+
+  const [protocol, setProtocol] = useState<Protocol | null>(null)
+  const [client, setClient] = useState<Client | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [emailing, setEmailing] = useState(false)
+  const [emailSuccess, setEmailSuccess] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch(`/api/clients/${params.clientId}/protocols/${params.protocolId}`)
+      .then(r => r.json())
+      .then(d => { setProtocol(d.protocol); setClient(d.client); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [params.clientId, params.protocolId])
+
+  async function handleDownloadPDF() {
+    if (!printRef.current || !protocol || !client) return
+    setGenerating(true); setError('')
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: html2canvas } = await import('html2canvas')
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+      })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width
+      let heightLeft = imgHeight
+      let position = 0
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight)
+      heightLeft -= pdfHeight
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight)
+        heightLeft -= pdfHeight
+      }
+      const fileName = `${client.full_name.replace(/\s+/g, '_')}_${protocol.name.slice(0, 30).replace(/\s+/g, '_')}_${protocol.effective_date}.pdf`
+      pdf.save(fileName)
+    } catch (err) {
+      setError('PDF generation failed. Please try again.')
+      console.error(err)
+    } finally { setGenerating(false) }
+  }
+
+  async function handleEmailPDF() {
+    if (!protocol || !client || !printRef.current) return
+    setEmailing(true); setError('')
+    try {
+      // Step 1 — generate and download PDF
+      const { default: jsPDF } = await import('jspdf')
+      const { default: html2canvas } = await import('html2canvas')
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+      })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width
+      let heightLeft = imgHeight
+      let position = 0
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight)
+      heightLeft -= pdfHeight
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight)
+        heightLeft -= pdfHeight
+      }
+      const fileName = `${client.full_name.replace(/\s+/g, '_')}_${protocol.name.slice(0, 30).replace(/\s+/g, '_')}.pdf`
+      pdf.save(fileName)
+
+      // Step 2 — get email draft content
+      const res = await fetch(`/api/clients/${params.clientId}/protocols/${params.protocolId}/email`, { method: 'POST' })
+      const data = await res.json()
+
+      // Step 3 — open Gmail compose
+      const to = data.to ?? client.email
+      const subject = data.subject ?? `Your FORGË Protocol: ${protocol.name}`
+      const body = (data.body ?? '') + '\n\n---\n📎 Please see the attached PDF protocol document.'
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.open(gmailUrl, '_blank')
+
+      setEmailSuccess(true)
+      setTimeout(() => setEmailSuccess(false), 5000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Email send failed.')
+    } finally { setEmailing(false) }
+  }
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-white/20" />
+    </div>
+  )
+
+  if (!protocol || !client) return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <p className="text-white/40">Protocol not found</p>
+    </div>
+  )
+
+  const ss = protocol.protocol_payload?.sessionStructure as Record<string, unknown> | undefined
+  const ns = protocol.protocol_payload?.nutritionStructure as Record<string, unknown> | undefined
+  const rs = protocol.protocol_payload?.recoveryStructure as Record<string, unknown> | undefined
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a]">
+      <div className="sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/8 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href={`/clients/${params.clientId}/protocols`}
+            className="w-8 h-8 rounded-lg bg-white/6 border border-white/10 flex items-center justify-center text-white/50 hover:text-white transition-colors">
+            <ArrowLeft size={14} />
+          </Link>
+          <div>
+            <p className="text-sm font-semibold text-white truncate max-w-xs">{protocol.name}</p>
+            <p className="text-xs text-white/40">{client.full_name} · {protocol.effective_date}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {emailSuccess && <span className="flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> PDF downloaded — attach it to the Gmail window that just opened</span>}
+          {error && <span className="text-xs text-red-400">{error}</span>}
+          <button onClick={handleEmailPDF} disabled={emailing}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white/6 border border-white/10 rounded-xl text-xs text-white/60 hover:text-white transition-colors disabled:opacity-50">
+            {emailing ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />} Email to Client
+          </button>
+          <button onClick={handleDownloadPDF} disabled={generating}
+            className="forge-btn-gold flex items-center gap-1.5 text-sm py-2 disabled:opacity-50">
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {generating ? 'Generating...' : 'Download PDF'}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex justify-center py-8 px-4">
+        <div ref={printRef} className="bg-white w-full max-w-[800px] p-12 shadow-2xl" style={{ fontFamily: 'Arial, sans-serif', color: '#1a1a1a' }}>
+
+          <div style={{ borderBottom: '3px solid #4B0082', paddingBottom: '20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: '#4B0082', letterSpacing: '2px' }}>FORGË</div>
+              <div style={{ fontSize: '10px', color: '#888', letterSpacing: '3px', textTransform: 'uppercase' }}>Behavioral Intelligence Engine</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '10px', color: '#888' }}>Coach Dee Byfield, MBA, CHC, CSNC, CPT</div>
+              <div style={{ fontSize: '10px', color: '#888' }}>DFitFactor · dee@dfitfactor.com</div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '4px' }}>Client Protocol</div>
+            <div style={{ fontSize: '24px', fontWeight: '800', color: '#1a1a1a', marginBottom: '8px', lineHeight: '1.2' }}>{protocol.name}</div>
+            <div style={{ display: 'flex', gap: '20px', fontSize: '11px', color: '#666', flexWrap: 'wrap' }}>
+              <span><strong>Client:</strong> {client.full_name}</span>
+              <span><strong>Stage:</strong> {protocol.stage.charAt(0).toUpperCase() + protocol.stage.slice(1)}</span>
+              {protocol.generation_state && <span><strong>State:</strong> {protocol.generation_state}</span>}
+              <span><strong>Date:</strong> {protocol.effective_date}</span>
+            </div>
+          </div>
+
+          {protocol.protocol_payload?.rationale && (
+            <div style={{ background: '#f8f4ff', border: '1px solid #e0d4f7', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: '#4B0082', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>Protocol Rationale</div>
+              <div style={{ fontSize: '12px', color: '#444', lineHeight: '1.7' }}>{protocol.protocol_payload.rationale as string}</div>
+            </div>
+          )}
+
+          {ss && (
+            <div style={{ marginBottom: '28px' }}>
+              <SectionHeader title="Movement Protocol" color="#2d6a4f" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                {[
+                  { label: 'Sessions/Week', value: String(ss.sessionsPerWeek ?? protocol.sessions_per_week ?? '—') },
+                  { label: 'Session Type', value: String(ss.sessionType ?? '—') },
+                  { label: 'Complexity', value: ss.complexityCeiling ? 'Tier ' + ss.complexityCeiling : '—' },
+                  { label: 'Volume', value: String(ss.volumeLevel ?? protocol.volume_target ?? '—') },
+                ].map(s => (
+                  <div key={s.label} style={{ background: '#f0faf4', border: '1px solid #d4edda', borderRadius: '6px', padding: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#2d6a4f' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              {(ss.activationBlock as ExerciseRow[])?.length > 0 && <ExerciseTable title="Activation" exercises={ss.activationBlock as ExerciseRow[]} />}
+              {(ss.primaryBlock as ExerciseRow[])?.length > 0 && <ExerciseTable title="Primary" exercises={ss.primaryBlock as ExerciseRow[]} />}
+              {(ss.accessoryBlock as ExerciseRow[])?.length > 0 && <ExerciseTable title="Accessory" exercises={ss.accessoryBlock as ExerciseRow[]} />}
+            </div>
+          )}
+
+          {ns && (
+            <div style={{ marginBottom: '28px' }}>
+              <SectionHeader title="Nutrition Protocol" color="#b5451b" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                {[
+                  { label: 'Calories', value: String(ns.dailyCalories ?? protocol.calorie_target ?? '—') + ' kcal' },
+                  { label: 'Protein', value: String(ns.proteinG ?? protocol.protein_target_g ?? '—') + 'g' },
+                  { label: 'Carbs', value: String(ns.carbG ?? protocol.carb_target_g ?? '—') + 'g' },
+                  { label: 'Fats', value: String(ns.fatG ?? protocol.fat_target_g ?? '—') + 'g' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: '#fff8f5', border: '1px solid #fde0d0', borderRadius: '6px', padding: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#b5451b' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              {ns.mealTiming && (
+                <div style={{ fontSize: '11px', color: '#555', marginBottom: '12px', lineHeight: '1.6', background: '#fafafa', padding: '10px', borderRadius: '6px' }}>
+                  <strong>Meal Timing:</strong> {ns.mealTiming as string}
+                </div>
+              )}
+              {ns.bsldsTemplate && <BSLDSTable bsldsTemplate={ns.bsldsTemplate as Record<string, unknown>} />}
+              {(ns.keyGuidelines as string[])?.length > 0 && (
+                <div style={{ marginTop: '12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Key Guidelines</div>
+                  {(ns.keyGuidelines as string[]).map((g, i) => (
+                    <div key={i} style={{ fontSize: '11px', color: '#444', marginBottom: '5px', display: 'flex', gap: '8px' }}>
+                      <span style={{ color: '#D4AF37', fontWeight: '700', flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
+                      <span>{g}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ns.hydrationTargetOz && (
+                <div style={{ marginTop: '12px', fontSize: '11px', color: '#555', background: '#f0f8ff', padding: '10px', borderRadius: '6px', border: '1px solid #d0e8f8' }}>
+                  <strong>Hydration Target:</strong> {String(ns.hydrationTargetOz)} oz/day
+                  {(ns.hydrationSchedule as Array<Record<string, string>>)?.map((h, i) => (
+                    <div key={i} style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#888' }}>{h.timing}</span>
+                      <span style={{ fontWeight: '600', color: '#1e6fa8' }}>{h.amount} {h.notes ? '· ' + h.notes : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ns.disruption_protocol && (
+                <div style={{ marginTop: '12px', background: '#fffbf0', border: '1px solid #fde8a0', borderRadius: '6px', padding: '10px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#b8860b', textTransform: 'uppercase', marginBottom: '4px' }}>When Life Disrupts the Plan</div>
+                  <div style={{ fontSize: '11px', color: '#555', lineHeight: '1.6' }}>{ns.disruption_protocol as string}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {rs && (
+            <div style={{ marginBottom: '28px' }}>
+              <SectionHeader title="Recovery Protocol" color="#1a5276" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                {[
+                  { label: 'Sleep Target', value: String(rs.sleepTarget ?? '—') },
+                  { label: 'Recovery Days', value: String(rs.activeRecoveryDays ?? '—') + '/week' },
+                  { label: 'Mobility', value: String(rs.mobilityMinutes ?? '—') + ' min/day' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: '#f0f5ff', border: '1px solid #d0dff8', borderRadius: '6px', padding: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#1a5276' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              {rs.stressReductionProtocol && (
+                <div style={{ fontSize: '11px', color: '#555', marginBottom: '12px', background: '#f0f5ff', padding: '10px', borderRadius: '6px', border: '1px solid #d0dff8', lineHeight: '1.6' }}>
+                  <strong>Stress Reduction:</strong> {rs.stressReductionProtocol as string}
+                </div>
+              )}
+              {(rs.keyRecoveryPractices as string[])?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Key Recovery Practices</div>
+                  {(rs.keyRecoveryPractices as string[]).map((p, i) => (
+                    <div key={i} style={{ fontSize: '11px', color: '#444', marginBottom: '5px', display: 'flex', gap: '8px' }}>
+                      <span style={{ color: '#D4AF37', fontWeight: '700', flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
+                      <span>{p}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {protocol.protocol_payload?.clientFacingMessage && (
+            <div style={{ background: '#f8f4ff', border: '1px solid #e0d4f7', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: '#4B0082', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>A Note From Your Coach</div>
+              <div style={{ fontSize: '12px', color: '#444', lineHeight: '1.8', fontStyle: 'italic' }}>{protocol.protocol_payload.clientFacingMessage as string}</div>
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid #eee', paddingTop: '16px', fontSize: '9px', color: '#aaa', lineHeight: '1.6' }}>
+            This protocol is provided for educational wellness coaching purposes and does not replace medical advice.
+            Consult your healthcare provider before making nutrition, supplement, or exercise changes.
+            © DFitFactor {new Date().getFullYear()} · Strength Forged In Training
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --forge-purple: #4B1D8E;
+  --forge-gold: #D4AF37;
+  --forge-surface: #0F0A1E;
+}
+
+@layer base {
+  * {
+    @apply border-forge-border;
+  }
+  
+  body {
+    @apply bg-forge-surface text-forge-text-primary;
+    background-image: 
+      radial-gradient(ellipse at 10% 20%, rgba(75, 29, 142, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 80%, rgba(75, 29, 142, 0.05) 0%, transparent 50%);
+  }
+  
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-forge-surface-2;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-forge-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-forge-purple;
+  }
+}
+
+@layer components {
+  .forge-card {
+    @apply bg-forge-surface-2 border border-forge-border rounded-xl p-6;
+  }
+  
+  .forge-card-hover {
+    @apply forge-card hover:border-forge-purple-light transition-colors duration-200 cursor-pointer;
+  }
+
+  .forge-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .forge-input {
+    @apply w-full bg-forge-surface-3 border border-forge-border rounded-lg px-4 py-2.5
+           text-forge-text-primary placeholder-forge-text-muted
+           focus:outline-none focus:border-forge-purple-light focus:ring-1 focus:ring-forge-purple-light
+           transition-colors duration-200;
+  }
+
+  .forge-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5
+           bg-forge-purple hover:bg-forge-purple-mid text-white font-medium rounded-lg
+           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-forge-purple focus:ring-offset-2 focus:ring-offset-forge-surface
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .forge-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5
+           bg-forge-surface-3 hover:bg-forge-border text-forge-text-primary font-medium rounded-lg
+           border border-forge-border transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-forge-purple focus:ring-offset-2 focus:ring-offset-forge-surface;
+  }
+
+  .forge-btn-gold {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5
+           bg-forge-gold hover:bg-forge-gold-light text-forge-purple-dark font-semibold rounded-lg
+           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-forge-gold;
+  }
+
+  .forge-label {
+    @apply block text-sm font-medium text-forge-text-secondary mb-1.5;
+  }
+
+  .forge-section-title {
+    @apply text-lg font-semibold text-forge-text-primary mb-1;
+  }
+
+  .stage-badge {
+    @apply forge-badge bg-forge-purple/20 text-forge-gold border border-forge-purple/30;
+  }
+
+  .state-badge-a { @apply forge-badge bg-state-stable/20 text-state-stable border border-state-stable/30; }
+  .state-badge-b { @apply forge-badge bg-state-consolidation/20 text-state-consolidation border border-state-consolidation/30; }
+  .state-badge-c { @apply forge-badge bg-state-simplified/20 text-state-simplified border border-state-simplified/30; }
+  .state-badge-d { @apply forge-badge bg-state-recovery/20 text-state-recovery border border-state-recovery/30; }
+  .state-badge-e { @apply forge-badge bg-state-rebuild/20 text-state-rebuild border border-state-rebuild/30; }
+
+  .bie-bar {
+    @apply h-2 rounded-full bg-forge-surface-3 overflow-hidden;
+  }
+
+  .bie-bar-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+
+  .metric-card {
+    @apply forge-card flex flex-col gap-1;
+  }
+
+  .metric-value {
+    @apply text-3xl font-bold text-forge-text-primary;
+  }
+
+  .metric-label {
+    @apply text-sm text-forge-text-muted uppercase tracking-wide;
+  }
+
+  .metric-delta-up {
+    @apply text-xs text-state-stable flex items-center gap-1;
+  }
+
+  .metric-delta-down {
+    @apply text-xs text-state-recovery flex items-center gap-1;
+  }
+}
+
+@layer utilities {
+  .text-gold {
+    @apply text-forge-gold;
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 20px rgba(75, 29, 142, 0.3);
+  }
+
+  .gradient-gold {
+    background: linear-gradient(135deg, #D4AF37, #E8C84A);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
