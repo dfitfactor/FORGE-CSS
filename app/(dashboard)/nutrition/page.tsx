@@ -7,7 +7,7 @@ import { NutritionAdherenceChart } from '@/components/modules/nutrition/Nutritio
 import { Apple, Plus } from 'lucide-react'
 
 type Props = {
-  searchParams: Promise<{ clientId?: string }>
+  searchParams: { clientId?: string }
 }
 
 async function getCoachClients(coachId: string) {
@@ -21,8 +21,7 @@ export default async function NutritionPage({ searchParams }: Props) {
   const session = await getSession()
   if (!session) return null
 
-  const params = await searchParams
-  const clientId = params.clientId
+  const clientId = searchParams.clientId
 
   if (!clientId) {
     const clients = await getCoachClients(session.id)

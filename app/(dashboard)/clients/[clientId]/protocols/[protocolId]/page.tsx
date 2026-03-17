@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
@@ -286,10 +286,10 @@ export default function ProtocolPDFPage() {
             </div>
           </div>
 
-          {protocol.protocol_payload?.rationale && (
+          {typeof (protocol.protocol_payload as any)?.rationale === 'string' && (protocol.protocol_payload as any).rationale.length > 0 && (
             <div style={{ background: '#f8f4ff', border: '1px solid #e0d4f7', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
               <div style={{ fontSize: '10px', fontWeight: '700', color: '#4B0082', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>Protocol Rationale</div>
-              <div style={{ fontSize: '12px', color: '#444', lineHeight: '1.7' }}>{protocol.protocol_payload.rationale as string}</div>
+              <div style={{ fontSize: '12px', color: '#444', lineHeight: '1.7' }}>{String((protocol.protocol_payload as any).rationale)}</div>
             </div>
           )}
 
@@ -331,12 +331,14 @@ export default function ProtocolPDFPage() {
                   </div>
                 ))}
               </div>
-              {ns.mealTiming && (
+              {typeof (ns as any).mealTiming === 'string' && (ns as any).mealTiming.length > 0 && (
                 <div style={{ fontSize: '11px', color: '#555', marginBottom: '12px', lineHeight: '1.6', background: '#fafafa', padding: '10px', borderRadius: '6px' }}>
-                  <strong>Meal Timing:</strong> {ns.mealTiming as string}
+                  <strong>Meal Timing:</strong> {String((ns as any).mealTiming)}
                 </div>
               )}
-              {ns.bsldsTemplate && <BSLDSTable bsldsTemplate={ns.bsldsTemplate as Record<string, unknown>} />}
+              {Boolean((ns as any).bsldsTemplate) && (
+                <BSLDSTable bsldsTemplate={(ns as any).bsldsTemplate as Record<string, unknown>} />
+              )}
               {(ns.keyGuidelines as string[])?.length > 0 && (
                 <div style={{ marginTop: '12px' }}>
                   <div style={{ fontSize: '10px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Key Guidelines</div>
@@ -348,7 +350,7 @@ export default function ProtocolPDFPage() {
                   ))}
                 </div>
               )}
-              {ns.hydrationTargetOz && (
+              {Boolean((ns as any).hydrationTargetOz) && (
                 <div style={{ marginTop: '12px', fontSize: '11px', color: '#555', background: '#f0f8ff', padding: '10px', borderRadius: '6px', border: '1px solid #d0e8f8' }}>
                   <strong>Hydration Target:</strong> {String(ns.hydrationTargetOz)} oz/day
                   {(ns.hydrationSchedule as Array<Record<string, string>>)?.map((h, i) => (
@@ -359,10 +361,10 @@ export default function ProtocolPDFPage() {
                   ))}
                 </div>
               )}
-              {ns.disruption_protocol && (
+              {typeof (ns as any).disruption_protocol === 'string' && (ns as any).disruption_protocol.length > 0 && (
                 <div style={{ marginTop: '12px', background: '#fffbf0', border: '1px solid #fde8a0', borderRadius: '6px', padding: '10px' }}>
                   <div style={{ fontSize: '10px', fontWeight: '700', color: '#b8860b', textTransform: 'uppercase', marginBottom: '4px' }}>When Life Disrupts the Plan</div>
-                  <div style={{ fontSize: '11px', color: '#555', lineHeight: '1.6' }}>{ns.disruption_protocol as string}</div>
+                  <div style={{ fontSize: '11px', color: '#555', lineHeight: '1.6' }}>{String((ns as any).disruption_protocol)}</div>
                 </div>
               )}
             </div>
@@ -383,9 +385,9 @@ export default function ProtocolPDFPage() {
                   </div>
                 ))}
               </div>
-              {rs.stressReductionProtocol && (
+              {typeof (rs as any).stressReductionProtocol === 'string' && (rs as any).stressReductionProtocol.length > 0 && (
                 <div style={{ fontSize: '11px', color: '#555', marginBottom: '12px', background: '#f0f5ff', padding: '10px', borderRadius: '6px', border: '1px solid #d0dff8', lineHeight: '1.6' }}>
-                  <strong>Stress Reduction:</strong> {rs.stressReductionProtocol as string}
+                  <strong>Stress Reduction:</strong> {String((rs as any).stressReductionProtocol)}
                 </div>
               )}
               {(rs.keyRecoveryPractices as string[])?.length > 0 && (
@@ -402,10 +404,10 @@ export default function ProtocolPDFPage() {
             </div>
           )}
 
-          {protocol.protocol_payload?.clientFacingMessage && (
+          {typeof (protocol.protocol_payload as any)?.clientFacingMessage === 'string' && (protocol.protocol_payload as any).clientFacingMessage.length > 0 && (
             <div style={{ background: '#f8f4ff', border: '1px solid #e0d4f7', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
               <div style={{ fontSize: '10px', fontWeight: '700', color: '#4B0082', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>A Note From Your Coach</div>
-              <div style={{ fontSize: '12px', color: '#444', lineHeight: '1.8', fontStyle: 'italic' }}>{protocol.protocol_payload.clientFacingMessage as string}</div>
+              <div style={{ fontSize: '12px', color: '#444', lineHeight: '1.8', fontStyle: 'italic' }}>{String((protocol.protocol_payload as any).clientFacingMessage)}</div>
             </div>
           )}
 

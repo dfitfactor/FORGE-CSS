@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -39,8 +39,8 @@ export function Sidebar() {
 
   return (
     <aside
-      style={{ width: w, minWidth: w, maxWidth: w }}
-      className="min-h-screen bg-forge-surface-2 border-r border-forge-border flex flex-col overflow-hidden transition-all duration-200" style={{ width: w, minWidth: w, maxWidth: w, flex: `0 0 ${w}px` }}
+      className="min-h-screen bg-forge-surface-2 border-r border-forge-border flex flex-col overflow-hidden transition-all duration-200"
+      style={{ width: w, minWidth: w, maxWidth: w, flex: `0 0 ${w}px` }}
     >
       {/* Logo */}
       <div className={`border-b border-forge-border flex items-center ${collapsed ? 'px-3 py-5 justify-center' : 'px-6 py-5'}`}>

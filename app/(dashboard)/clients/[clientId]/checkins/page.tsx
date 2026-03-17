@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
@@ -332,7 +332,7 @@ export default function CheckinsPage() {
                       {['Yes', 'No'].map(opt => (
                         <button key={opt} type="button" onClick={() => setF('digestionIssues', opt === 'Yes')}
                           className={`px-4 py-2 rounded-xl text-sm border transition-all ${
-                            (form.digestionIssues === true && opt === 'Yes') || (form.digestionIssues === false && opt === 'No' && form.digestionIssues !== '')
+                            (form.digestionIssues === true && opt === 'Yes') || (form.digestionIssues === false && opt === 'No')
                               ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/40'
                               : 'bg-white/4 text-white/40 border-white/10'
                           }`}>{opt}</button>

@@ -139,7 +139,7 @@ export default function ClientsPage() {
     .sort((a, b) => {
       let av: string | number = 0, bv: string | number = 0
       if (sortKey === 'full_name') { av = a.full_name; bv = b.full_name }
-      else if (sortKey === 'current_stage') { av = a.current_stage; bv = b.current_stage }
+      else if (sortKey === 'current_stage') { av = a.current_stage ?? ''; bv = b.current_stage ?? '' }
       else if (sortKey === 'bar') { av = Number(a.bar_score ?? -1); bv = Number(b.bar_score ?? -1) }
       else if (sortKey === 'dbi') { av = Number(a.dbi_score ?? -1); bv = Number(b.dbi_score ?? -1) }
       else if (sortKey === 'bli') { av = Number(a.bli_score ?? -1); bv = Number(b.bli_score ?? -1) }
@@ -275,8 +275,8 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono uppercase capitalize
-                          ${STAGE_COLORS[c.current_stage] ?? 'text-white/40 bg-white/5 border-white/10'}`}>
-                          {c.current_stage}
+                          ${STAGE_COLORS[c.current_stage ?? ''] ?? 'text-white/40 bg-white/5 border-white/10'}`}>
+                          {c.current_stage ?? '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={Number(c.bar_score)} /></td>

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
@@ -122,18 +122,6 @@ export default function DocumentsPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally { setUploading(false) }
-  }
-
-  async function handleView(doc: { file_data?: string; mime_type?: string; file_name?: string }) {
-    if (!doc.file_data) { alert('No file data available'); return }
-    try {
-      const byteChars = atob(doc.file_data)
-      const byteArr = new Uint8Array(byteChars.length)
-      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i)
-      const blob = new Blob([byteArr], { type: doc.mime_type ?? 'application/octet-stream' })
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-    } catch { alert('Could not open file') }
   }
 
   async function handleView(doc: { file_data?: string; mime_type?: string; file_name?: string }) {

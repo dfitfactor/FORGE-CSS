@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
 import { verifyPassword, createSession } from '@/lib/auth'
@@ -78,11 +78,7 @@ export async function POST(request: NextRequest) {
     db.query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [user.id])
       .catch((err) => console.warn('[auth/login] last_login_at update failed:', err.message))
 
-    const token = await createSession(user.id, {
-      email: user.email,
-      fullName: user.full_name,
-      role: user.role,
-    })
+    const token = await createSession(user.id)
 
     cookies().set({
       name: 'forge_session',

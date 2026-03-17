@@ -1,10 +1,10 @@
-﻿/**
+/**
  * FORGÃ‹ AI Service
  * Claude API integration for protocol generation, signal extraction, and coaching insights
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import { BIEVariables, ForgeStage, GenerationState } from '../lib/bie-engine'
+import { BIEVariables, ForgeStage, GenerationState } from '../../lib/bie-engine'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,

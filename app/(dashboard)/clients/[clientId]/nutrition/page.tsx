@@ -1,4 +1,4 @@
-﻿import { notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Link from 'next/link'
@@ -129,6 +129,7 @@ export default async function NutritionPage({ params }: { params: { clientId: st
   if (!client || client.coach_id !== session.id) return notFound()
 
   const ns = protocol?.protocol_payload?.nutritionStructure
+  const keyGuidelines = (ns?.keyGuidelines ?? []) as string[]
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
@@ -252,11 +253,11 @@ export default async function NutritionPage({ params }: { params: { clientId: st
             )}
 
             {/* Key guidelines */}
-            {ns?.keyGuidelines?.length > 0 && (
+            {keyGuidelines.length > 0 && (
               <div className="bg-[#111111] border border-white/8 rounded-2xl p-5">
                 <p className="text-xs font-mono uppercase tracking-widest text-white/30 mb-4">Key Guidelines</p>
                 <div className="space-y-3">
-                  {ns.keyGuidelines.map((g, i) => (
+                  {keyGuidelines.map((g, i) => (
                     <div key={i} className="flex gap-3">
                       <span className="text-[#D4AF37] flex-shrink-0 mt-0.5 text-xs font-bold font-mono">{String(i + 1).padStart(2, '0')}</span>
                       <p className="text-sm text-white/65 leading-relaxed">{g}</p>
