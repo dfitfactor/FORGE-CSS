@@ -236,7 +236,7 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-6',
-      max_tokens: 4096,
+      max_tokens: 4000,
       system: FORGE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     })
@@ -245,16 +245,26 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
     let raw = content.text.trim()
-    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
-    const jsonMatch = raw.match(/\{[\s\S]*\}/)
-    if (jsonMatch) raw = jsonMatch[0]
+    // Strip common markdown fences more aggressively
+    let cleaned = raw
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim()
+
+    // Extract just the JSON object between the first { and last }
+    const firstBrace = cleaned.indexOf('{')
+    const lastBrace = cleaned.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+    }
 
     let generated
     try {
-      generated = JSON.parse(raw)
+      generated = JSON.parse(cleaned)
     } catch {
-      console.error('Parse error. Raw:', raw.slice(0, 300))
-      return NextResponse.json({ error: 'AI response parsing failed', raw: raw.slice(0, 500) }, { status: 500 })
+      console.error('Parse error. Raw:', cleaned.slice(0, 300))
+      return NextResponse.json({ error: 'AI response parsing failed', raw: cleaned.slice(0, 500) }, { status: 500 })
     }
 
     return NextResponse.json({
