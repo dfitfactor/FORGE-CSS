@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Anthropic from '@anthropic-ai/sdk'
@@ -57,7 +57,7 @@ export async function POST(
       bar: number; bli: number; dbi: number; cdi: number; lsi: number; pps: number
       generation_state: string
     }>(
-      `SELECT bar, bli, dbi, cdi, lsi, pps, generation_state
+      `SELECT bar_score AS bar, bli_score AS bli, dbi_score AS dbi, cdi, lsi, pps, generation_state
        FROM behavioral_snapshots WHERE client_id = $1
        ORDER BY snapshot_date DESC LIMIT 1`,
       [params.clientId]
