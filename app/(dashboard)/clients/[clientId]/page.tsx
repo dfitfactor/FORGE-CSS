@@ -56,16 +56,19 @@ async function getClientDetail(clientId: string, coachId: string) {
 }
 
 export default async function ClientDetailPage({ params }: { params: { clientId: string } }) {
-  const session = await getSession()
-  if (!session) return null
-  const data = await getClientDetail(params.clientId, session.id)
-  if (!data) notFound()
-  const { client, latestSnapshot, recentTimeline } = data
-  const snap = latestSnapshot
-  const weeksInStage = client.stage_entered_at
-    ? Math.floor((Date.now() - new Date(client.stage_entered_at).getTime()) / (1000 * 60 * 60 * 24 * 7))
-    : 0
-  const initials = client.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+  try {
+    const session = await getSession()
+    if (!session) return null
+
+    const data = await getClientDetail(params.clientId, session.id)
+    if (!data) return notFound()
+
+    const { client, latestSnapshot, recentTimeline } = data
+    const snap = latestSnapshot
+    const weeksInStage = client.stage_entered_at
+      ? Math.floor((Date.now() - new Date(client.stage_entered_at).getTime()) / (1000 * 60 * 60 * 24 * 7))
+      : 0
+    const initials = client.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
 
   const NAV_SECTIONS = [
     { href: 'movement',     label: 'Movement',     icon: Dumbbell,      desc: 'Protocol, sessions, BIE guidance' },
@@ -80,11 +83,11 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
     { href: 'documents',    label: 'Documents',    icon: FileText,      desc: 'Uploads for AI insights and protocols' },
   ]
 
-  return (
-    <div className="p-8 space-y-6 animate-fade-in">
-      <Link href="/clients" className="flex items-center gap-2 text-sm text-forge-text-muted hover:text-forge-text-primary transition-colors">
-        <ArrowLeft className="w-4 h-4" /> All Clients
-      </Link>
+    return (
+      <div className="p-8 space-y-6 animate-fade-in">
+        <Link href="/clients" className="flex items-center gap-2 text-sm text-forge-text-muted hover:text-forge-text-primary transition-colors">
+          <ArrowLeft className="w-4 h-4" /> All Clients
+        </Link>
 
       <div className="forge-card">
         <div className="flex items-start gap-5">
@@ -167,31 +170,47 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
         </div>
       </div>
 
-      {recentTimeline.length > 0 && (
-        <div className="forge-card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="forge-section-title flex items-center gap-2">
-              <Clock className="w-4 h-4 text-forge-gold" /> Recent Activity
-            </h2>
-            <Link href={`/clients/${client.id}/timeline`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
-              Full timeline
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {recentTimeline.map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-2.5">
-                <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 bg-forge-gold/60" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-forge-text-secondary truncate">{event.title}</div>
-                  <div className="text-xs text-forge-text-muted">
-                    {event.event_date ? new Date(event.event_date).toLocaleDateString() : ''}
+        {recentTimeline.length > 0 && (
+          <div className="forge-card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="forge-section-title flex items-center gap-2">
+                <Clock className="w-4 h-4 text-forge-gold" /> Recent Activity
+              </h2>
+              <Link href={`/clients/${client.id}/timeline`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
+                Full timeline
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {recentTimeline.map((event, i) => (
+                <div key={i} className="flex items-start gap-3 p-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 bg-forge-gold/60" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-forge-text-secondary truncate">{event.title}</div>
+                    <div className="text-xs text-forge-text-muted">
+                      {event.event_date ? new Date(event.event_date).toLocaleDateString() : ''}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+        )}
+      </div>
+    )
+  } catch (err) {
+    console.error('[clients/[clientId]] page error:', err)
+    return (
+      <div className="p-8 space-y-4">
+        <Link href="/clients" className="flex items-center gap-2 text-sm text-forge-text-muted hover:text-forge-text-primary transition-colors">
+          <ArrowLeft className="w-4 h-4" /> All Clients
+        </Link>
+        <div className="forge-card">
+          <h1 className="text-lg font-bold text-forge-text-primary">Client Profile</h1>
+          <p className="text-sm text-forge-text-muted mt-2">
+            This client profile could not be loaded in the current staging environment.
+          </p>
         </div>
-      )}
-    </div>
-  )
+      </div>
+    )
+  }
 }
