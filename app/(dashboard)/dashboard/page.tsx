@@ -7,79 +7,108 @@ import {
 import Link from 'next/link'
 
 async function getDashboardStats(coachId: string) {
-  const [clientStats, alerts, recentActivity] = await Promise.all([
-    db.queryOne<{
-      total: number
-      active: number
-      paused: number
-      needs_attention: number
-    }>(`
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-        COUNT(CASE WHEN status = 'paused' THEN 1 END) as paused,
-        COUNT(CASE WHEN EXISTS (
-          SELECT 1 FROM behavioral_snapshots bs 
-          WHERE bs.client_id = clients.id 
-          AND bs.snapshot_date >= CURRENT_DATE - INTERVAL '7 days'
-          AND (bs.dbi > 50 OR bs.bar < 50)
-        ) THEN 1 END) as needs_attention
-      FROM clients WHERE coach_id = $1 AND status != 'churned'
-    `, [coachId]),
+  try {
+    const [clientStats, alerts, recentActivity] = await Promise.all([
+      db.queryOne<{
+        total: number
+        active: number
+        paused: number
+        needs_attention: number
+      }>(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
+          COUNT(CASE WHEN status = 'paused' THEN 1 END) as paused,
+          COUNT(CASE WHEN EXISTS (
+            SELECT 1 FROM behavioral_snapshots bs 
+            WHERE bs.client_id = clients.id 
+            AND bs.snapshot_date >= CURRENT_DATE - INTERVAL '7 days'
+            AND (bs.dbi_score > 50 OR bs.bar_score < 50)
+          ) THEN 1 END) as needs_attention
+        FROM clients WHERE coach_id = $1 AND status != 'churned'
+      `, [coachId]),
 
-    db.query<{
-      client_id: string
-      client_name: string
-      alert_type: string
-      severity: string
-      bar: number
-      dbi: number
-      snapshot_date: string
-    }>(`
-      SELECT 
-        c.id as client_id,
-        c.full_name as client_name,
-        CASE 
-          WHEN bs.dbi >= 70 THEN 'Critical DBI'
-          WHEN bs.bar < 35 THEN 'Low BAR'
-          WHEN bs.dbi >= 50 THEN 'Elevated DBI'
-          ELSE 'Declining BAR'
-        END as alert_type,
-        CASE 
-          WHEN bs.dbi >= 70 OR bs.bar < 35 THEN 'critical'
-          ELSE 'warning'
-        END as severity,
-        bs.bar,
-        bs.dbi,
-        bs.snapshot_date::text
-      FROM clients c
-      JOIN behavioral_snapshots bs ON bs.client_id = c.id
-      WHERE c.coach_id = $1
-        AND bs.snapshot_date = (
-          SELECT MAX(snapshot_date) FROM behavioral_snapshots WHERE client_id = c.id
-        )
-        AND (bs.dbi >= 50 OR bs.bar < 50)
-        AND c.status = 'active'
-      ORDER BY bs.dbi DESC, bs.bar ASC
-      LIMIT 5
-    `, [coachId]),
+      db.query<{
+        client_id: string
+        client_name: string
+        alert_type: string
+        severity: string
+        bar: number
+        dbi: number
+        snapshot_date: string
+      }>(`
+        SELECT 
+          c.id as client_id,
+          c.full_name as client_name,
+          CASE 
+            WHEN bs.dbi_score >= 70 THEN 'Critical DBI'
+            WHEN bs.bar_score < 35 THEN 'Low BAR'
+            WHEN bs.dbi_score >= 50 THEN 'Elevated DBI'
+            ELSE 'Declining BAR'
+          END as alert_type,
+          CASE 
+            WHEN bs.dbi_score >= 70 OR bs.bar_score < 35 THEN 'critical'
+            ELSE 'warning'
+          END as severity,
+          bs.bar_score AS bar,
+          bs.dbi_score AS dbi,
+          bs.snapshot_date::text
+        FROM clients c
+        JOIN behavioral_snapshots bs ON bs.client_id = c.id
+        WHERE c.coach_id = $1
+          AND bs.snapshot_date = (
+            SELECT MAX(snapshot_date) FROM behavioral_snapshots WHERE client_id = c.id
+          )
+          AND (bs.dbi_score >= 50 OR bs.bar_score < 50)
+          AND c.status = 'active'
+        ORDER BY bs.dbi_score DESC, bs.bar_score ASC
+        LIMIT 5
+      `, [coachId]),
 
-    db.query<{
-      client_name: string
-      event_type: string
-      title: string
-      event_date: string
-    }>(`
-      SELECT c.full_name as client_name, te.event_type, te.title, te.event_date::text
-      FROM timeline_events te
-      JOIN clients c ON c.id = te.client_id
-      WHERE c.coach_id = $1
-      ORDER BY te.event_date DESC, te.created_at DESC
-      LIMIT 10
-    `, [coachId]),
-  ])
+      (async () => {
+        try {
+          const rows = await db.query<{
+            client_name: string
+            event_type: string
+            title: string
+            event_date: string
+          }>(`
+            SELECT c.full_name as client_name, te.event_type, te.title, te.event_date::text
+            FROM timeline_events te
+            JOIN clients c ON c.id = te.client_id
+            WHERE c.coach_id = $1
+            ORDER BY te.event_date DESC, te.created_at DESC
+            LIMIT 10
+          `, [coachId])
+          return rows
+        } catch {
+          return []
+        }
+      })(),
+    ])
 
-  return { clientStats, alerts, recentActivity }
+    return { clientStats, alerts, recentActivity }
+  } catch (err) {
+    console.error('[dashboard] getDashboardStats failed:', err)
+    return {
+      clientStats: null,
+      alerts: [] as {
+        client_id: string
+        client_name: string
+        alert_type: string
+        severity: string
+        bar: number
+        dbi: number
+        snapshot_date: string
+      }[],
+      recentActivity: [] as {
+        client_name: string
+        event_type: string
+        title: string
+        event_date: string
+      }[],
+    }
+  }
 }
 
 export default async function DashboardPage() {
