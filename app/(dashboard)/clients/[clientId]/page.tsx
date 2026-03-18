@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import Link from 'next/link'
 import { BIEDisplay } from '@/components/modules/clients/BIEDisplay'
 import { ClientActionsMenu } from '@/components/modules/clients/ClientActionsMenu'
+import { BIEScoreCard } from '@/components/modules/clients/BIEScoreCard'
 import {
   ArrowLeft, Dumbbell, Apple, BookOpen, FlaskConical,
   TrendingUp, Clock, Zap, Activity, Ruler, ClipboardList, Edit, FileText 
@@ -141,6 +142,18 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
           </div>
         </div>
       </div>
+
+      <BIEScoreCard
+        clientId={client.id}
+        initialScores={snap ? {
+          bar: Number(snap.bar),
+          dbi: Number(snap.dbi),
+          bli: Number(snap.bli),
+          cdi: Number(snap.cdi),
+          lsi: Number(snap.lsi),
+          pps: Number(snap.pps),
+        } : null}
+      />
 
       {snap && (
         <div className="forge-card">
