@@ -29,13 +29,7 @@ async function getClientDetail(clientId: string, coachId: string) {
           FROM behavioral_snapshots WHERE client_id = $1
           ORDER BY snapshot_date DESC LIMIT 1`, [clientId])
     } catch {
-      return await db.queryOne<{
-        bar: number; bli: number; dbi: number; cdi: number
-        lsi: number; c_lsi: number; pps: number
-        generation_state: string; generation_state_label: string
-      }>(`SELECT bar, bli, dbi, cdi, lsi, c_lsi, pps, generation_state, generation_state_label
-          FROM behavioral_snapshots WHERE client_id = $1
-          ORDER BY snapshot_date DESC LIMIT 1`, [clientId])
+      return null
     }
   })()
 
