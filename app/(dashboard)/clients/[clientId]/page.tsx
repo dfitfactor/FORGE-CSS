@@ -65,10 +65,19 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
 
     const { client, latestSnapshot, recentTimeline } = data
     const snap = latestSnapshot
-    const weeksInStage = client.stage_entered_at
-      ? Math.floor((Date.now() - new Date(client.stage_entered_at).getTime()) / (1000 * 60 * 60 * 24 * 7))
+
+    const fullName = typeof client.full_name === 'string' && client.full_name.trim().length > 0 ? client.full_name.trim() : 'Client'
+    const email = typeof client.email === 'string' && client.email.trim().length > 0 ? client.email.trim() : null
+    const currentStage = typeof client.current_stage === 'string' && client.current_stage.trim().length > 0 ? client.current_stage.trim() : null
+    const status = typeof client.status === 'string' && client.status.trim().length > 0 ? client.status.trim() : 'active'
+    const primaryGoal = typeof client.primary_goal === 'string' && client.primary_goal.trim().length > 0 ? client.primary_goal.trim() : null
+    const weightLbs = typeof client.weight_lbs === 'number' ? client.weight_lbs : Number(client.weight_lbs)
+
+    const stageEnteredAt = client.stage_entered_at
+    const weeksInStage = stageEnteredAt
+      ? Math.floor((Date.now() - new Date(stageEnteredAt).getTime()) / (1000 * 60 * 60 * 24 * 7))
       : 0
-    const initials = client.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+    const initials = fullName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'CL'
 
   const NAV_SECTIONS = [
     { href: 'movement',     label: 'Movement',     icon: Dumbbell,      desc: 'Protocol, sessions, BIE guidance' },
@@ -99,13 +108,13 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
               <div>
                 <h1 className="text-2xl font-bold text-forge-text-primary">{client.full_name}</h1>
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
-                  {client.email && <span className="text-sm text-forge-text-muted">{client.email}</span>}
-                  <span className="stage-badge capitalize">{client.current_stage}</span>
+                  {email && <span className="text-sm text-forge-text-muted">{email}</span>}
+                  <span className="stage-badge capitalize">{currentStage ?? '—'}</span>
                   {snap?.generation_state && (
                     <span className="forge-badge text-xs">State {snap.generation_state}</span>
                   )}
-                  <span className={`forge-badge text-xs ${client.status === 'active' ? 'bg-state-stable/10 text-state-stable border border-state-stable/30' : 'bg-forge-surface-3 text-forge-text-muted border border-forge-border'}`}>
-                    {client.status}
+                  <span className={`forge-badge text-xs ${status === 'active' ? 'bg-state-stable/10 text-state-stable border border-state-stable/30' : 'bg-forge-surface-3 text-forge-text-muted border border-forge-border'}`}>
+                    {status}
                   </span>
                 </div>
               </div>
@@ -118,18 +127,18 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                 </Link>
               </div>
             </div>
-            {client.primary_goal && (
-              <div className="mt-3 text-sm text-forge-text-secondary">{client.primary_goal}</div>
+            {primaryGoal && (
+              <div className="mt-3 text-sm text-forge-text-secondary">{primaryGoal}</div>
             )}
             <div className="flex gap-6 mt-4">
               <div>
                 <div className="text-xs text-forge-text-muted">In Stage</div>
                 <div className="text-sm font-medium text-forge-text-secondary">{weeksInStage}w</div>
               </div>
-              {client.weight_lbs && (
+              {Number.isFinite(weightLbs) && weightLbs > 0 && (
                 <div>
                   <div className="text-xs text-forge-text-muted">Weight</div>
-                  <div className="text-sm font-medium text-forge-text-secondary">{client.weight_lbs} lb</div>
+                  <div className="text-sm font-medium text-forge-text-secondary">{weightLbs} lb</div>
                 </div>
               )}
             </div>
@@ -198,6 +207,11 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
       </div>
     )
   } catch (err) {
+    // Preserve Next.js control-flow errors (notFound/redirect) so they behave correctly.
+    if (err && typeof err === 'object' && 'digest' in (err as any)) {
+      const digest = String((err as any).digest)
+      if (digest === 'NEXT_NOT_FOUND' || digest.startsWith('NEXT_REDIRECT')) throw err
+    }
     console.error('[clients/[clientId]] page error:', err)
     return (
       <div className="p-8 space-y-4">
