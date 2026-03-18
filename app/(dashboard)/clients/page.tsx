@@ -30,8 +30,13 @@ const STAGE_COLORS: Record<string, string> = {
 }
 
 function BIEBar({ value, invert = false }: { value: number | null; invert?: boolean }) {
-  if (value === null) return <span className="text-white/20 text-xs font-mono">—</span>
+  if (value === null || value === undefined) {
+    return <span className="text-white/20 text-xs font-mono">—</span>
+  }
   const v = Number(value)
+  if (isNaN(v)) {
+    return <span className="text-white/20 text-xs font-mono">—</span>
+  }
   const isGood = invert ? v <= 40 : v >= 65
   const isMid = invert ? v <= 60 : v >= 45
   const color = isGood ? 'text-emerald-400' : isMid ? 'text-[#D4AF37]' : 'text-red-400'
@@ -70,9 +75,9 @@ function PriorityCard({ client }: { client: Client }) {
       </div>
       <div className="flex items-center justify-between pt-3 border-t border-white/6">
         <div className="flex gap-3 text-xs text-white/30">
-          <span>BAR <BIEBar value={Number(client.bar_score)} /></span>
-          <span>DBI <BIEBar value={Number(client.dbi_score)} invert /></span>
-          <span>BLI <BIEBar value={Number(client.bli_score)} invert /></span>
+          <span>BAR <BIEBar value={client.bar_score} /></span>
+          <span>DBI <BIEBar value={client.dbi_score} invert /></span>
+          <span>BLI <BIEBar value={client.bli_score} invert /></span>
         </div>
         <ArrowRight size={13} className="text-white/20 group-hover:text-[#D4AF37] transition-colors" />
       </div>
@@ -108,13 +113,17 @@ export default function ClientsPage() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  // Priority clients — low BAR, high DBI, or high BLI
+  // Priority clients — low BAR, high DBI, or high BLI (null-safe)
   const priorityClients = clients
-    .filter(c => c.status === 'active' && (
-      Number(c.bar_score) < 50 ||
-      Number(c.dbi_score) > 60 ||
-      Number(c.bli_score) > 65
-    ))
+    .filter(c => {
+      if (c.status !== 'active') return false
+      const bar = c.bar_score !== null ? Number(c.bar_score) : null
+      const dbi = c.dbi_score !== null ? Number(c.dbi_score) : null
+      const bli = c.bli_score !== null ? Number(c.bli_score) : null
+      return (bar !== null && bar < 50) ||
+        (dbi !== null && dbi > 60) ||
+        (bli !== null && bli > 65)
+    })
     .sort((a, b) => {
       const at = a.snapshot_updated_at ? new Date(a.snapshot_updated_at).getTime() : 0
       const bt = b.snapshot_updated_at ? new Date(b.snapshot_updated_at).getTime() : 0
@@ -279,9 +288,9 @@ export default function ClientsPage() {
                           {c.current_stage ?? '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-center"><BIEBar value={Number(c.bar_score)} /></td>
-                      <td className="px-4 py-3.5 text-center"><BIEBar value={Number(c.dbi_score)} invert /></td>
-                      <td className="px-4 py-3.5 text-center"><BIEBar value={Number(c.bli_score)} invert /></td>
+                      <td className="px-4 py-3.5 text-center"><BIEBar value={c.bar_score} /></td>
+                      <td className="px-4 py-3.5 text-center"><BIEBar value={c.dbi_score} invert /></td>
+                      <td className="px-4 py-3.5 text-center"><BIEBar value={c.bli_score} invert /></td>
                       <td className="px-4 py-3.5 hidden md:table-cell">
                         <span className="text-xs text-white/35 font-mono">
                           {c.last_session ? new Date(c.last_session).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
