@@ -139,7 +139,7 @@ CLIENT: ${client.full_name}
 Stage: ${client.current_stage.toUpperCase()}
 Program Tier: ${client.program_tier}
 Primary Goal: ${client.primary_goal ?? 'General fitness and wellness'}
-Injuries: ${client.injuries?.join(', ') || 'None'}
+Injuries: ${Array.isArray(client.injuries) ? client.injuries.join(', ') : (client.injuries || '') || 'None'}
 Equipment: ${client.available_equipment?.join(', ') || 'Standard gym'}
 Generation State: ${snapshot?.generation_state ?? 'B'}
 
