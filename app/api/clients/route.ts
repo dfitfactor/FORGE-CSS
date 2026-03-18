@@ -34,27 +34,54 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const clients = await db.query(
-      `SELECT 
-        c.id,
-        c.full_name,
-        c.email,
-        c.status,
-        c.primary_goal,
-        c.current_stage,
-        CAST(bs.bar AS FLOAT) AS bar_score,
-        CAST(bs.dbi AS FLOAT) AS dbi_score,
-        CAST(COALESCE(bs.bli, 0) AS FLOAT) AS bli_score,
-        bs.created_at AS snapshot_updated_at,
-        (
-          SELECT MAX(created_at) 
-          FROM adherence_records ar 
-          WHERE ar.client_id = c.id
-        ) AS last_session
-      FROM clients c
-      LEFT JOIN behavioral_snapshots bs ON bs.client_id = c.id
-      ORDER BY bs.created_at DESC NULLS LAST`
-    )
+    // Staging schemas may differ (legacy snapshots vs Neon snapshots). Try Neon-style columns first,
+    // then fall back to legacy columns while keeping the same response shape.
+    let clients: any[] = []
+    try {
+      clients = await db.query(
+        `SELECT 
+          c.id,
+          c.full_name,
+          c.email,
+          c.status,
+          c.primary_goal,
+          c.current_stage,
+          CAST(bs.bar_score AS FLOAT) AS bar_score,
+          CAST(bs.dbi_score AS FLOAT) AS dbi_score,
+          CAST(bs.bli_score AS FLOAT) AS bli_score,
+          bs.updated_at AS snapshot_updated_at,
+          (
+            SELECT MAX(created_at) 
+            FROM adherence_records ar 
+            WHERE ar.client_id = c.id
+          ) AS last_session
+        FROM clients c
+        LEFT JOIN behavioral_snapshots bs ON bs.client_id = c.id
+        ORDER BY bs.updated_at DESC NULLS LAST`
+      )
+    } catch {
+      clients = await db.query(
+        `SELECT 
+          c.id,
+          c.full_name,
+          c.email,
+          c.status,
+          c.primary_goal,
+          c.current_stage,
+          CAST(bs.bar AS FLOAT) AS bar_score,
+          CAST(bs.dbi AS FLOAT) AS dbi_score,
+          CAST(COALESCE(bs.bli, 0) AS FLOAT) AS bli_score,
+          bs.created_at AS snapshot_updated_at,
+          (
+            SELECT MAX(created_at) 
+            FROM adherence_records ar 
+            WHERE ar.client_id = c.id
+          ) AS last_session
+        FROM clients c
+        LEFT JOIN behavioral_snapshots bs ON bs.client_id = c.id
+        ORDER BY bs.created_at DESC NULLS LAST`
+      )
+    }
 
     return NextResponse.json(clients)
   } catch (err: any) {
