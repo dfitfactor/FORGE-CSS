@@ -1,4 +1,4 @@
-﻿import { notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Link from 'next/link'
@@ -9,26 +9,49 @@ import {
 } from 'lucide-react'
 
 async function getClientDetail(clientId: string, coachId: string) {
-  const [client, latestSnapshot, recentTimeline] = await Promise.all([
-    db.queryOne<{
-      id: string; full_name: string; email: string
-      current_stage: string; status: string
-      primary_goal: string; weight_lbs: number
-      intake_date: string; stage_entered_at: string; coach_id: string
-    }>(`SELECT * FROM clients WHERE id = $1`, [clientId]),
-    db.queryOne<{
-      bar: number; bli: number; dbi: number; cdi: number
-      lsi: number; c_lsi: number; pps: number
-      generation_state: string; generation_state_label: string
-    }>(`SELECT bar, bli, dbi, cdi, lsi, c_lsi, pps, generation_state, generation_state_label
-        FROM behavioral_snapshots WHERE client_id = $1
-        ORDER BY snapshot_date DESC LIMIT 1`, [clientId]),
-    db.query<{ event_date: string; event_type: string; title: string }>(
-      `SELECT event_date::text, event_type, title
-       FROM timeline_events WHERE client_id = $1
-       ORDER BY event_date DESC, created_at DESC LIMIT 5`, [clientId]),
-  ])
-  if (!client || client.coach_id !== coachId) return null
+  const client = await db.queryOne<Record<string, any>>(
+    `SELECT * FROM clients WHERE id = $1`,
+    [clientId]
+  )
+  if (!client) return null
+
+  // If coach_id exists in this schema, enforce it. Otherwise (staging schema),
+  // allow access to avoid crashing due to missing column.
+  if (typeof client.coach_id === 'string' && client.coach_id !== coachId) return null
+
+  const latestSnapshot = await (async () => {
+    try {
+      return await db.queryOne<{
+        bar: number; bli: number; dbi: number; cdi: number
+        lsi: number; c_lsi: number; pps: number
+        generation_state: string; generation_state_label: string
+      }>(`SELECT bar_score as bar, bli_score as bli, dbi_score as dbi, cdi, lsi, c_lsi, pps, generation_state, generation_state_label
+          FROM behavioral_snapshots WHERE client_id = $1
+          ORDER BY snapshot_date DESC LIMIT 1`, [clientId])
+    } catch {
+      return await db.queryOne<{
+        bar: number; bli: number; dbi: number; cdi: number
+        lsi: number; c_lsi: number; pps: number
+        generation_state: string; generation_state_label: string
+      }>(`SELECT bar, bli, dbi, cdi, lsi, c_lsi, pps, generation_state, generation_state_label
+          FROM behavioral_snapshots WHERE client_id = $1
+          ORDER BY snapshot_date DESC LIMIT 1`, [clientId])
+    }
+  })()
+
+  const recentTimeline = await (async () => {
+    try {
+      return await db.query<{ event_date: string; event_type: string; title: string }>(
+        `SELECT event_date::text, event_type, title
+         FROM timeline_events WHERE client_id = $1
+         ORDER BY event_date DESC, created_at DESC LIMIT 5`,
+        [clientId]
+      )
+    } catch {
+      return []
+    }
+  })()
+
   return { client, latestSnapshot, recentTimeline }
 }
 

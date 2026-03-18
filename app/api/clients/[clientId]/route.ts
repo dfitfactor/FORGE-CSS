@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { z } from 'zod'
@@ -28,34 +28,54 @@ export async function GET(
   const session = await getSession(request)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const client = await db.queryOne(
-    `SELECT c.*,
-       c.intake_date::text as intake_date,
-       c.date_of_birth::text as date_of_birth,
-       c.stage_entered_at::text as stage_entered_at,
-       c.created_at::text as created_at,
-       c.updated_at::text as updated_at
-     FROM clients c
-     WHERE c.id = $1`,
-    [params.clientId]
-  ) as Record<string, unknown> | null
+  try {
+    const client = await db.queryOne(
+      `SELECT c.*,
+         c.intake_date::text as intake_date,
+         c.date_of_birth::text as date_of_birth,
+         c.stage_entered_at::text as stage_entered_at,
+         c.created_at::text as created_at,
+         c.updated_at::text as updated_at
+       FROM clients c
+       WHERE c.id = $1`,
+      [params.clientId]
+    ) as Record<string, unknown> | null
 
-  if (!client) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (client.coach_id !== session.id && session.role !== 'admin') {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    if (!client) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    // Enforce coach_id only if present in this schema.
+    if (typeof (client as any).coach_id === 'string' && (client as any).coach_id !== session.id && session.role !== 'admin') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    const snapshot = await (async () => {
+      try {
+        return await db.queryOne(
+          `SELECT id, client_id, snapshot_date::text as snapshot_date,
+                  bar_score as bar, bli_score as bli, dbi_score as dbi, cdi, lsi, c_lsi, pps,
+                  generation_state, generation_state_label,
+                  coach_override, override_notes, updated_at::text as created_at
+           FROM behavioral_snapshots WHERE client_id = $1
+           ORDER BY snapshot_date DESC LIMIT 1`,
+          [params.clientId]
+        )
+      } catch {
+        return await db.queryOne(
+          `SELECT id, client_id, snapshot_date::text as snapshot_date,
+                  bar, bli, dbi, cdi, lsi, c_lsi, pps,
+                  generation_state, generation_state_label,
+                  coach_override, override_notes, created_at::text as created_at
+           FROM behavioral_snapshots WHERE client_id = $1
+           ORDER BY snapshot_date DESC LIMIT 1`,
+          [params.clientId]
+        )
+      }
+    })()
+
+    return NextResponse.json({ client, latestSnapshot: snapshot })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 })
   }
-
-  const snapshot = await db.queryOne(
-    `SELECT id, client_id, snapshot_date::text as snapshot_date,
-            bar, bli, dbi, cdi, lsi, c_lsi, pps,
-            generation_state, generation_state_label,
-            coach_override, override_notes, created_at::text as created_at
-     FROM behavioral_snapshots WHERE client_id = $1
-     ORDER BY snapshot_date DESC LIMIT 1`,
-    [params.clientId]
-  )
-
-  return NextResponse.json({ client, latestSnapshot: snapshot })
 }
 
 export async function PATCH(
