@@ -26,6 +26,14 @@ BSLDS MEAL STRUCTURE: Breakfast · Snack · Lunch · Dinner · Snack
 - Dinner is intentionally carb-reduced or carb-free
 - Evening snack is protein-forward
 
+DAILY MEAL PLAN REQUIREMENTS:
+- You MUST generate a structured daily mealPlan array as part of the nutritionStructure.
+- Each entry MUST have: "time", "meal", "foods", "notes".
+- "foods" MUST include specific portions, and any key foods or quantities should be wrapped in **bold** markdown (e.g., "**Oatmeal (dry) 40g** + **2 whole eggs**").
+- Include, where appropriate: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (for training days), Dinner, Evening Snack (if applicable).
+- "time" should be a readable window or context (e.g., "8:00–9:00 a.m.", "Training days only").
+- Use the client's macro targets, weight, goals, and current stage to scale portions.
+
 You must ALWAYS respond with ONLY a valid JSON object. No markdown, no backticks, no explanation. Just raw JSON.`
 
 export async function POST(
@@ -199,7 +207,21 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
       }
     },
     "keyGuidelines": ["guideline 1", "guideline 2", "guideline 3", "guideline 4"],
-    "disruption_protocol": "What to do when schedule is disrupted - 2 sentences"
+  "disruption_protocol": "What to do when schedule is disrupted - 2 sentences",
+  "mealPlan": [
+    {
+      "time": "8:00–9:00 a.m.",
+      "meal": "Breakfast",
+      "foods": "Oatmeal (dry) 40g + 2 whole eggs + 3 egg whites",
+      "notes": ""
+    },
+    {
+      "time": "Training days only",
+      "meal": "Training carbs",
+      "foods": "Sweet potato (cooked) 150g",
+      "notes": "Eaten with meal closest to training"
+    }
+  ]
   },
   "recoveryStructure": {
     "sleepTarget": "7-8 hours",

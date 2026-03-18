@@ -28,6 +28,13 @@ type NutritionStructure = {
   disruption_protocol: string
 }
 
+type MealPlanEntry = {
+  time: string
+  meal: string
+  foods: string
+  notes: string
+}
+
 type Protocol = {
   id: string; name: string; protocol_type: string; stage: string
   generation_state: string | null; calorie_target: number | null
@@ -35,7 +42,7 @@ type Protocol = {
   fat_target_g: number | null; effective_date: string; generated_by: string
   notes: string | null
   protocol_payload: {
-    nutritionStructure?: NutritionStructure
+    nutritionStructure?: NutritionStructure & { mealPlan?: MealPlanEntry[] }
     rationale?: string
     clientFacingMessage?: string
   }
@@ -55,6 +62,17 @@ const MEAL_COLORS: Record<string, string> = {
   lunch: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
   dinner: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
   eveningSnack: 'text-white/50 bg-white/4 border-white/10',
+}
+
+function renderMarkdownInline(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, idx) => {
+    const boldMatch = part.match(/^\*\*(.*)\*\*$/)
+    if (boldMatch) {
+      return <strong key={idx}>{boldMatch[1]}</strong>
+    }
+    return <span key={idx}>{part}</span>
+  })
 }
 
 function MealTable({ day, label }: { day: BSLDSDay; label: string }) {
@@ -130,6 +148,7 @@ export default async function NutritionPage({ params }: { params: { clientId: st
 
   const ns = protocol?.protocol_payload?.nutritionStructure
   const keyGuidelines = (ns?.keyGuidelines ?? []) as string[]
+  const mealPlan = (ns?.mealPlan ?? []) as MealPlanEntry[]
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
@@ -188,6 +207,53 @@ export default async function NutritionPage({ params }: { params: { clientId: st
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Daily Meal Plan */}
+            <div className="bg-[#111111] border border-white/8 rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Utensils size={14} className="text-[#D4AF37]" />
+                  <p className="text-xs font-mono uppercase tracking-widest text-white/40">Daily Meal Plan</p>
+                </div>
+              </div>
+              {mealPlan.length === 0 ? (
+                <p className="text-sm text-white/40">Generate a protocol to see the meal plan</p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-white/8">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/8 bg-white/3">
+                        <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-white/35 w-[18%]">Time</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-white/35 w-[18%]">Meal</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-mono uppercase tracking-widest text-white/35">Foods &amp; Portions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mealPlan.map((row, i) => (
+                        <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/2 transition-colors">
+                          <td className="px-4 py-3 text-sm font-semibold text-white">
+                            <span className="font-mono">{row.time}</span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-white/80">
+                            {row.meal}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-white/70">
+                            <div className="space-y-1">
+                              <div>{renderMarkdownInline(row.foods)}</div>
+                              {row.notes && (
+                                <div className="text-xs text-white/40">
+                                  {row.notes}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Meal timing + hydration row */}
