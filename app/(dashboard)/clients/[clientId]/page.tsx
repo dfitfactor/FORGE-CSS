@@ -120,7 +120,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                 <Link href={`/clients/${client.id}/edit`} className="forge-btn-secondary text-sm flex items-center gap-2">
                   <Edit className="w-4 h-4" /> Edit Profile
                 </Link>
-                <ClientActionsMenu clientId={client.id} clientName={fullName} />
+                <ClientActionsMenu clientId={client.id} clientName={client.full_name} />
               </div>
             </div>
             {primaryGoal && (
