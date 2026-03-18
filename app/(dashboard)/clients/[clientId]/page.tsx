@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Link from 'next/link'
 import { BIEDisplay } from '@/components/modules/clients/BIEDisplay'
+import { ClientActionsMenu } from '@/components/modules/clients/ClientActionsMenu'
 import {
   ArrowLeft, Dumbbell, Apple, BookOpen, FlaskConical,
   TrendingUp, Clock, Zap, Activity, Ruler, ClipboardList, Edit, FileText 
@@ -112,13 +113,14 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                   </span>
                 </div>
               </div>
-              <div className="flex gap-2 flex-shrink-0">
+              <div className="flex gap-2 flex-shrink-0 items-center">
                 <Link href={`/clients/${client.id}/protocols/new`} className="forge-btn-gold text-sm flex items-center gap-2">
                   <Zap className="w-4 h-4" /> Generate Protocol
                 </Link>
                 <Link href={`/clients/${client.id}/edit`} className="forge-btn-secondary text-sm flex items-center gap-2">
                   <Edit className="w-4 h-4" /> Edit Profile
                 </Link>
+                <ClientActionsMenu clientId={client.id} clientName={fullName} />
               </div>
             </div>
             {primaryGoal && (
