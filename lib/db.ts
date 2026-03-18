@@ -4,21 +4,31 @@ declare global {
   var _pgPool: Pool | undefined
 }
 
-const connectionConfig = {
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'forge_css',
-  user: process.env.POSTGRES_USER || 'forge_admin',
-  password: process.env.POSTGRES_PASSWORD || '',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+function buildConfig() {
+  if (process.env.DATABASE_URL) {
+    return {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    }
+  }
+  return {
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    database: process.env.POSTGRES_DB || 'forge_css',
+    user: process.env.POSTGRES_USER || 'forge_admin',
+    password: process.env.POSTGRES_PASSWORD || '',
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  }
 }
 
 function getPool(): Pool {
   if (!global._pgPool) {
-    global._pgPool = new Pool(connectionConfig)
-    
+    global._pgPool = new Pool(buildConfig())
     global._pgPool.on('error', (err) => {
       console.error('Unexpected error on idle client', err)
     })
