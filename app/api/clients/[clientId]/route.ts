@@ -88,76 +88,76 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { clientId: string } }
 ) {
-  const session = await getSession(request)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const existing = await db.queryOne<{ coach_id: string }>(
-    `SELECT coach_id FROM clients WHERE id = $1`, [params.clientId]
-  )
-  if (!existing || (existing.coach_id !== session.id && session.role !== 'admin')) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-  }
-
-  const body = await request.json()
-  const parsed = UpdateClientSchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid data', details: parsed.error.flatten() }, { status: 400 })
-  }
-
-  // Some staging environments may have a different `clients` schema.
-  // Only update columns that exist to avoid hard 500s.
-  const existingColumns = await db.query<{ column_name: string }>(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_name = 'clients'`
-  )
-  const colSet = new Set(existingColumns.map(c => c.column_name))
-
-  const updates: string[] = []
-  const values: unknown[] = []
-  let idx = 1
-
-  const fieldMap: Record<string, string> = {
-    fullName: 'full_name', email: 'email', phone: 'phone',
-    primaryGoal: 'primary_goal', motivation: 'motivation', obstacles: 'obstacles',
-    weightLbs: 'weight_lbs', bodyFatPct: 'body_fat_pct',
-    injuries: 'injuries', programTier: 'program_tier',
-    sessionsPerMonth: 'sessions_per_month',
-    targetSessionsPerWeek: 'sessions_per_week',
-    availableEquipment: 'available_equipment',
-    status: 'status', notes: 'notes',
-  }
-
-  for (const [key, dbCol] of Object.entries(fieldMap)) {
-    if (key in parsed.data) {
-      // Skip missing columns on staging.
-      if (!colSet.has(dbCol)) continue
-      updates.push(`${dbCol} = $${idx}`)
-      values.push(parsed.data[key as keyof typeof parsed.data])
-      idx++
-    }
-  }
-
-  if (updates.length === 0) {
-    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
-  }
-
-  if (colSet.has('updated_at')) {
-    updates.push(`updated_at = NOW()`)
-  }
-  values.push(params.clientId)
-
   try {
+    const session = await getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const existing = await db.queryOne<{ coach_id: string }>(
+      `SELECT coach_id FROM clients WHERE id = $1`, [params.clientId]
+    )
+    if (!existing || (existing.coach_id !== session.id && session.role !== 'admin')) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const parsed = UpdateClientSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid data', details: parsed.error.flatten() }, { status: 400 })
+    }
+
+    // Some staging environments may have a different `clients` schema.
+    // Only update columns that exist to avoid hard 500s.
+    const existingColumns = await db.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'clients'`
+    )
+    const colSet = new Set(existingColumns.map(c => c.column_name))
+
+    const updates: string[] = []
+    const values: unknown[] = []
+    let idx = 1
+
+    const fieldMap: Record<string, string> = {
+      fullName: 'full_name', email: 'email', phone: 'phone',
+      primaryGoal: 'primary_goal', motivation: 'motivation', obstacles: 'obstacles',
+      weightLbs: 'weight_lbs', bodyFatPct: 'body_fat_pct',
+      injuries: 'injuries', programTier: 'program_tier',
+      sessionsPerMonth: 'sessions_per_month',
+      targetSessionsPerWeek: 'sessions_per_week',
+      availableEquipment: 'available_equipment',
+      status: 'status', notes: 'notes',
+    }
+
+    for (const [key, dbCol] of Object.entries(fieldMap)) {
+      if (key in parsed.data) {
+        // Skip missing columns on staging.
+        if (!colSet.has(dbCol)) continue
+        updates.push(`${dbCol} = $${idx}`)
+        values.push(parsed.data[key as keyof typeof parsed.data])
+        idx++
+      }
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    if (colSet.has('updated_at')) {
+      updates.push(`updated_at = NOW()`)
+    }
+    values.push(params.clientId)
+
     await db.query(
       `UPDATE clients SET ${updates.join(', ')} WHERE id = $${idx}`,
       values
     )
+
+    return NextResponse.json({ success: true })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  return NextResponse.json({ success: true })
 }
 
 export async function DELETE(
