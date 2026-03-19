@@ -1,4 +1,4 @@
-﻿import { notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Link from 'next/link'
@@ -87,7 +87,7 @@ export default async function MovementPage({ params }: { params: { clientId: str
               protocol_payload, generated_by, notes
        FROM protocols
        WHERE client_id = $1
-       AND protocol_type IN ('movement', 'composite')
+       AND protocol_type = 'movement'
        AND is_active = true
        ORDER BY created_at DESC LIMIT 1`,
       [params.clientId]

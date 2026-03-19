@@ -1,4 +1,4 @@
-﻿import { notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Link from 'next/link'
@@ -62,9 +62,9 @@ export default async function RecoveryPage({ params }: { params: { clientId: str
               generated_by, protocol_payload
        FROM protocols
        WHERE client_id = $1
-       AND protocol_type IN ('recovery', 'composite')
+       AND protocol_type = 'recovery'
        AND is_active = true
-       ORDER BY CASE protocol_type WHEN 'recovery' THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
+       ORDER BY created_at DESC LIMIT 1`,
       [params.clientId]
     ),
     db.query<JournalEntry>(

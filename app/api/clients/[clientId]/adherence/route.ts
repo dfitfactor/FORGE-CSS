@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
@@ -20,7 +20,7 @@ export async function GET(
 
     const records = await db.query(
       `SELECT id, record_date::text, record_type, session_type,
-              completion_pct, rpe, energy_level, mood_rating,
+              rpe, energy_level, mood_rating,
               swaps_applied, client_notes, coach_notes,
               created_at::text
        FROM adherence_records
@@ -55,23 +55,23 @@ export async function POST(
     const body = await request.json()
     const {
       recordDate, recordType, sessionType,
-      completionPct, rpe, energyLevel, moodRating,
+      // completionPct,  // Not persisted on some staging DBs
+      rpe, energyLevel, moodRating,
       swapsApplied, clientNotes, coachNotes
     } = body
 
     const result = await db.queryOne<{ id: string }>(
       `INSERT INTO adherence_records
          (client_id, record_date, record_type, session_type,
-          completion_pct, rpe, energy_level, mood_rating,
+          rpe, energy_level, mood_rating,
           swaps_applied, client_notes, coach_notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         params.clientId,
         recordDate || new Date().toISOString().split('T')[0],
         recordType || 'session_completed',
         sessionType || null,
-        completionPct ?? 100,
         rpe || null,
         energyLevel || null,
         moodRating || null,

@@ -102,11 +102,71 @@ export async function POST(
       [params.clientId]
     )
 
-    const aiDocs = await db.query<{ title: string; document_type: string }>(
-      `SELECT title, document_type FROM client_documents
-       WHERE client_id = $1 AND include_in_ai = true ORDER BY created_at DESC LIMIT 5`,
+    const aiDocs = await db.query<{
+      title: string | null
+      document_type: string | null
+      file_data: string | null
+      file_type: string | null
+      file_name: string | null
+    }>(
+      `SELECT title, document_type, file_type, file_name,
+              encode(file_data, 'base64') as file_data
+       FROM client_documents
+       WHERE client_id = $1 AND include_in_ai = true
+       ORDER BY created_at DESC LIMIT 5`,
       [params.clientId]
     )
+
+    // Extract text content from documents for AI context
+    const docContexts: string[] = []
+
+    for (const doc of aiDocs) {
+      if (!doc.file_data) continue
+
+      const fileType = doc.file_type?.toLowerCase() ?? ''
+      const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
+
+      // For text-based files, decode and include content directly
+      if (
+        fileType.includes('text') ||
+        fileType.includes('plain') ||
+        fileType.includes('csv') ||
+        (doc.file_name?.endsWith('.txt') ?? false) ||
+        (doc.file_name?.endsWith('.md') ?? false) ||
+        (doc.file_name?.endsWith('.csv') ?? false)
+      ) {
+        try {
+          const text = Buffer.from(doc.file_data, 'base64')
+            .toString('utf-8')
+            .slice(0, 2000) // cap at 2000 chars per doc
+          docContexts.push(`${label}\n${text}`)
+        } catch {
+          docContexts.push(`${label}\n[Could not read content]`)
+        }
+      }
+      // For PDFs and other binary files, note they exist with metadata
+      else if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
+        docContexts.push(`${label}\n[PDF document uploaded — use title and document type as context]`)
+      }
+      // For images (progress photos, lab result screenshots etc)
+      else if (
+        fileType.includes('image') ||
+        fileType.includes('jpeg') ||
+        fileType.includes('png') ||
+        (doc.file_name?.toLowerCase().match(/\.(jpe?g|png|webp|gif)$/) ?? false)
+      ) {
+        docContexts.push(`${label}\n[Image document — ${doc.document_type} visual reference]`)
+      } else {
+        docContexts.push(`${label}\n[Document uploaded: ${doc.file_name}]`)
+      }
+    }
+
+    const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
+
+    const pdfDocs = aiDocs.filter(doc => {
+      const fileType = doc.file_type?.toLowerCase() ?? ''
+      return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
+    })
 
     const bie = {
       bar: snapshot?.bar ?? null,
@@ -150,7 +210,8 @@ MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurem
 
 RECENT JOURNALS: ${journalSummary || 'No recent journal entries'}
 RECENT CHECK-INS: ${checkinSummary || 'No recent check-ins'}
-AI DOCUMENTS: ${aiDocs.map(d => d.document_type + ': ' + d.title).join('; ') || 'None'}
+    ═══ CLIENT DOCUMENTS (AI-enabled) ═══
+    ${docSummary}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
 
 Protocol name must include ${client.full_name.split(' ')[0] || 'the client'}'s first name or their specific goal — never a generic name.
@@ -203,11 +264,26 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 }`
 
     // CALL 1 — Core protocol (no mealPlan)
+    const userMessageContent: any[] = [{ type: 'text', text: prompt }]
+
+    // Add PDF documents as Anthropic document blocks (when available)
+    for (const doc of pdfDocs.slice(0, 3)) {
+      if (!doc.file_data) continue
+      userMessageContent.push({
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: doc.file_data,
+        },
+      })
+    }
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: FORGE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: userMessageContent }],
     })
 
     const content = response.content[0]

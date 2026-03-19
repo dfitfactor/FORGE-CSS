@@ -137,9 +137,9 @@ export default async function NutritionPage({ params }: { params: { clientId: st
               effective_date::text, generated_by, notes, protocol_payload
        FROM protocols
        WHERE client_id = $1
-       AND protocol_type IN ('nutrition', 'composite')
+       AND protocol_type = 'nutrition'
        AND is_active = true
-       ORDER BY CASE protocol_type WHEN 'nutrition' THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
+       ORDER BY created_at DESC LIMIT 1`,
       [params.clientId]
     ),
   ])
