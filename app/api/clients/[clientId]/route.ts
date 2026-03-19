@@ -104,6 +104,15 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid data', details: parsed.error.flatten() }, { status: 400 })
   }
 
+  // Some staging environments may have a different `clients` schema.
+  // Only update columns that exist to avoid hard 500s.
+  const existingColumns = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_name = 'clients'`
+  )
+  const colSet = new Set(existingColumns.map(c => c.column_name))
+
   const updates: string[] = []
   const values: unknown[] = []
   let idx = 1
@@ -121,6 +130,8 @@ export async function PATCH(
 
   for (const [key, dbCol] of Object.entries(fieldMap)) {
     if (key in parsed.data) {
+      // Skip missing columns on staging.
+      if (!colSet.has(dbCol)) continue
       updates.push(`${dbCol} = $${idx}`)
       values.push(parsed.data[key as keyof typeof parsed.data])
       idx++
@@ -131,13 +142,20 @@ export async function PATCH(
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
-  updates.push(`updated_at = NOW()`)
+  if (colSet.has('updated_at')) {
+    updates.push(`updated_at = NOW()`)
+  }
   values.push(params.clientId)
 
-  await db.query(
-    `UPDATE clients SET ${updates.join(', ')} WHERE id = $${idx}`,
-    values
-  )
+  try {
+    await db.query(
+      `UPDATE clients SET ${updates.join(', ')} WHERE id = $${idx}`,
+      values
+    )
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }
