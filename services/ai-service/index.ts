@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { BIEVariables, ForgeStage, GenerationState } from '../../lib/bie-engine'
+import { db } from '../../lib/db'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -128,6 +129,68 @@ export async function generateProtocol(
 ): Promise<GeneratedProtocol> {
   const { client, protocolType, equipmentAvailable, previousProtocolSummary, coachDirectives } = request
 
+  // Pull AI-enabled documents and decode content for better protocol generation context.
+  // Note: we only inline-decoded text-based files; for PDFs/images we provide placeholders
+  // and also attach PDFs as document blocks to Anthropic when available.
+  const aiDocs = await db.query<{
+    title: string | null
+    document_type: string | null
+    file_data: string | null
+    file_type: string | null
+    file_name: string | null
+  }>(
+    `SELECT title, document_type, file_type, file_name,
+            encode(file_data, 'base64') as file_data
+     FROM client_documents
+     WHERE client_id = $1 AND include_in_ai = true
+     ORDER BY created_at DESC LIMIT 5`,
+    [client.clientId]
+  )
+
+  const docContexts: string[] = []
+  for (const doc of aiDocs) {
+    if (!doc.file_data) continue
+
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
+
+    if (
+      fileType.includes('text') ||
+      fileType.includes('plain') ||
+      fileType.includes('csv') ||
+      (doc.file_name?.endsWith('.txt') ?? false) ||
+      (doc.file_name?.endsWith('.md') ?? false) ||
+      (doc.file_name?.endsWith('.csv') ?? false)
+    ) {
+      try {
+        const text = Buffer.from(doc.file_data, 'base64')
+          .toString('utf-8')
+          .slice(0, 2000)
+        docContexts.push(`${label}\n${text}`)
+      } catch {
+        docContexts.push(`${label}\n[Could not read content]`)
+      }
+    } else if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
+      docContexts.push(`${label}\n[PDF document uploaded — use title and document type as context]`)
+    } else if (
+      fileType.includes('image') ||
+      fileType.includes('jpeg') ||
+      fileType.includes('png') ||
+      (doc.file_name?.toLowerCase().match(/\.(jpe?g|png|webp|gif)$/) ?? false)
+    ) {
+      docContexts.push(`${label}\n[Image document — ${doc.document_type ?? 'visual reference'} visual reference]`)
+    } else {
+      docContexts.push(`${label}\n[Document uploaded: ${doc.file_name}]`)
+    }
+  }
+
+  const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
+
+  const pdfDocs = aiDocs.filter(doc => {
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
+  })
+
   const userPrompt = `Generate a ${protocolType} protocol for the following FORGE client.
 
 CLIENT CONTEXT:
@@ -156,6 +219,9 @@ ${previousProtocolSummary ? `PREVIOUS PROTOCOL SUMMARY: ${previousProtocolSummar
 ${client.recentJournalSummary ? `RECENT JOURNAL SIGNALS: ${client.recentJournalSummary}` : ''}
 ${coachDirectives ? `COACH DIRECTIVES: ${coachDirectives}` : ''}
 
+CLIENT DOCUMENTS (AI-enabled):
+${docSummary}
+
 Generate a complete ${protocolType} protocol. Apply the correct generation state logic. 
 Output ONLY valid JSON matching this schema:
 {
@@ -170,7 +236,26 @@ Output ONLY valid JSON matching this schema:
     model: MODEL,
     max_tokens: 4096,
     system: FORGE_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
+    messages: [
+      {
+        role: 'user',
+        content: ((): any[] => {
+          const userMessageContent: any[] = [{ type: 'text', text: userPrompt }]
+          for (const doc of pdfDocs.slice(0, 3)) {
+            if (!doc.file_data) continue
+            userMessageContent.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: doc.file_data,
+              },
+            })
+          }
+          return userMessageContent
+        })(),
+      },
+    ],
   })
 
   const content = response.content[0]
@@ -249,6 +334,66 @@ export async function generateWeeklyInsight(
   recommendations: string[]
   confidenceScore: number
 }> {
+  // Pull AI-enabled documents and decode content for better insight context.
+  const aiDocs = await db.query<{
+    title: string | null
+    document_type: string | null
+    file_data: string | null
+    file_type: string | null
+    file_name: string | null
+  }>(
+    `SELECT title, document_type, file_type, file_name,
+            encode(file_data, 'base64') as file_data
+     FROM client_documents
+     WHERE client_id = $1 AND include_in_ai = true
+     ORDER BY created_at DESC LIMIT 5`,
+    [client.clientId]
+  )
+
+  const docContexts: string[] = []
+  for (const doc of aiDocs) {
+    if (!doc.file_data) continue
+
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
+
+    if (
+      fileType.includes('text') ||
+      fileType.includes('plain') ||
+      fileType.includes('csv') ||
+      (doc.file_name?.endsWith('.txt') ?? false) ||
+      (doc.file_name?.endsWith('.md') ?? false) ||
+      (doc.file_name?.endsWith('.csv') ?? false)
+    ) {
+      try {
+        const text = Buffer.from(doc.file_data, 'base64')
+          .toString('utf-8')
+          .slice(0, 2000)
+        docContexts.push(`${label}\n${text}`)
+      } catch {
+        docContexts.push(`${label}\n[Could not read content]`)
+      }
+    } else if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
+      docContexts.push(`${label}\n[PDF document uploaded — use title and document type as context]`)
+    } else if (
+      fileType.includes('image') ||
+      fileType.includes('jpeg') ||
+      fileType.includes('png') ||
+      (doc.file_name?.toLowerCase().match(/\.(jpe?g|png|webp|gif)$/) ?? false)
+    ) {
+      docContexts.push(`${label}\n[Image document — ${doc.document_type ?? 'visual reference'} visual reference]`)
+    } else {
+      docContexts.push(`${label}\n[Document uploaded: ${doc.file_name}]`)
+    }
+  }
+
+  const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
+
+  const pdfDocs = aiDocs.filter(doc => {
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
+  })
+
   const prompt = `Generate a weekly behavioral intelligence insight for this FORGE client.
 
 CLIENT: ${client.fullName} | Stage: ${client.stage} | State: ${client.generationState}
@@ -261,6 +406,9 @@ ${weeklyData.biomarkerChanges ? `Biomarker changes: ${JSON.stringify(weeklyData.
 
 CURRENT BIE:
 BAR: ${client.currentBIE.bar.toFixed(1)}, BLI: ${client.currentBIE.bli.toFixed(1)}, DBI: ${client.currentBIE.dbi.toFixed(1)}, PPS: ${client.currentBIE.pps.toFixed(1)}
+
+CLIENT DOCUMENTS (AI-enabled):
+${docSummary}
 
 Output ONLY JSON:
 {
@@ -275,7 +423,26 @@ Output ONLY JSON:
     model: MODEL,
     max_tokens: 2048,
     system: FORGE_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [
+      {
+        role: 'user',
+        content: ((): any[] => {
+          const userMessageContent: any[] = [{ type: 'text', text: prompt }]
+          for (const doc of pdfDocs.slice(0, 3)) {
+            if (!doc.file_data) continue
+            userMessageContent.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: doc.file_data,
+              },
+            })
+          }
+          return userMessageContent
+        })(),
+      },
+    ],
   })
 
   const content = response.content[0]
