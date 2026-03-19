@@ -60,15 +60,21 @@ export async function GET(
           [params.clientId]
         )
       } catch {
-        return await db.queryOne(
-          `SELECT id, client_id, snapshot_date::text as snapshot_date,
-                  bar, bli, dbi, cdi, lsi, c_lsi, pps,
-                  generation_state, generation_state_label,
-                  coach_override, override_notes, created_at::text as created_at
-           FROM behavioral_snapshots WHERE client_id = $1
-           ORDER BY snapshot_date DESC LIMIT 1`,
-          [params.clientId]
-        )
+        try {
+          return await db.queryOne(
+            `SELECT id, client_id, snapshot_date::text as snapshot_date,
+                    bar, bli, dbi, cdi, lsi, c_lsi, pps,
+                    generation_state, generation_state_label,
+                    coach_override, override_notes, created_at::text as created_at
+             FROM behavioral_snapshots WHERE client_id = $1
+             ORDER BY snapshot_date DESC LIMIT 1`,
+            [params.clientId]
+          )
+        } catch {
+          // If staging schema differs enough that *both* query variants fail,
+          // return null so edit page can load.
+          return null
+        }
       }
     })()
 
