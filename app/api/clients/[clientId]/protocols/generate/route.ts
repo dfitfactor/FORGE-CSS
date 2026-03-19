@@ -26,14 +26,6 @@ BSLDS MEAL STRUCTURE: Breakfast · Snack · Lunch · Dinner · Snack
 - Dinner is intentionally carb-reduced or carb-free
 - Evening snack is protein-forward
 
-DAILY MEAL PLAN REQUIREMENTS:
-- You MUST generate a structured daily mealPlan array as part of the nutritionStructure.
-- Each entry MUST have: "time", "meal", "foods", "notes".
-- "foods" MUST include specific portions, and any key foods or quantities should be wrapped in **bold** markdown (e.g., "**Oatmeal (dry) 40g** + **2 whole eggs**").
-- Include, where appropriate: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (for training days), Dinner, Evening Snack (if applicable).
-- "time" should be a readable window or context (e.g., "8:00–9:00 a.m.", "Training days only").
-- Use the client's macro targets, weight, goals, and current stage to scale portions.
-
 You must ALWAYS respond with ONLY a valid JSON object. No markdown, no backticks, no explanation. Just raw JSON.`
 
 export async function POST(
@@ -117,12 +109,12 @@ export async function POST(
     )
 
     const bie = {
-      bar: Number(snapshot?.bar ?? 65),
-      bli: Number(snapshot?.bli ?? 40),
-      dbi: Number(snapshot?.dbi ?? 35),
-      cdi: Number(snapshot?.cdi ?? 35),
-      lsi: Number(snapshot?.lsi ?? 60),
-      pps: Number(snapshot?.pps ?? 55),
+      bar: snapshot?.bar ?? null,
+      bli: snapshot?.bli ?? null,
+      dbi: snapshot?.dbi ?? null,
+      cdi: snapshot?.cdi ?? null,
+      lsi: snapshot?.lsi ?? null,
+      pps: snapshot?.pps ?? null,
     }
 
     const journalSummary = journals.map(j => [
@@ -152,7 +144,7 @@ Equipment: ${client.available_equipment?.join(', ') || 'Standard gym'}
 Generation State: ${snapshot?.generation_state ?? 'B'}
 
 BIE VARIABLES:
-BAR: ${bie.bar} | BLI: ${bie.bli} | DBI: ${bie.dbi} | CDI: ${bie.cdi} | LSI: ${bie.lsi} | PPS: ${bie.pps}
+BAR: ${bie.bar ?? 'not recorded'} | BLI: ${bie.bli ?? 'not recorded'} | DBI: ${bie.dbi ?? 'not recorded'} | CDI: ${bie.cdi ?? 'not recorded'} | LSI: ${bie.lsi ?? 'not recorded'} | PPS: ${bie.pps ?? 'not recorded'}
 
 MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurements?.body_fat_pct ?? 'unknown'} | Lean mass ${measurements?.lean_mass_lbs ?? 'unknown'}lb | Waist ${measurements?.waist_in ?? 'unknown'}in
 
@@ -160,6 +152,8 @@ RECENT JOURNALS: ${journalSummary || 'No recent journal entries'}
 RECENT CHECK-INS: ${checkinSummary || 'No recent check-ins'}
 AI DOCUMENTS: ${aiDocs.map(d => d.document_type + ': ' + d.title).join('; ') || 'None'}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
+
+Protocol name must include ${client.full_name.split(' ')[0] || 'the client'}'s first name or their specific goal — never a generic name.
 
 Respond with ONLY this JSON structure (no markdown, no backticks):
 {
@@ -191,37 +185,11 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
       {"timing": "Evening", "amount": "16 oz", "notes": "Stop 1hr before bed"}
     ],
     "bsldsTemplate": {
-      "trainingDay": {
-        "breakfast": {"foods": "food description", "protein": "30g", "carbs": "40g", "fats": "10g", "timing": "7-8 AM", "notes": "Pre-training fuel"},
-        "morningSnack": {"foods": "food description", "protein": "20g", "carbs": "15g", "fats": "5g", "timing": "10 AM", "notes": "optional"},
-        "lunch": {"foods": "food description", "protein": "35g", "carbs": "45g", "fats": "15g", "timing": "12:30-1 PM", "notes": ""},
-        "dinner": {"foods": "food description", "protein": "40g", "carbs": "0-10g", "fats": "20g", "timing": "6-7 PM", "notes": "Carb-free"},
-        "eveningSnack": {"foods": "food description", "protein": "20g", "carbs": "5g", "fats": "5g", "timing": "8-9 PM", "notes": "Protein-forward"}
-      },
-      "restDay": {
-        "breakfast": {"foods": "food description", "protein": "30g", "carbs": "30g", "fats": "12g", "timing": "8-9 AM", "notes": ""},
-        "morningSnack": {"foods": "food description", "protein": "15g", "carbs": "10g", "fats": "8g", "timing": "11 AM", "notes": "optional"},
-        "lunch": {"foods": "food description", "protein": "35g", "carbs": "35g", "fats": "15g", "timing": "1-2 PM", "notes": ""},
-        "dinner": {"foods": "food description", "protein": "40g", "carbs": "0g", "fats": "20g", "timing": "6-7 PM", "notes": "Protein + veg only"},
-        "eveningSnack": {"foods": "food description", "protein": "20g", "carbs": "0g", "fats": "5g", "timing": "8-9 PM", "notes": "Light protein only"}
-      }
+      "trainingDay": {/* meal slots object */},
+      "restDay": {/* meal slots object */}
     },
     "keyGuidelines": ["guideline 1", "guideline 2", "guideline 3", "guideline 4"],
-  "disruption_protocol": "What to do when schedule is disrupted - 2 sentences",
-  "mealPlan": [
-    {
-      "time": "8:00–9:00 a.m.",
-      "meal": "Breakfast",
-      "foods": "Oatmeal (dry) 40g + 2 whole eggs + 3 egg whites",
-      "notes": ""
-    },
-    {
-      "time": "Training days only",
-      "meal": "Training carbs",
-      "foods": "Sweet potato (cooked) 150g",
-      "notes": "Eaten with meal closest to training"
-    }
-  ]
+    "disruption_protocol": "What to do when schedule is disrupted - 2 sentences"
   },
   "recoveryStructure": {
     "sleepTarget": "7-8 hours",
@@ -234,9 +202,10 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
   "clientFacingMessage": "Encouraging message for client about this protocol - 3-4 sentences"
 }`
 
+    // CALL 1 — Core protocol (no mealPlan)
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 4000,
       system: FORGE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     })
@@ -259,12 +228,82 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
       cleaned = cleaned.slice(firstBrace, lastBrace + 1)
     }
 
-    let generated
+    let generated: any
     try {
       generated = JSON.parse(cleaned)
     } catch {
       console.error('Parse error. Raw:', cleaned.slice(0, 300))
       return NextResponse.json({ error: 'AI response parsing failed', raw: cleaned.slice(0, 500) }, { status: 500 })
+    }
+
+    // CALL 2 — Meal plan only
+    let mealPlan: any[] = []
+    try {
+      const mealPlanPrompt = `Generate a daily meal plan for this client.
+
+Client: ${client.full_name}
+Goal: ${client.primary_goal ?? 'General fitness'}
+Weight: ${measurements?.weight_lbs ?? 'unknown'} lbs
+Stage: ${client.current_stage}
+Daily Targets: ${generated.nutritionStructure?.dailyCalories} cal | ${generated.nutritionStructure?.proteinG}g protein | ${generated.nutritionStructure?.carbG}g carbs | ${generated.nutritionStructure?.fatG}g fat
+Meal Frequency: ${generated.nutritionStructure?.mealFrequency} meals
+Meal Timing: ${generated.nutritionStructure?.mealTiming}
+Injuries: ${Array.isArray(client.injuries) && client.injuries.length > 0 ? client.injuries.join(', ') : 'None'}
+${coachDirectives ? 'Coach notes: ' + coachDirectives : ''}
+
+Return ONLY a JSON array (no markdown, no wrapper object):
+[
+  {
+    "time": "8:00-9:00 a.m.",
+    "meal": "Breakfast",
+    "foods": "Specific foods with exact portions for this client",
+    "notes": ""
+  }
+]
+
+Include: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (training days), Dinner, Evening Snack (if applicable).
+Use REAL foods and EXACT gram/oz portions based on the macro targets above.
+The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
+
+      const mealPlanResponse = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: 'You generate meal plans. Respond with ONLY a raw JSON array. No markdown, no backticks, no explanation.',
+        messages: [{ role: 'user', content: mealPlanPrompt }],
+      })
+
+      const mpContent = mealPlanResponse.content[0]
+      if (mpContent.type === 'text') {
+        let mpRaw = mpContent.text.trim()
+        mpRaw = mpRaw
+          .replace(/^```json\s*/i, '')
+          .replace(/^```\s*/i, '')
+          .replace(/```\s*$/i, '')
+          .trim()
+
+        const firstBracket = mpRaw.indexOf('[')
+        const lastBracket = mpRaw.lastIndexOf(']')
+        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+          mpRaw = mpRaw.slice(firstBracket, lastBracket + 1)
+        }
+
+        try {
+          const parsed = JSON.parse(mpRaw)
+          if (Array.isArray(parsed)) {
+            mealPlan = parsed
+          }
+        } catch {
+          console.error('Meal plan parse failed, falling back to empty array')
+          mealPlan = []
+        }
+      }
+    } catch (e) {
+      console.error('Meal plan generation error:', e)
+      mealPlan = []
+    }
+
+    if (generated && generated.nutritionStructure) {
+      generated.nutritionStructure.mealPlan = mealPlan
     }
 
     return NextResponse.json({
