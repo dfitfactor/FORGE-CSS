@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const accessFilter = session.role === 'admin' ? '' : 'WHERE c.coach_id = $1'
+    const params = session.role === 'admin' ? [] : [session.id]
+
     // Staging schemas may differ (legacy snapshots vs Neon snapshots). Try Neon-style columns first,
     // then fall back to legacy columns while keeping the same response shape.
     let clients: any[] = []
@@ -49,15 +52,27 @@ export async function GET(request: NextRequest) {
           CAST(bs.bar_score AS FLOAT) AS bar_score,
           CAST(bs.dbi_score AS FLOAT) AS dbi_score,
           CAST(bs.bli_score AS FLOAT) AS bli_score,
-          bs.updated_at AS snapshot_updated_at,
+          bs.snapshot_updated_at,
           (
             SELECT MAX(created_at) 
             FROM adherence_records ar 
             WHERE ar.client_id = c.id
           ) AS last_session
         FROM clients c
-        LEFT JOIN behavioral_snapshots bs ON bs.client_id = c.id
-        ORDER BY bs.updated_at DESC NULLS LAST`
+        LEFT JOIN LATERAL (
+          SELECT
+            updated_at AS snapshot_updated_at,
+            bar_score,
+            dbi_score,
+            bli_score
+          FROM behavioral_snapshots
+          WHERE client_id = c.id
+          ORDER BY snapshot_date DESC, updated_at DESC
+          LIMIT 1
+        ) bs ON true
+        ${accessFilter}
+        ORDER BY bs.snapshot_updated_at DESC NULLS LAST, c.full_name ASC`,
+        params
       )
     } catch {
       clients = await db.query(
@@ -71,15 +86,27 @@ export async function GET(request: NextRequest) {
           CAST(bs.bar AS FLOAT) AS bar_score,
           CAST(bs.dbi AS FLOAT) AS dbi_score,
           CAST(COALESCE(bs.bli, 0) AS FLOAT) AS bli_score,
-          bs.created_at AS snapshot_updated_at,
+          bs.snapshot_updated_at,
           (
             SELECT MAX(created_at) 
             FROM adherence_records ar 
             WHERE ar.client_id = c.id
           ) AS last_session
         FROM clients c
-        LEFT JOIN behavioral_snapshots bs ON bs.client_id = c.id
-        ORDER BY bs.created_at DESC NULLS LAST`
+        LEFT JOIN LATERAL (
+          SELECT
+            created_at AS snapshot_updated_at,
+            bar,
+            dbi,
+            bli
+          FROM behavioral_snapshots
+          WHERE client_id = c.id
+          ORDER BY snapshot_date DESC, created_at DESC
+          LIMIT 1
+        ) bs ON true
+        ${accessFilter}
+        ORDER BY bs.snapshot_updated_at DESC NULLS LAST, c.full_name ASC`,
+        params
       )
     }
 

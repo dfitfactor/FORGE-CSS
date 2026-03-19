@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { redirect } from 'next/navigation'
 import { 
   Users, TrendingUp, AlertTriangle, CheckCircle, 
   Zap, ArrowUp, ArrowDown, Minus 
@@ -113,7 +114,7 @@ async function getDashboardStats(coachId: string) {
 
 export default async function DashboardPage() {
   const session = await getSession()
-  if (!session) return null
+  if (!session) redirect('/auth/login')
 
   const { clientStats, alerts, recentActivity } = await getDashboardStats(session.id)
 

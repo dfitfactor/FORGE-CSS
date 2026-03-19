@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
-import { verifyPassword, createSession } from '@/lib/auth'
+import { verifyPassword, createSession, setSessionCookie } from '@/lib/auth'
 import { z } from 'zod'
 
 const LoginSchema = z.object({
@@ -80,15 +79,7 @@ export async function POST(request: NextRequest) {
 
     const token = await createSession(user.id)
 
-    cookies().set({
-      name: 'forge_session',
-      value: token,
-      httpOnly: true,
-      path: '/',
-      sameSite: 'lax',
-      secure: false,
-      maxAge: 60 * 60 * 24 * 7,
-    })
+    setSessionCookie(token)
 
     return NextResponse.json({ success: true })
 

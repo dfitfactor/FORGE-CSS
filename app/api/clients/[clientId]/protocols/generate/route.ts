@@ -5,6 +5,23 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+function normalizeBase64(input: string | null | undefined): string | null {
+  if (input === null || input === undefined) return null
+  let s = String(input).trim()
+  // Strip common data-URL prefix if present
+  s = s.replace(/^data:.*?;base64,/i, '')
+  // Remove whitespace/newlines
+  s = s.replace(/\s+/g, '')
+  // Accept base64url variants
+  s = s.replace(/-/g, '+').replace(/_/g, '/')
+
+  if (s.length === 0) return null
+  // Basic structural validation
+  if (s.length % 4 !== 0) return null
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
+  return s
+}
+
 const FORGE_SYSTEM_PROMPT = `You are the FORGË Behavioral Intelligence Engine AI component. You generate adaptive health and fitness protocols for the FORGË platform.
 
 CORE PHILOSOPHY:
@@ -136,7 +153,9 @@ export async function POST(
         (doc.file_name?.endsWith('.csv') ?? false)
       ) {
         try {
-          const text = Buffer.from(doc.file_data, 'base64')
+          const normalized = normalizeBase64(doc.file_data)
+          if (!normalized) throw new Error('Invalid base64')
+          const text = Buffer.from(normalized, 'base64')
             .toString('utf-8')
             .slice(0, 2000) // cap at 2000 chars per doc
           docContexts.push(`${label}\n${text}`)
@@ -272,19 +291,6 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 
     // CALL 1 — Core protocol (no mealPlan)
     const userMessageContent: any[] = [{ type: 'text', text: prompt }]
-
-    // Add PDF documents as Anthropic document blocks (when available)
-    for (const doc of pdfDocs.slice(0, 3)) {
-      if (!doc.file_data) continue
-      userMessageContent.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: doc.file_data,
-        },
-      })
-    }
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

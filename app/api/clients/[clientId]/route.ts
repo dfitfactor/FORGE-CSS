@@ -164,25 +164,30 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { clientId: string } }
 ) {
-  const session = await getSession(request)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const session = await getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const existing = await db.queryOne<{ coach_id: string }>(
-    `SELECT coach_id FROM clients WHERE id = $1`,
-    [params.clientId]
-  )
+    const existing = await db.queryOne<{ coach_id: string }>(
+      `SELECT coach_id FROM clients WHERE id = $1`,
+      [params.clientId]
+    )
 
-  if (!existing || (existing.coach_id !== session.id && session.role !== 'admin')) {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    if (!existing || (existing.coach_id !== session.id && session.role !== 'admin')) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    await db.query(
+      `UPDATE clients
+       SET status = 'churned',
+           updated_at = NOW()
+       WHERE id = $1`,
+      [params.clientId]
+    )
+
+    return NextResponse.json({ success: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  await db.query(
-    `UPDATE clients
-     SET status = 'archived',
-         updated_at = NOW()
-     WHERE id = $1 AND coach_id = $2`,
-    [params.clientId, existing.coach_id]
-  )
-
-  return NextResponse.json({ success: true })
 }

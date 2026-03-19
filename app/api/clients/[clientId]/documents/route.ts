@@ -2,6 +2,25 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+function normalizeBase64(input: string | null | undefined): string | null {
+  if (input === null || input === undefined) return null
+
+  let s = String(input).trim()
+  s = s.replace(/^data:.*?;base64,/i, '')
+  s = s.replace(/\s+/g, '')
+  s = s.replace(/-/g, '+').replace(/_/g, '/')
+
+  if (s.length === 0) return null
+
+  const padding = s.length % 4
+  if (padding !== 0) {
+    s = s.padEnd(s.length + (4 - padding), '=')
+  }
+
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
+  return s
+}
+
 // GET /api/clients/[clientId]/documents
 export async function GET(
   request: NextRequest,
@@ -65,6 +84,13 @@ export async function POST(
       return NextResponse.json({ error: 'File size must be under 10MB' }, { status: 400 })
     }
 
+    const normalized = normalizeBase64(fileData)
+    if (!normalized) {
+      return NextResponse.json({ error: 'Invalid file data' }, { status: 400 })
+    }
+
+    const fileBuffer = Buffer.from(normalized, 'base64')
+
     const doc = await db.queryOne<{ id: string }>(
       `INSERT INTO client_documents
          (client_id, uploaded_by, file_name, file_type, file_size, file_data,
@@ -73,7 +99,7 @@ export async function POST(
        RETURNING id`,
       [
         params.clientId, session.id, fileName, fileType,
-        fileSize || 0, fileData,
+        fileSize || 0, fileBuffer,
         documentType || 'general', title || null, notes || null,
         includeInAi !== false
       ]

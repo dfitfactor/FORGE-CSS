@@ -13,6 +13,52 @@ const anthropic = new Anthropic({
 
 const MODEL = 'claude-opus-4-6'
 
+function normalizeBase64(input: string | null | undefined): string | null {
+  if (input === null || input === undefined) return null
+  let s = String(input).trim()
+  s = s.replace(/^data:.*?;base64,/i, '')
+  s = s.replace(/\s+/g, '')
+  s = s.replace(/-/g, '+').replace(/_/g, '/')
+  if (s.length === 0) return null
+  const padding = s.length % 4
+  if (padding !== 0) {
+    s = s.padEnd(s.length + (4 - padding), '=')
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
+  return s
+}
+
+function canonicalizeDocumentBase64(
+  input: string | null | undefined,
+  expectedType?: 'pdf'
+): string | null {
+  const normalized = normalizeBase64(input)
+  if (!normalized) return null
+
+  const decoded = Buffer.from(normalized, 'base64')
+  if (decoded.length === 0) return null
+
+  if (expectedType === 'pdf') {
+    if (decoded.subarray(0, 4).toString('utf8') === '%PDF') {
+      return decoded.toString('base64')
+    }
+
+    // Legacy uploads may have stored the base64 text itself in bytea, which means
+    // `encode(file_data, 'base64')` returns base64-of-base64 text. Decode once more.
+    const nested = normalizeBase64(decoded.toString('utf8'))
+    if (!nested) return null
+
+    const nestedDecoded = Buffer.from(nested, 'base64')
+    if (nestedDecoded.subarray(0, 4).toString('utf8') !== '%PDF') {
+      return null
+    }
+
+    return nestedDecoded.toString('base64')
+  }
+
+  return decoded.toString('base64')
+}
+
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ClientContext = {
@@ -163,7 +209,9 @@ export async function generateProtocol(
       (doc.file_name?.endsWith('.csv') ?? false)
     ) {
       try {
-        const text = Buffer.from(doc.file_data, 'base64')
+        const normalized = normalizeBase64(doc.file_data)
+        if (!normalized) throw new Error('Invalid base64')
+        const text = Buffer.from(normalized, 'base64')
           .toString('utf-8')
           .slice(0, 2000)
         docContexts.push(`${label}\n${text}`)
@@ -243,12 +291,14 @@ Output ONLY valid JSON matching this schema:
           const userMessageContent: any[] = [{ type: 'text', text: userPrompt }]
           for (const doc of pdfDocs.slice(0, 3)) {
             if (!doc.file_data) continue
+            const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
+            if (!pdfB64) continue
             userMessageContent.push({
               type: 'document',
               source: {
                 type: 'base64',
                 media_type: 'application/pdf',
-                data: doc.file_data,
+                data: pdfB64,
               },
             })
           }
@@ -366,7 +416,9 @@ export async function generateWeeklyInsight(
       (doc.file_name?.endsWith('.csv') ?? false)
     ) {
       try {
-        const text = Buffer.from(doc.file_data, 'base64')
+        const normalized = normalizeBase64(doc.file_data)
+        if (!normalized) throw new Error('Invalid base64')
+        const text = Buffer.from(normalized, 'base64')
           .toString('utf-8')
           .slice(0, 2000)
         docContexts.push(`${label}\n${text}`)
@@ -430,12 +482,14 @@ Output ONLY JSON:
           const userMessageContent: any[] = [{ type: 'text', text: prompt }]
           for (const doc of pdfDocs.slice(0, 3)) {
             if (!doc.file_data) continue
+            const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
+            if (!pdfB64) continue
             userMessageContent.push({
               type: 'document',
               source: {
                 type: 'base64',
                 media_type: 'application/pdf',
-                data: doc.file_data,
+                data: pdfB64,
               },
             })
           }
