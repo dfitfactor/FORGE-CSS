@@ -168,6 +168,13 @@ export async function POST(
       return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
     })
 
+    const equipmentText =
+      Array.isArray(client.available_equipment)
+        ? client.available_equipment.join(', ')
+        : typeof (client as any).available_equipment === 'string'
+          ? (client as any).available_equipment
+          : 'Standard gym'
+
     const bie = {
       bar: snapshot?.bar ?? null,
       bli: snapshot?.bli ?? null,
@@ -200,7 +207,7 @@ Stage: ${client.current_stage.toUpperCase()}
 Program Tier: ${client.program_tier}
 Primary Goal: ${client.primary_goal ?? 'General fitness and wellness'}
 Injuries: ${Array.isArray(client.injuries) ? client.injuries.join(', ') : (client.injuries || '') || 'None'}
-Equipment: ${client.available_equipment?.join(', ') || 'Standard gym'}
+Equipment: ${equipmentText}
 Generation State: ${snapshot?.generation_state ?? 'B'}
 
 BIE VARIABLES:
