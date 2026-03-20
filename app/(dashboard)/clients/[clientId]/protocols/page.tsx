@@ -39,6 +39,7 @@ type GeneratedProtocol = {
   nutritionStructure?: {
     dailyCalories: number; proteinG: number; carbG: number; fatG: number
     mealFrequency: number; mealTiming: string; complexityLevel: string
+    mealPlan?: Array<{ time: string; meal: string; foods: string; notes?: string }>
     keyGuidelines: string[]; disruption_protocol: string
   }
   recoveryStructure?: {
@@ -575,6 +576,21 @@ export default function ProtocolsPage() {
                           <div className="bg-amber-500/6 border border-amber-500/15 rounded-xl p-3">
                             <p className="text-xs text-amber-400/70 font-mono mb-1">DISRUPTION PROTOCOL</p>
                             <p className="text-sm text-white/60">{generated.nutritionStructure.disruption_protocol}</p>
+                          </div>
+                        )}
+                        {generated.nutritionStructure.mealPlan && generated.nutritionStructure.mealPlan.length > 0 && (
+                          <div className="bg-white/3 rounded-xl p-3 space-y-2">
+                            <p className="text-xs text-white/30 font-mono mb-1">SAMPLE MEAL PLAN</p>
+                            {generated.nutritionStructure.mealPlan.map((meal, i) => (
+                              <div key={i} className="rounded-lg border border-white/6 bg-black/20 px-3 py-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-semibold text-white">{meal.meal}</p>
+                                  <p className="text-[11px] font-mono text-[#D4AF37] shrink-0">{meal.time}</p>
+                                </div>
+                                <p className="text-sm text-white/65 mt-1">{meal.foods}</p>
+                                {meal.notes && <p className="text-xs text-white/35 mt-1">{meal.notes}</p>}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

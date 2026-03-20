@@ -22,6 +22,13 @@ type ExerciseRow = {
   tempo?: string; loadGuidance?: string; coachingCue?: string; swapOption?: string
 }
 
+type MealPlanRow = {
+  time?: string
+  meal?: string
+  foods?: string
+  notes?: string
+}
+
 type MealSlot = { foods: string; protein: string; carbs: string; fats: string; timing: string; notes: string }
 
 function SectionHeader({ title, color }: { title: string; color: string }) {
@@ -116,6 +123,35 @@ function BSLDSTable({ bsldsTemplate }: { bsldsTemplate: Record<string, unknown> 
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function MealPlanTable({ mealPlan }: { mealPlan: MealPlanRow[] }) {
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <div style={{ fontSize: '10px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+        Sample Meal Plan
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+        <thead>
+          <tr style={{ background: '#fff8f5' }}>
+            {['Time', 'Meal', 'Foods', 'Notes'].map(h => (
+              <th key={h} style={{ padding: '5px 6px', textAlign: 'left', fontSize: '8px', color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #fde0d0' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {mealPlan.map((meal, i) => (
+            <tr key={`${meal.meal ?? 'meal'}-${i}`} style={{ borderBottom: '1px solid #fafafa', background: i % 2 === 0 ? '#fff' : '#fff8f5' }}>
+              <td style={{ padding: '6px', color: '#888', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{meal.time ?? '—'}</td>
+              <td style={{ padding: '6px', fontWeight: '600', color: '#b5451b', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{meal.meal ?? 'Meal'}</td>
+              <td style={{ padding: '6px', color: '#333' }}>{meal.foods ?? '—'}</td>
+              <td style={{ padding: '6px', color: '#888' }}>{meal.notes || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -338,6 +374,9 @@ export default function ProtocolPDFPage() {
               )}
               {Boolean((ns as any).bsldsTemplate) && (
                 <BSLDSTable bsldsTemplate={(ns as any).bsldsTemplate as Record<string, unknown>} />
+              )}
+              {Array.isArray((ns as any).mealPlan) && (ns as any).mealPlan.length > 0 && (
+                <MealPlanTable mealPlan={(ns as any).mealPlan as MealPlanRow[]} />
               )}
               {(ns.keyGuidelines as string[])?.length > 0 && (
                 <div style={{ marginTop: '12px' }}>
