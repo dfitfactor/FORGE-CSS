@@ -14,6 +14,7 @@ type FormState = {
   phone: string
   dateOfBirth: string
   gender: string
+  currentStage: string
   status: string
   primaryGoal: string
   motivation: string
@@ -80,7 +81,7 @@ export default function EditClientPage() {
   const [clientName, setClientName] = useState('')
 
   const [form, setForm] = useState<FormState>({
-    fullName: '', email: '', phone: '', dateOfBirth: '', gender: '', status: 'active',
+    fullName: '', email: '', phone: '', dateOfBirth: '', gender: '', currentStage: 'foundations', status: 'active',
     primaryGoal: '', motivation: '', obstacles: '',
     weightLbs: '', bodyFatPct: '',
     programTier: '', sessionsPerMonth: '', targetSessionsPerWeek: 3,
@@ -104,6 +105,7 @@ export default function EditClientPage() {
           phone: c.phone ?? '',
           dateOfBirth: c.date_of_birth ?? '',
           gender: c.gender ?? '',
+          currentStage: c.current_stage ?? 'foundations',
           status: c.status ?? 'active',
           primaryGoal: c.primary_goal ?? '',
           motivation: c.motivation ?? '',
@@ -143,6 +145,7 @@ export default function EditClientPage() {
           phone: form.phone || undefined,
           dateOfBirth: form.dateOfBirth || undefined,
           gender: form.gender || undefined,
+          currentStage: form.currentStage || undefined,
           status: form.status,
           primaryGoal: form.primaryGoal || undefined,
           motivation: form.motivation || undefined,
@@ -247,6 +250,16 @@ export default function EditClientPage() {
                 <option value="non-binary">Non-binary</option>
                 <option value="prefer_not_to_say">Prefer not to say</option>
                 <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="forge-label">Current Stage</label>
+              <select value={form.currentStage} onChange={e => set('currentStage', e.target.value)} className="forge-input">
+                <option value="foundations">Foundations</option>
+                <option value="optimization">Optimization</option>
+                <option value="resilience">Resilience</option>
+                <option value="growth">Growth</option>
+                <option value="empowerment">Empowerment</option>
               </select>
             </div>
             <div className="col-span-2">

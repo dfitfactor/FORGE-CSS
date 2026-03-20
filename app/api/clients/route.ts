@@ -9,6 +9,7 @@ const CreateClientSchema = z.object({
   phone: z.string().optional(),
   dateOfBirth: z.string().optional(),
   gender: z.string().optional(),
+  currentStage: z.enum(['foundations', 'optimization', 'resilience', 'growth', 'empowerment']).optional(),
   primaryGoal: z.string().optional(),
   secondaryGoals: z.array(z.string()).optional(),
   motivation: z.string().optional(),
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
           c.full_name,
           c.email,
           c.date_of_birth::text as date_of_birth,
+          c.gender,
           CASE
             WHEN c.date_of_birth IS NOT NULL
             THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
@@ -87,6 +89,7 @@ export async function GET(request: NextRequest) {
           c.full_name,
           c.email,
           c.date_of_birth::text as date_of_birth,
+          c.gender,
           CASE
             WHEN c.date_of_birth IS NOT NULL
             THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
@@ -162,7 +165,7 @@ export async function POST(request: NextRequest) {
       $13, $14, $15,
       $16, $17, $18, $19,
       $20, $21, $22,
-      'foundations', CURRENT_DATE, 'active'
+      $23, CURRENT_DATE, 'active'
     ) RETURNING id`,
     [
       session.id, data.fullName, data.email || null, data.phone || null,
@@ -174,6 +177,7 @@ export async function POST(request: NextRequest) {
       data.injuries || [], data.medicalConditions || [], data.medications || [],
       data.physicianClearance || false,
       data.programTier || null, data.sessionsPerMonth || null, data.notes || null,
+      data.currentStage || 'foundations',
     ]
   )
 
@@ -185,7 +189,7 @@ export async function POST(request: NextRequest) {
   await db.query(
     `INSERT INTO timeline_events (client_id, event_type, title, description, event_date, created_by)
      VALUES ($1, 'intake', 'Client Intake Completed', $2, CURRENT_DATE, $3)`,
-    [client.id, `${data.fullName} joined FORGE at the Foundations stage.`, session.id]
+    [client.id, `${data.fullName} joined FORGE at the ${(data.currentStage || 'foundations').charAt(0).toUpperCase() + (data.currentStage || 'foundations').slice(1)} stage.`, session.id]
   )
 
   // Create initial stage progression

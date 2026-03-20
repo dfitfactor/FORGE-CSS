@@ -9,6 +9,7 @@ const UpdateClientSchema = z.object({
   phone: z.string().optional(),
   dateOfBirth: z.string().optional(),
   gender: z.string().optional(),
+  currentStage: z.enum(['foundations', 'optimization', 'resilience', 'growth', 'empowerment']).optional(),
   primaryGoal: z.string().optional(),
   motivation: z.string().optional(),
   obstacles: z.string().optional(),
@@ -122,7 +123,7 @@ export async function PATCH(
 
     const fieldMap: Record<string, string> = {
       fullName: 'full_name', email: 'email', phone: 'phone',
-      dateOfBirth: 'date_of_birth', gender: 'gender',
+      dateOfBirth: 'date_of_birth', gender: 'gender', currentStage: 'current_stage',
       primaryGoal: 'primary_goal', motivation: 'motivation', obstacles: 'obstacles',
       weightLbs: 'weight_lbs', bodyFatPct: 'body_fat_pct',
       injuries: 'injuries', programTier: 'program_tier',

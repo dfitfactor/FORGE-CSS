@@ -86,11 +86,22 @@ export async function POST(
     }
 
     const client = await db.queryOne<{
-      coach_id: string; full_name: string; primary_goal: string
-      injuries: string[]; program_tier: string; current_stage: string
-      available_equipment: string[]; sessions_per_week: number
+      coach_id: string
+      full_name: string
+      primary_goal: string | null
+      motivation: string | null
+      obstacles: string | null
+      notes: string | null
+      date_of_birth: string | null
+      gender: string | null
+      injuries: string[] | null
+      program_tier: string | null
+      current_stage: string | null
+      available_equipment: string[] | null
+      sessions_per_week: number | null
     }>(
-      `SELECT coach_id, full_name, primary_goal, injuries, program_tier,
+      `SELECT coach_id, full_name, primary_goal, motivation, obstacles, notes,
+              date_of_birth::text as date_of_birth, gender, injuries, program_tier,
               current_stage, available_equipment, sessions_per_week
        FROM clients WHERE id = $1`,
       [params.clientId]
@@ -101,6 +112,7 @@ export async function POST(
 
     const body = await request.json()
     const { protocolType, coachDirectives } = body
+    const currentStage = client.current_stage ?? 'foundations'
     const normalizedProtocolType =
       protocolType === 'movement' ||
       protocolType === 'nutrition' ||
@@ -232,6 +244,43 @@ export async function POST(
         : typeof (client as any).available_equipment === 'string'
           ? (client as any).available_equipment
           : 'Standard gym'
+    const age =
+      client.date_of_birth
+        ? Math.max(
+            0,
+            new Date().getFullYear() -
+              new Date(`${client.date_of_birth}T00:00:00`).getFullYear() -
+              (
+                (() => {
+                  const today = new Date()
+                  const birth = new Date(`${client.date_of_birth}T00:00:00`)
+                  return today.getMonth() < birth.getMonth() ||
+                    (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
+                    ? 1
+                    : 0
+                })()
+              )
+          )
+        : null
+    const priorProtocols = await db.query<{
+      name: string
+      protocol_type: string
+      created_at: string
+      notes: string | null
+      coach_notes: string | null
+    }>(
+      `SELECT name, protocol_type, created_at::text, notes, coach_notes
+       FROM protocols
+       WHERE client_id = $1
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [params.clientId]
+    )
+    const priorProtocolSummary = priorProtocols.length > 0
+      ? priorProtocols.map(protocol =>
+          `${protocol.protocol_type}: ${protocol.name}${protocol.notes ? ` | notes: ${protocol.notes.slice(0, 120)}` : ''}${protocol.coach_notes ? ` | coach: ${protocol.coach_notes.slice(0, 120)}` : ''}`
+        ).join(' // ')
+      : 'No prior protocols'
 
     const journalSummary = journals.map(j => [
       j.body?.slice(0, 100),
@@ -363,10 +412,15 @@ export async function POST(
     const prompt = `Generate a ${normalizedProtocolType} protocol for this FORGE client.
 
 CLIENT: ${client.full_name}
-Stage: ${client.current_stage.toUpperCase()}
-Program Tier: ${client.program_tier}
+Stage: ${currentStage.toUpperCase()}
+Program Tier: ${client.program_tier ?? 'Not set'}
 Primary Goal: ${client.primary_goal ?? 'General fitness and wellness'}
 Injuries: ${Array.isArray(client.injuries) ? client.injuries.join(', ') : (client.injuries || '') || 'None'}
+Age: ${age ?? 'unknown'}
+Gender: ${client.gender ? client.gender.replace(/_/g, ' ') : 'not specified'}
+Motivation: ${client.motivation ?? 'Not recorded'}
+Obstacles: ${client.obstacles ?? 'Not recorded'}
+Coach / intake notes: ${client.notes ?? 'None'}
 Equipment: ${equipmentText}
 Generation State: ${generationState}
 
@@ -377,6 +431,7 @@ MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurem
 
 RECENT JOURNALS: ${journalSummary || 'No recent journal entries'}
 RECENT CHECK-INS: ${checkinSummary || 'No recent check-ins'}
+RECENT PROTOCOL HISTORY: ${priorProtocolSummary}
     ═══ CLIENT DOCUMENTS (AI-enabled) ═══
     ${docSummary}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
@@ -474,7 +529,7 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 Client: ${client.full_name}
 Goal: ${client.primary_goal ?? 'General fitness'}
 Weight: ${measurements?.weight_lbs ?? 'unknown'} lbs
-Stage: ${client.current_stage}
+Stage: ${currentStage}
 Daily Targets: ${generated.nutritionStructure?.dailyCalories} cal | ${generated.nutritionStructure?.proteinG}g protein | ${generated.nutritionStructure?.carbG}g carbs | ${generated.nutritionStructure?.fatG}g fat
 Meal Frequency: ${generated.nutritionStructure?.mealFrequency} meals
 Meal Timing: ${generated.nutritionStructure?.mealTiming}
@@ -543,7 +598,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         bie: resolvedBie,
         bieSource,
         generationState,
-        stage: client.current_stage,
+        stage: currentStage,
         measurements,
         dataPoints: {
           adherenceRecords: adherenceRecords.length,
