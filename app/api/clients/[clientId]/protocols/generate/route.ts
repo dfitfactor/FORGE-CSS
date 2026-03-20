@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Anthropic from '@anthropic-ai/sdk'
+import {
+  computeBAR,
+  computeGenerationState,
+  computePPS,
+  extractSignalsFromCheckIn,
+} from '@/lib/bie-engine'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
@@ -25,6 +31,21 @@ function normalizeBase64(input: string | null | undefined): string | null {
   if (s.length % 4 !== 0) return null
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
   return s
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function average(values: Array<number | null | undefined>) {
+  const nums = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  if (nums.length === 0) return null
+  return nums.reduce((sum, value) => sum + value, 0) / nums.length
+}
+
+function countKeywordHits(text: string, patterns: RegExp[]) {
+  const normalized = text.toLowerCase()
+  return patterns.reduce((count, pattern) => count + (pattern.test(normalized) ? 1 : 0), 0)
 }
 
 const FORGE_SYSTEM_PROMPT = `You are the FORGË Behavioral Intelligence Engine AI component. You generate adaptive health and fitness protocols for the FORGË platform.
@@ -212,15 +233,6 @@ export async function POST(
           ? (client as any).available_equipment
           : 'Standard gym'
 
-    const bie = {
-      bar: snapshot?.bar ?? null,
-      bli: snapshot?.bli ?? null,
-      dbi: snapshot?.dbi ?? null,
-      cdi: snapshot?.cdi ?? null,
-      lsi: snapshot?.lsi ?? null,
-      pps: snapshot?.pps ?? null,
-    }
-
     const journalSummary = journals.map(j => [
       j.body?.slice(0, 100),
       j.sleep_quality ? `sleep ${j.sleep_quality}/5` : '',
@@ -237,6 +249,117 @@ export async function POST(
       c.did_for_self ? `self-care: ${c.did_for_self.slice(0, 60)}` : '',
     ].filter(Boolean).join(' | ')).filter(Boolean).join(' // ')
 
+    const completedSessions = adherenceRecords.filter(record =>
+      record.record_type === 'session_completed' || record.record_type.includes('completed')
+    ).length
+    const partialSessions = adherenceRecords.filter(record =>
+      record.record_type.includes('partial')
+    ).length
+    const loggedNutritionDays = adherenceRecords.filter(record =>
+      record.record_type.includes('nutrition') || record.record_type.includes('meal')
+    ).length
+    const expectedSessions = Math.max((client.sessions_per_week ?? 3) * 4, 1)
+    const expectedNutritionDays = 28
+    const expectedCheckins = Math.max(journals.length > 0 || checkins.length > 0 ? 4 : 1, 1)
+
+    const estimatedBar = clampScore(computeBAR({
+      plannedSessions: expectedSessions,
+      completedSessions,
+      partialSessions,
+      plannedNutritionDays: expectedNutritionDays,
+      loggedNutritionDays: Math.min(loggedNutritionDays, expectedNutritionDays),
+      checkInsCompleted: Math.min(checkins.length, expectedCheckins),
+      checkInsPlanned: expectedCheckins,
+    }))
+
+    const journalSignalSamples = journals.map(journal =>
+      extractSignalsFromCheckIn({
+        sleepQuality: journal.sleep_quality ?? undefined,
+        energyLevel: journal.energy_level ?? undefined,
+        stressLevel: journal.stress_level ?? undefined,
+        mood: journal.mood ?? undefined,
+      })
+    )
+
+    const checkinSignalSamples = checkins.map(checkin =>
+      extractSignalsFromCheckIn({
+        sleepQuality: checkin.sleep_quality ?? undefined,
+        stressLevel:
+          typeof checkin.stress_rating === 'number'
+            ? Math.max(1, Math.min(5, Math.round(checkin.stress_rating / 2)))
+            : undefined,
+        energyLevel:
+          typeof checkin.workout_consistency === 'number'
+            ? Math.max(1, Math.min(5, Math.round(checkin.workout_consistency / 2)))
+            : undefined,
+      })
+    )
+
+    const allSignals = [...journalSignalSamples, ...checkinSignalSamples]
+    const baseDbi = average(allSignals.map(signal => signal.dbi_signal)) ?? 42
+    const baseLsi = average(allSignals.map(signal => signal.lsi_signal)) ?? 58
+    const baseCdi = average(allSignals.map(signal => signal.cdi_signal)) ?? 40
+
+    const textCorpus = [
+      ...journals.map(journal => journal.body ?? ''),
+      ...checkins.flatMap(checkin => [
+        checkin.what_worked ?? '',
+        checkin.challenges ?? '',
+        checkin.grateful_for ?? '',
+        checkin.did_for_self ?? '',
+      ]),
+      docSummary === 'None' ? '' : docSummary,
+    ].join('\n')
+
+    const disruptionHits = countKeywordHits(textCorpus, [
+      /\btravel\b/,
+      /\bsick|ill|illness\b/,
+      /\bstress|overwhelm|burnout\b/,
+      /\bbusy|chaos|disrupt(?:ed|ion)?\b/,
+      /\bpain|injury|flare\b/,
+      /\bpoor sleep|insomnia|exhausted|fatigue\b/,
+    ])
+    const stabilityHits = countKeywordHits(textCorpus, [
+      /\bconsistent|routine|steady|stable\b/,
+      /\benergized|confident|focused|strong\b/,
+      /\bwell-rested|slept well|good sleep\b/,
+      /\bon track|momentum|dialed in\b/,
+    ])
+
+    const estimatedDbi = clampScore(baseDbi + (disruptionHits * 5) - (stabilityHits * 3))
+    const estimatedLsi = clampScore(baseLsi + (stabilityHits * 6) - (disruptionHits * 5))
+    const estimatedCdi = clampScore(baseCdi + (disruptionHits * 4) - (stabilityHits * 2))
+    const estimatedBli = clampScore((estimatedDbi * 0.4) + ((100 - estimatedBar) * 0.25) + (estimatedCdi * 0.2) + ((100 - estimatedLsi) * 0.15))
+    const estimatedPps = clampScore(computePPS(
+      estimatedBar,
+      estimatedBli,
+      estimatedDbi,
+      estimatedLsi,
+      estimatedBar >= 65 ? 4 : estimatedBar >= 50 ? 2 : 0
+    ))
+
+    const resolvedBie = {
+      bar: snapshot?.bar ?? estimatedBar,
+      bli: snapshot?.bli ?? estimatedBli,
+      dbi: snapshot?.dbi ?? estimatedDbi,
+      cdi: snapshot?.cdi ?? estimatedCdi,
+      lsi: snapshot?.lsi ?? estimatedLsi,
+      pps: snapshot?.pps ?? estimatedPps,
+    }
+    const hasStoredSnapshot = Boolean(
+      snapshot &&
+      [snapshot.bar, snapshot.bli, snapshot.dbi, snapshot.cdi, snapshot.lsi, snapshot.pps].some(
+        value => typeof value === 'number'
+      )
+    )
+    const generationState =
+      snapshot?.generation_state ??
+      computeGenerationState({
+        ...resolvedBie,
+        cLsi: resolvedBie.lsi,
+      }).state
+    const bieSource = hasStoredSnapshot ? 'snapshot' : 'estimated'
+
     const prompt = `Generate a ${normalizedProtocolType} protocol for this FORGE client.
 
 CLIENT: ${client.full_name}
@@ -245,10 +368,10 @@ Program Tier: ${client.program_tier}
 Primary Goal: ${client.primary_goal ?? 'General fitness and wellness'}
 Injuries: ${Array.isArray(client.injuries) ? client.injuries.join(', ') : (client.injuries || '') || 'None'}
 Equipment: ${equipmentText}
-Generation State: ${snapshot?.generation_state ?? 'B'}
+Generation State: ${generationState}
 
 BIE VARIABLES:
-BAR: ${bie.bar ?? 'not recorded'} | BLI: ${bie.bli ?? 'not recorded'} | DBI: ${bie.dbi ?? 'not recorded'} | CDI: ${bie.cdi ?? 'not recorded'} | LSI: ${bie.lsi ?? 'not recorded'} | PPS: ${bie.pps ?? 'not recorded'}
+BAR: ${resolvedBie.bar} | BLI: ${resolvedBie.bli} | DBI: ${resolvedBie.dbi} | CDI: ${resolvedBie.cdi} | LSI: ${resolvedBie.lsi} | PPS: ${resolvedBie.pps}
 
 MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurements?.body_fat_pct ?? 'unknown'} | Lean mass ${measurements?.lean_mass_lbs ?? 'unknown'}lb | Waist ${measurements?.waist_in ?? 'unknown'}in
 
@@ -417,8 +540,9 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       success: true,
       generated,
       context: {
-        bie,
-        generationState: snapshot?.generation_state ?? 'B',
+        bie: resolvedBie,
+        bieSource,
+        generationState,
         stage: client.current_stage,
         measurements,
         dataPoints: {

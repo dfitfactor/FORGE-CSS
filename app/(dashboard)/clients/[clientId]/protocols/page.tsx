@@ -52,6 +52,7 @@ type GeneratedProtocol = {
 
 type GenerationContext = {
   bie: { bar: number; bli: number; dbi: number; cdi: number; lsi: number; pps: number }
+  bieSource?: 'snapshot' | 'estimated'
   generationState: string
   stage: string
   dataPoints: { adherenceRecords: number; journalEntries: number; checkins: number; biomarkers: string; aiDocs: number }
@@ -631,11 +632,14 @@ export default function ProtocolsPage() {
                       {showInsights && (
                         <div className="px-4 pb-4 space-y-4">
                           {/* Generation state */}
-                          <div className="bg-[#D4AF37]/6 border border-[#D4AF37]/15 rounded-xl p-3">
-                            <p className="text-[10px] font-mono text-white/30 mb-1">GENERATION STATE</p>
-                            <p className="text-sm font-bold text-[#D4AF37]">State {genContext.generationState}</p>
-                            <p className="text-xs text-white/40 mt-1 capitalize">{genContext.stage} stage</p>
-                          </div>
+                            <div className="bg-[#D4AF37]/6 border border-[#D4AF37]/15 rounded-xl p-3">
+                              <p className="text-[10px] font-mono text-white/30 mb-1">GENERATION STATE</p>
+                              <p className="text-sm font-bold text-[#D4AF37]">State {genContext.generationState}</p>
+                              <p className="text-xs text-white/40 mt-1 capitalize">{genContext.stage} stage</p>
+                              <p className="text-[10px] text-white/30 mt-2">
+                                BIE source: {genContext.bieSource === 'estimated' ? 'estimated from recent data' : 'latest snapshot'}
+                              </p>
+                            </div>
 
                           {/* BIE breakdown */}
                           <div>
