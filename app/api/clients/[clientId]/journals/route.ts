@@ -4,6 +4,68 @@ import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
+async function getJournalEntries(clientId: string) {
+  try {
+    return await db.query(
+      `SELECT id, entry_date::text, entry_type, title, body,
+              sleep_hours, sleep_quality, stress_level, energy_level,
+              hunger_level, mood, digestion_quality,
+              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
+              extracted_signals, signals_extracted,
+              coach_response, is_private, created_at::text
+       FROM journal_entries
+       WHERE client_id = $1
+       ORDER BY entry_date ASC, created_at ASC
+       LIMIT 100`,
+      [clientId]
+    )
+  } catch {
+    return db.query(
+      `SELECT id, entry_date::text, entry_type, title, body,
+              sleep_hours, sleep_quality, stress_level, energy_level,
+              hunger_level, mood, digestion_quality,
+              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
+              NULL::jsonb AS extracted_signals,
+              false AS signals_extracted,
+              coach_response, is_private, created_at::text
+       FROM journal_entries
+       WHERE client_id = $1
+       ORDER BY entry_date ASC, created_at ASC
+       LIMIT 100`,
+      [clientId]
+    )
+  }
+}
+
+async function getJournalEntryById(id: string) {
+  try {
+    return await db.queryOne(
+      `SELECT id, entry_date::text, entry_type, title, body,
+              sleep_hours, sleep_quality, stress_level, energy_level,
+              hunger_level, mood, digestion_quality,
+              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
+              extracted_signals, signals_extracted,
+              coach_response, is_private, created_at::text
+       FROM journal_entries
+       WHERE id = $1`,
+      [id]
+    )
+  } catch {
+    return db.queryOne(
+      `SELECT id, entry_date::text, entry_type, title, body,
+              sleep_hours, sleep_quality, stress_level, energy_level,
+              hunger_level, mood, digestion_quality,
+              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
+              NULL::jsonb AS extracted_signals,
+              false AS signals_extracted,
+              coach_response, is_private, created_at::text
+       FROM journal_entries
+       WHERE id = $1`,
+      [id]
+    )
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -23,19 +85,7 @@ export async function GET(
     if (!client || (client.coach_id !== session.id && session.role !== 'admin')) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
-    const entries = await db.query(
-      `SELECT id, entry_date::text, entry_type, title, body,
-              sleep_hours, sleep_quality, stress_level, energy_level,
-              hunger_level, mood, digestion_quality,
-              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
-              extracted_signals, signals_extracted,
-              coach_response, is_private, created_at::text
-       FROM journal_entries
-       WHERE client_id = $1
-       ORDER BY entry_date ASC, created_at ASC
-       LIMIT 100`,
-      [params.clientId]
-    )
+    const entries = await getJournalEntries(params.clientId)
     const debug = {
       clientId: params.clientId,
       rowCount: entries.length,
@@ -110,17 +160,7 @@ export async function POST(
       insertedId: result.id,
     })
 
-    const entry = await db.queryOne(
-      `SELECT id, entry_date::text, entry_type, title, body,
-              sleep_hours, sleep_quality, stress_level, energy_level,
-              hunger_level, mood, digestion_quality,
-              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
-              extracted_signals, signals_extracted,
-              coach_response, is_private, created_at::text
-       FROM journal_entries
-       WHERE id = $1`,
-      [result.id]
-    )
+    const entry = await getJournalEntryById(result.id)
     const countRow = await db.queryOne<{ count: string }>(
       `SELECT COUNT(*)::text AS count
        FROM journal_entries
