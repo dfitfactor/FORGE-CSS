@@ -83,6 +83,16 @@ function formatDate(str: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function compareJournalEntries(a: Entry, b: Entry) {
+  const aTime = `${a.entry_date}|${a.id}`
+  const bTime = `${b.entry_date}|${b.id}`
+  return aTime.localeCompare(bTime)
+}
+
+function sortJournalEntries(entries: Entry[]) {
+  return [...entries].sort(compareJournalEntries)
+}
+
 export default function JournalsPage() {
   const params = useParams<{ clientId: string }>()
   const clientId = params?.clientId as string
@@ -141,7 +151,7 @@ export default function JournalsPage() {
         if (d.debug) {
           console.log('[TEMP DEBUG][journals][page][GET] debug', d.debug)
         }
-        setEntries(Array.isArray(d.entries) ? d.entries : [])
+        setEntries(Array.isArray(d.entries) ? sortJournalEntries(d.entries as Entry[]) : [])
         setLoading(false)
       })
       .catch((err) => {
@@ -211,7 +221,7 @@ export default function JournalsPage() {
       setEditingId(null)
       setForm(emptyForm)
       if (data.entry) {
-        setEntries(prev => [...prev.filter(entry => entry.id !== data.entry.id), data.entry as Entry])
+        setEntries(prev => sortJournalEntries([...prev.filter(entry => entry.id !== data.entry.id), data.entry as Entry]))
       } else {
         loadEntries()
       }
