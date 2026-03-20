@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Plus, BookOpen, Loader2, CheckCircle,
-  AlertCircle, X, Trash2, ChevronDown, ChevronUp,
+  AlertCircle, X, Trash2, ChevronDown, ChevronUp, Pencil,
   Zap, Heart, Brain, Droplets, Moon, Utensils, Flag
 } from 'lucide-react'
 
@@ -75,7 +75,12 @@ function RatingButtons({ value, max = 5, onChange }: { value: string; max?: numb
 }
 
 function formatDate(str: string) {
-  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str)
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(str)
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function JournalsPage() {
@@ -89,6 +94,7 @@ export default function JournalsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filterType, setFilterType] = useState('all')
   const [respondingTo, setRespondingTo] = useState<string | null>(null)
@@ -148,13 +154,44 @@ export default function JournalsPage() {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
+  function openNewEntryForm() {
+    setEditingId(null)
+    setForm(emptyForm)
+    setShowForm(true)
+  }
+
+  function openEditForm(entry: Entry) {
+    setEditingId(entry.id)
+    setForm({
+      entryDate: entry.entry_date,
+      entryType: entry.entry_type,
+      title: entry.title ?? '',
+      body: entry.body ?? '',
+      sleepHours: entry.sleep_hours?.toString() ?? '',
+      sleepQuality: entry.sleep_quality?.toString() ?? '',
+      stressLevel: entry.stress_level?.toString() ?? '',
+      energyLevel: entry.energy_level?.toString() ?? '',
+      hungerLevel: entry.hunger_level?.toString() ?? '',
+      mood: entry.mood?.toString() ?? '',
+      digestionQuality: entry.digestion_quality?.toString() ?? '',
+      travelFlag: entry.travel_flag ?? false,
+      illnessFlag: entry.illness_flag ?? false,
+      workStressFlag: entry.work_stress_flag ?? false,
+      familyStressFlag: entry.family_stress_flag ?? false,
+      coachResponse: entry.coach_response ?? '',
+      isPrivate: entry.is_private ?? false,
+    })
+    setShowForm(true)
+  }
+
   async function handleSave() {
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/clients/' + clientId + '/journals', {
-        method: 'POST',
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(editingId ? { id: editingId } : {}),
           ...form,
           sleepHours: form.sleepHours ? Number(form.sleepHours) : undefined,
           sleepQuality: form.sleepQuality ? Number(form.sleepQuality) : undefined,
@@ -169,8 +206,9 @@ export default function JournalsPage() {
       // TEMP DEBUG
       console.log('[TEMP DEBUG][journals][page][POST] full response', data)
       if (!res.ok) { setError(data.error ?? 'Save failed'); return }
-      setSuccess('Entry saved')
+      setSuccess(editingId ? 'Entry updated' : 'Entry saved')
       setShowForm(false)
+      setEditingId(null)
       setForm(emptyForm)
       if (data.entry) {
         setEntries(prev => [...prev.filter(entry => entry.id !== data.entry.id), data.entry as Entry])
@@ -203,7 +241,7 @@ export default function JournalsPage() {
               <p className="text-sm text-white/40">{clientName}</p>
             </div>
           </div>
-          <button onClick={() => setShowForm(true)} className="forge-btn-gold text-sm flex items-center gap-2">
+          <button onClick={openNewEntryForm} className="forge-btn-gold text-sm flex items-center gap-2">
             <Plus size={15} /> New Entry
           </button>
         </div>
@@ -233,8 +271,8 @@ export default function JournalsPage() {
         {showForm && (
           <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">New Entry</h2>
-              <button onClick={() => setShowForm(false)} className="text-white/30 hover:text-white"><X size={16} /></button>
+              <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">{editingId ? 'Edit Entry' : 'New Entry'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm) }} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -284,7 +322,7 @@ export default function JournalsPage() {
             <div><label className="forge-label">Coach Notes (internal)</label><textarea rows={2} value={String(form.coachResponse)} onChange={e => setF('coachResponse', e.target.value)} className="forge-input resize-none" placeholder="Coaching observations, patterns, action items..." /></div>
 
             <button onClick={handleSave} disabled={saving} className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50">
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><BookOpen size={16} /> Save Entry</>}
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><BookOpen size={16} /> {editingId ? 'Update Entry' : 'Save Entry'}</>}
             </button>
           </div>
         )}
@@ -296,7 +334,7 @@ export default function JournalsPage() {
           <div className="bg-[#111111] border border-dashed border-white/8 rounded-2xl p-12 text-center">
             <BookOpen size={32} className="mx-auto mb-4 text-white/15" />
             <p className="text-sm text-white/40">No journal entries yet</p>
-            <button onClick={() => setShowForm(true)} className="mt-4 forge-btn-gold text-sm flex items-center gap-2 mx-auto"><Plus size={14} /> Add First Entry</button>
+            <button onClick={openNewEntryForm} className="mt-4 forge-btn-gold text-sm flex items-center gap-2 mx-auto"><Plus size={14} /> Add First Entry</button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -327,6 +365,7 @@ export default function JournalsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                      <button onClick={e => { e.stopPropagation(); openEditForm(entry) }} className="text-white/15 hover:text-[#D4AF37] transition-colors p-1"><Pencil size={13} /></button>
                       <button onClick={e => { e.stopPropagation(); handleDelete(entry.id) }} className="text-white/15 hover:text-red-400 transition-colors p-1"><Trash2 size={13} /></button>
                       {expanded === entry.id ? <ChevronUp size={14} className="text-white/30" /> : <ChevronDown size={14} className="text-white/30" />}
                     </div>

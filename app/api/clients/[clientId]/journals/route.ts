@@ -202,3 +202,80 @@ export async function DELETE(
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { clientId: string } }
+) {
+  try {
+    const session = await getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const client = await db.queryOne<{ coach_id: string }>(
+      `SELECT coach_id FROM clients WHERE id = $1`, [params.clientId]
+    )
+    if (!client || (client.coach_id !== session.id && session.role !== 'admin')) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const entryId = typeof body.id === 'string' ? body.id : ''
+    if (!entryId) {
+      return NextResponse.json({ error: 'Journal entry ID required' }, { status: 400 })
+    }
+
+    await db.query(
+      `UPDATE journal_entries
+       SET entry_date = $1,
+           entry_type = $2,
+           title = $3,
+           body = $4,
+           sleep_hours = $5,
+           sleep_quality = $6,
+           stress_level = $7,
+           energy_level = $8,
+           hunger_level = $9,
+           mood = $10,
+           digestion_quality = $11,
+           travel_flag = $12,
+           illness_flag = $13,
+           work_stress_flag = $14,
+           family_stress_flag = $15,
+           coach_response = $16,
+           is_private = $17,
+           updated_at = NOW()
+       WHERE id = $18 AND client_id = $19`,
+      [
+        body.entryDate || new Date().toISOString().split('T')[0],
+        body.entryType || 'daily_log',
+        body.title || null,
+        body.body || null,
+        body.sleepHours || null,
+        body.sleepQuality || null,
+        body.stressLevel || null,
+        body.energyLevel || null,
+        body.hungerLevel || null,
+        body.mood || null,
+        body.digestionQuality || null,
+        body.travelFlag || false,
+        body.illnessFlag || false,
+        body.workStressFlag || false,
+        body.familyStressFlag || false,
+        body.coachResponse || null,
+        body.isPrivate || false,
+        entryId,
+        params.clientId,
+      ]
+    )
+
+    const entry = await getJournalEntryById(entryId)
+    if (!entry) {
+      return NextResponse.json({ error: 'Journal entry not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, id: entryId, entry })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
