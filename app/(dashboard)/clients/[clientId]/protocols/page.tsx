@@ -28,6 +28,47 @@ type Protocol = {
 type GeneratedProtocol = {
   name: string
   rationale: string
+  stateAnalysis?: {
+    capacityClass?: string
+    physiologicalFocus?: string
+    adherenceRisk?: string
+    summary?: string
+  }
+  protocolRationale?: {
+    behaviorLink?: string
+    physiologyLink?: string
+    executionFocus?: string
+  }
+  movementProtocol?: {
+    progressionModel?: string[]
+    rationale?: string
+  }
+  nutritionProtocol?: {
+    caloriePhase?: string
+    macroJustification?: string
+    adherenceFallback?: string
+    bsldsTemplate?: {
+      trainingDay?: Record<string, string>
+      restDay?: Record<string, string>
+    }
+  }
+  recoveryProtocol?: {
+    progressionNotes?: string
+  }
+  monitoringMetrics?: {
+    primary?: string[]
+    secondary?: string[]
+    cadence?: string
+  }
+  decisionRules?: string[]
+  phaseProgressionCriteria?: string[]
+  coachIntelligence?: {
+    progressionAssessment?: string
+    gapsIdentified?: string[]
+    oversights?: string[]
+    riskFlags?: string[]
+    nextIterationStrategy?: string[]
+  }
   sessionStructure?: {
     frequency: number; sessionsPerWeek: number; sessionType: string
     complexityCeiling: number; volumeLevel: string
@@ -604,6 +645,38 @@ export default function ProtocolsPage() {
                       <p className="text-sm text-white/65 leading-relaxed">{generated.rationale}</p>
                     </div>
 
+                    {generated.stateAnalysis && (
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                        {generated.stateAnalysis.capacityClass && (
+                          <div className="rounded-xl bg-white/3 p-3">
+                            <p className="text-[10px] font-mono text-white/30 mb-1">CAPACITY</p>
+                            <p className="text-sm font-bold text-white">{generated.stateAnalysis.capacityClass}</p>
+                          </div>
+                        )}
+                        {generated.stateAnalysis.physiologicalFocus && (
+                          <div className="rounded-xl bg-white/3 p-3">
+                            <p className="text-[10px] font-mono text-white/30 mb-1">PHYSIOLOGY</p>
+                            <p className="text-sm text-white/70">{generated.stateAnalysis.physiologicalFocus}</p>
+                          </div>
+                        )}
+                        {generated.stateAnalysis.adherenceRisk && (
+                          <div className="rounded-xl bg-white/3 p-3">
+                            <p className="text-[10px] font-mono text-white/30 mb-1">ADHERENCE RISK</p>
+                            <p className="text-sm text-white/70">{generated.stateAnalysis.adherenceRisk}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {generated.protocolRationale && (
+                      <div className="rounded-xl bg-white/3 p-4 space-y-2">
+                        <p className="text-xs font-mono uppercase tracking-widest text-white/30">Protocol Rationale</p>
+                        {generated.protocolRationale.behaviorLink && <p className="text-sm text-white/65">{generated.protocolRationale.behaviorLink}</p>}
+                        {generated.protocolRationale.physiologyLink && <p className="text-sm text-white/65">{generated.protocolRationale.physiologyLink}</p>}
+                        {generated.protocolRationale.executionFocus && <p className="text-sm text-white/65">{generated.protocolRationale.executionFocus}</p>}
+                      </div>
+                    )}
+
                     {/* Movement Structure */}
                     {generated.sessionStructure && (
                       <div className="space-y-3">
@@ -613,11 +686,20 @@ export default function ProtocolsPage() {
                           <div className="bg-white/3 rounded-lg p-2 flex justify-between"><span className="text-white/40">Volume</span><span className="text-white font-bold">{generated.sessionStructure.volumeLevel}</span></div>
                           <div className="bg-white/3 rounded-lg p-2 flex justify-between"><span className="text-white/40">Complexity</span><span className="text-white font-bold">Tier {generated.sessionStructure.complexityCeiling}</span></div>
                           <div className="bg-white/3 rounded-lg p-2 flex justify-between"><span className="text-white/40">Session Type</span><span className="text-white font-bold truncate ml-2">{generated.sessionStructure.sessionType}</span></div>
-                        </div>
+                          </div>
 
-                        {/* Activation Block */}
-                        {generated.sessionStructure.activationBlock?.length > 0 && (
-                          <div>
+                          {generated.movementProtocol?.progressionModel && generated.movementProtocol.progressionModel.length > 0 && (
+                            <div className="bg-white/3 rounded-xl p-3 space-y-1">
+                              <p className="text-xs text-white/30 font-mono mb-2">PROGRESSION MODEL</p>
+                              {generated.movementProtocol.progressionModel.map((step, i) => (
+                                <p key={i} className="text-xs text-white/60 flex gap-2"><span className="text-emerald-400 flex-shrink-0">·</span>{step}</p>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Activation Block */}
+                          {generated.sessionStructure.activationBlock?.length > 0 && (
+                            <div>
                             <p className="text-xs text-white/25 font-mono mb-2">ACTIVATION</p>
                             <div className="space-y-1.5">
                               {generated.sessionStructure.activationBlock.map((ex, i) => (
@@ -699,6 +781,18 @@ export default function ProtocolsPage() {
                             <p className="text-sm text-white/60">{generated.nutritionStructure.mealTiming}</p>
                           </div>
                         )}
+                        {generated.nutritionProtocol?.macroJustification && (
+                          <div className="bg-white/3 rounded-xl p-3">
+                            <p className="text-xs text-white/30 font-mono mb-1">MACRO JUSTIFICATION</p>
+                            <p className="text-sm text-white/60">{generated.nutritionProtocol.macroJustification}</p>
+                          </div>
+                        )}
+                        {generated.nutritionProtocol?.adherenceFallback && (
+                          <div className="bg-emerald-500/6 border border-emerald-500/15 rounded-xl p-3">
+                            <p className="text-xs text-emerald-400/70 font-mono mb-1">ADHERENCE FALLBACK</p>
+                            <p className="text-sm text-white/60">{generated.nutritionProtocol.adherenceFallback}</p>
+                          </div>
+                        )}
                         {generated.nutritionStructure.disruption_protocol && (
                           <div className="bg-amber-500/6 border border-amber-500/15 rounded-xl p-3">
                             <p className="text-xs text-amber-400/70 font-mono mb-1">DISRUPTION PROTOCOL</p>
@@ -718,6 +812,26 @@ export default function ProtocolsPage() {
                                 {meal.notes && <p className="text-xs text-white/35 mt-1">{meal.notes}</p>}
                               </div>
                             ))}
+                          </div>
+                        )}
+                        {generated.nutritionProtocol?.bsldsTemplate && (
+                          <div className="bg-white/3 rounded-xl p-3 space-y-3">
+                            <p className="text-xs text-white/30 font-mono mb-1">BSLDS MEAL STRUCTURE</p>
+                            {(['trainingDay', 'restDay'] as const).map(day =>
+                              generated.nutritionProtocol?.bsldsTemplate?.[day] ? (
+                                <div key={day} className="rounded-lg border border-white/6 bg-black/20 p-3">
+                                  <p className="text-xs font-mono uppercase text-[#D4AF37] mb-2">{day === 'trainingDay' ? 'Training Day' : 'Rest Day'}</p>
+                                  <div className="space-y-1">
+                                    {Object.entries(generated.nutritionProtocol.bsldsTemplate?.[day] ?? {}).map(([slot, value]) => (
+                                      <div key={slot} className="flex justify-between gap-3 text-xs">
+                                        <span className="text-white/35 capitalize">{slot}</span>
+                                        <span className="text-white/65 text-right">{value}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null
+                            )}
                           </div>
                         )}
                       </div>
@@ -745,6 +859,76 @@ export default function ProtocolsPage() {
                             <p className="text-sm text-white/60">{generated.recoveryStructure.stressReductionProtocol}</p>
                           </div>
                         )}
+                        {generated.recoveryProtocol?.progressionNotes && (
+                          <div className="bg-white/3 rounded-xl p-3">
+                            <p className="text-xs text-white/30 font-mono mb-1">RECOVERY PROGRESSION</p>
+                            <p className="text-sm text-white/60">{generated.recoveryProtocol.progressionNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {generated.monitoringMetrics && (
+                      <div className="rounded-xl bg-white/3 p-4 space-y-3">
+                        <p className="text-xs font-mono uppercase tracking-widest text-white/30">Monitoring & Metrics</p>
+                        {generated.monitoringMetrics.primary && generated.monitoringMetrics.primary.length > 0 && (
+                          <div>
+                            <p className="text-xs text-white/35 mb-1">Primary</p>
+                            <p className="text-sm text-white/65">{generated.monitoringMetrics.primary.join(', ')}</p>
+                          </div>
+                        )}
+                        {generated.monitoringMetrics.secondary && generated.monitoringMetrics.secondary.length > 0 && (
+                          <div>
+                            <p className="text-xs text-white/35 mb-1">Secondary</p>
+                            <p className="text-sm text-white/65">{generated.monitoringMetrics.secondary.join(', ')}</p>
+                          </div>
+                        )}
+                        {generated.monitoringMetrics.cadence && (
+                          <div>
+                            <p className="text-xs text-white/35 mb-1">Cadence</p>
+                            <p className="text-sm text-white/65">{generated.monitoringMetrics.cadence}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {generated.decisionRules && generated.decisionRules.length > 0 && (
+                      <div className="rounded-xl bg-white/3 p-4 space-y-2">
+                        <p className="text-xs font-mono uppercase tracking-widest text-white/30">Decision Rules</p>
+                        {generated.decisionRules.map((rule, i) => (
+                          <p key={i} className="text-sm text-white/65 flex gap-2"><span className="text-[#D4AF37] flex-shrink-0">·</span>{rule}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {generated.phaseProgressionCriteria && generated.phaseProgressionCriteria.length > 0 && (
+                      <div className="rounded-xl bg-white/3 p-4 space-y-2">
+                        <p className="text-xs font-mono uppercase tracking-widest text-white/30">Phase Progression Criteria</p>
+                        {generated.phaseProgressionCriteria.map((criterion, i) => (
+                          <p key={i} className="text-sm text-white/65 flex gap-2"><span className="text-emerald-400 flex-shrink-0">·</span>{criterion}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {generated.coachIntelligence && (
+                      <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-3">
+                        <p className="text-xs font-mono uppercase tracking-widest text-purple-300/70">Coach Intelligence Notes</p>
+                        {generated.coachIntelligence.progressionAssessment && <p className="text-sm text-white/70">{generated.coachIntelligence.progressionAssessment}</p>}
+                        {([
+                          ['Gaps Identified', generated.coachIntelligence.gapsIdentified],
+                          ['Oversights', generated.coachIntelligence.oversights],
+                          ['Risk Flags', generated.coachIntelligence.riskFlags],
+                          ['Next Iteration Strategy', generated.coachIntelligence.nextIterationStrategy],
+                        ] as Array<[string, string[] | undefined]>).map(([label, items]) => Array.isArray(items) && items.length > 0 ? (
+                          <div key={label}>
+                            <p className="text-xs text-white/35 mb-1">{label}</p>
+                            <div className="space-y-1">
+                              {items.map((item, i) => (
+                                <p key={i} className="text-xs text-white/60 flex gap-2"><span className="text-purple-300 flex-shrink-0">·</span>{item}</p>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null)}
                       </div>
                     )}
 

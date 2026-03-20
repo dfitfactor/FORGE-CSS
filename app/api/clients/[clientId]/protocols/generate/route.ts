@@ -14,6 +14,105 @@ const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
 const MAX_CONTEXT_DOCS = 2
 const MAX_CONTEXT_DOC_CHARS = 500
 
+type GeneratedProtocolCompat = {
+  name: string
+  rationale?: string
+  sessionStructure?: {
+    frequency?: number
+    sessionsPerWeek?: number
+    sessionType?: string
+    complexityCeiling?: number
+    volumeLevel?: string
+    activationBlock?: unknown[]
+    primaryBlock?: unknown[]
+    accessoryBlock?: unknown[]
+    finisherBlock?: unknown[]
+  }
+  nutritionStructure?: {
+    dailyCalories?: number
+    proteinG?: number
+    carbG?: number
+    fatG?: number
+    mealFrequency?: number
+    mealTiming?: string
+    complexityLevel?: string
+    keyGuidelines?: string[]
+    disruption_protocol?: string
+    mealPlan?: unknown[]
+  }
+  recoveryStructure?: {
+    sleepTarget?: string
+    stressReductionProtocol?: string
+    activeRecoveryDays?: number
+    mobilityMinutes?: number
+    keyRecoveryPractices?: string[]
+  }
+  coachNotes?: string
+  clientFacingMessage?: string
+  stateAnalysis?: {
+    capacityClass?: string
+    physiologicalFocus?: string
+    adherenceRisk?: string
+    summary?: string
+  }
+  protocolRationale?: {
+    behaviorLink?: string
+    physiologyLink?: string
+    executionFocus?: string
+  }
+  movementProtocol?: {
+    frequency?: number
+    sessionsPerWeek?: number
+    sessionType?: string
+    complexityCeiling?: number
+    volumeLevel?: string
+    activationBlock?: unknown[]
+    primaryBlock?: unknown[]
+    accessoryBlock?: unknown[]
+    finisherBlock?: unknown[]
+    progressionModel?: string[]
+    rationale?: string
+  }
+  nutritionProtocol?: {
+    dailyCalories?: number
+    proteinG?: number
+    carbG?: number
+    fatG?: number
+    mealFrequency?: number
+    caloriePhase?: string
+    macroJustification?: string
+    adherenceFallback?: string
+    complexityLevel?: string
+    keyGuidelines?: string[]
+    disruptionProtocol?: string
+    mealTiming?: string
+    bsldsTemplate?: unknown
+    mealPlan?: unknown[]
+  }
+  recoveryProtocol?: {
+    sleepTarget?: string
+    stressReductionProtocol?: string
+    activeRecoveryDays?: number
+    mobilityMinutes?: number
+    keyRecoveryPractices?: string[]
+    progressionNotes?: string
+  }
+  monitoringMetrics?: {
+    primary?: string[]
+    secondary?: string[]
+    cadence?: string
+  }
+  decisionRules?: string[]
+  phaseProgressionCriteria?: string[]
+  coachIntelligence?: {
+    progressionAssessment?: string
+    gapsIdentified?: string[]
+    oversights?: string[]
+    riskFlags?: string[]
+    nextIterationStrategy?: string[]
+  }
+}
+
 function getAnthropicModel() {
   return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
 }
@@ -48,6 +147,76 @@ function average(values: Array<number | null | undefined>) {
 function countKeywordHits(text: string, patterns: RegExp[]) {
   const normalized = text.toLowerCase()
   return patterns.reduce((count, pattern) => count + (pattern.test(normalized) ? 1 : 0), 0)
+}
+
+function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedProtocolCompat {
+  if (!input.rationale) {
+    input.rationale = [
+      input.protocolRationale?.behaviorLink,
+      input.protocolRationale?.physiologyLink,
+      input.protocolRationale?.executionFocus,
+      input.stateAnalysis?.summary,
+    ].filter(Boolean).join(' ')
+  }
+
+  if (!input.sessionStructure && input.movementProtocol) {
+    input.sessionStructure = {
+      frequency: input.movementProtocol.frequency ?? input.movementProtocol.sessionsPerWeek,
+      sessionsPerWeek: input.movementProtocol.sessionsPerWeek ?? input.movementProtocol.frequency,
+      sessionType: input.movementProtocol.sessionType,
+      complexityCeiling: input.movementProtocol.complexityCeiling,
+      volumeLevel: input.movementProtocol.volumeLevel,
+      activationBlock: input.movementProtocol.activationBlock,
+      primaryBlock: input.movementProtocol.primaryBlock,
+      accessoryBlock: input.movementProtocol.accessoryBlock,
+      finisherBlock: input.movementProtocol.finisherBlock,
+    }
+  }
+
+  if (!input.nutritionStructure && input.nutritionProtocol) {
+    input.nutritionStructure = {
+      dailyCalories: input.nutritionProtocol.dailyCalories,
+      proteinG: input.nutritionProtocol.proteinG,
+      carbG: input.nutritionProtocol.carbG,
+      fatG: input.nutritionProtocol.fatG,
+      mealFrequency: input.nutritionProtocol.mealFrequency,
+      mealTiming: input.nutritionProtocol.mealTiming,
+      complexityLevel: input.nutritionProtocol.complexityLevel,
+      keyGuidelines: input.nutritionProtocol.keyGuidelines,
+      disruption_protocol: input.nutritionProtocol.disruptionProtocol ?? input.nutritionProtocol.adherenceFallback,
+      mealPlan: input.nutritionProtocol.mealPlan,
+    }
+  }
+
+  if (!input.recoveryStructure && input.recoveryProtocol) {
+    input.recoveryStructure = {
+      sleepTarget: input.recoveryProtocol.sleepTarget,
+      stressReductionProtocol: input.recoveryProtocol.stressReductionProtocol,
+      activeRecoveryDays: input.recoveryProtocol.activeRecoveryDays,
+      mobilityMinutes: input.recoveryProtocol.mobilityMinutes,
+      keyRecoveryPractices: input.recoveryProtocol.keyRecoveryPractices,
+    }
+  }
+
+  if (!input.coachNotes && input.coachIntelligence) {
+    input.coachNotes = [
+      input.coachIntelligence.progressionAssessment,
+      input.coachIntelligence.gapsIdentified?.length ? `Gaps: ${input.coachIntelligence.gapsIdentified.join('; ')}` : '',
+      input.coachIntelligence.oversights?.length ? `Oversights: ${input.coachIntelligence.oversights.join('; ')}` : '',
+      input.coachIntelligence.riskFlags?.length ? `Risk Flags: ${input.coachIntelligence.riskFlags.join('; ')}` : '',
+      input.coachIntelligence.nextIterationStrategy?.length ? `Next Iteration: ${input.coachIntelligence.nextIterationStrategy.join('; ')}` : '',
+    ].filter(Boolean).join('\n')
+  }
+
+  if (!input.clientFacingMessage) {
+    input.clientFacingMessage = [
+      input.stateAnalysis?.summary,
+      input.protocolRationale?.executionFocus,
+      input.nutritionProtocol?.adherenceFallback,
+    ].filter(Boolean).join(' ')
+  }
+
+  return input
 }
 
 const FORGE_SYSTEM_PROMPT = `You are the FORGË Behavioral Intelligence Engine AI component. You generate adaptive health and fitness protocols for the FORGË platform.
@@ -485,11 +654,40 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 }`
 
     // CALL 1 — Core protocol (no mealPlan)
+    const gyvrudPrompt = `You are operating as the FORGE Behavioral Intelligence Engine.
+
+CORE DIRECTIVE (GYVRUD):
+G — Gather Context
+Y — Yield Current State Analysis
+V — Validate Against Prior Protocol(s)
+R — Refine With Progression Logic
+U — Upgrade With Clinical + Behavioral Intelligence
+D — Deliver Client Protocol + Coach Intelligence Notes
+
+EXECUTION RULES:
+- This is SYSTEM EXECUTION, not generic content generation.
+- Use prior protocols for progression validation when available.
+- Classify the client as LOW CAPACITY, MODERATE CAPACITY, or HIGH CAPACITY.
+- Determine whether the result is TRUE progression, REGRESSION, or LATERAL change.
+- If regression, include this exact sentence: "This is a deliberate reset phase due to reduced behavioral capacity".
+- Define movement progression using Week 1-2 baseline, Week 3-4 progression trigger, Week 5+ advancement.
+- Protein must align with goal weight and calories must be justified as deficit, maintenance, or recovery.
+- Include adherence fallback, decision rules, monitoring system, and phase progression criteria.
+
+OUTPUT REQUIREMENTS:
+- Deliver a client protocol with protocol rationale, movement, nutrition, meal structure, recovery, monitoring, decision rules, and phase progression criteria.
+- Deliver separate coach intelligence notes including progression assessment, gaps identified, oversights, risk flags, and next iteration strategy.
+- Preserve compatibility fields sessionStructure, nutritionStructure, recoveryStructure, coachNotes, and clientFacingMessage.
+- Also include these richer fields when possible: stateAnalysis, protocolRationale, movementProtocol, nutritionProtocol, recoveryProtocol, monitoringMetrics, decisionRules, phaseProgressionCriteria, coachIntelligence.
+
+SOURCE CONTEXT:
+${prompt}`
+
     const response = await anthropic.messages.create({
       model: getAnthropicModel(),
       max_tokens: 2400,
       system: FORGE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: gyvrudPrompt }],
     })
 
     const content = response.content[0]
@@ -512,7 +710,7 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 
     let generated: any
     try {
-      generated = JSON.parse(cleaned)
+      generated = normalizeGeneratedProtocol(JSON.parse(cleaned) as GeneratedProtocolCompat)
     } catch {
       console.error('Parse error. Raw:', cleaned.slice(0, 300))
       return NextResponse.json({ error: 'AI response parsing failed', raw: cleaned.slice(0, 500) }, { status: 500 })
@@ -527,9 +725,9 @@ Client: ${client.full_name}
 Goal: ${client.primary_goal ?? 'General fitness'}
 Weight: ${measurements?.weight_lbs ?? 'unknown'} lbs
 Stage: ${currentStage}
-Daily Targets: ${generated.nutritionStructure?.dailyCalories} cal | ${generated.nutritionStructure?.proteinG}g protein | ${generated.nutritionStructure?.carbG}g carbs | ${generated.nutritionStructure?.fatG}g fat
-Meal Frequency: ${generated.nutritionStructure?.mealFrequency} meals
-Meal Timing: ${generated.nutritionStructure?.mealTiming}
+Daily Targets: ${generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories} cal | ${generated.nutritionStructure?.proteinG ?? generated.nutritionProtocol?.proteinG}g protein | ${generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG}g carbs | ${generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG}g fat
+Meal Frequency: ${generated.nutritionStructure?.mealFrequency ?? generated.nutritionProtocol?.mealFrequency} meals
+Meal Timing: ${generated.nutritionStructure?.mealTiming ?? generated.nutritionProtocol?.mealTiming}
 Injuries: ${Array.isArray(client.injuries) && client.injuries.length > 0 ? client.injuries.join(', ') : 'None'}
 ${coachDirectives ? 'Coach notes: ' + coachDirectives : ''}
 
