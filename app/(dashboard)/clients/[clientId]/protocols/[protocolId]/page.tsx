@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, Mail, Loader2, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Download, Mail, Loader2, CheckCircle, Edit3, Save, Trash2, X } from 'lucide-react'
 
 type Protocol = {
   id: string; name: string; protocol_type: string; stage: string
@@ -11,7 +11,8 @@ type Protocol = {
   sessions_per_week: number | null; complexity_ceiling: number | null
   volume_target: string | null; calorie_target: number | null
   protein_target_g: number | null; carb_target_g: number | null
-  fat_target_g: number | null; notes: string | null
+  fat_target_g: number | null; meal_frequency?: number | null
+  notes: string | null; coach_notes?: string | null; is_active?: boolean
   protocol_payload: Record<string, unknown>
 }
 
@@ -158,6 +159,7 @@ function MealPlanTable({ mealPlan }: { mealPlan: MealPlanRow[] }) {
 
 export default function ProtocolPDFPage() {
   const params = useParams<{ clientId: string; protocolId: string }>()
+  const router = useRouter()
   const printRef = useRef<HTMLDivElement>(null)
 
   const [protocol, setProtocol] = useState<Protocol | null>(null)
@@ -166,14 +168,70 @@ export default function ProtocolPDFPage() {
   const [generating, setGenerating] = useState(false)
   const [emailing, setEmailing] = useState(false)
   const [emailSuccess, setEmailSuccess] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [savingEdits, setSavingEdits] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [editForm, setEditForm] = useState({
+    name: '',
+    stage: '',
+    generationState: '',
+    effectiveDate: '',
+    sessionsPerWeek: '',
+    complexityCeiling: '',
+    volumeTarget: '',
+    calorieTarget: '',
+    proteinTargetG: '',
+    carbTargetG: '',
+    fatTargetG: '',
+    mealFrequency: '',
+    notes: '',
+    coachNotes: '',
+    clientFacingMessage: '',
+  })
 
   useEffect(() => {
     fetch(`/api/clients/${params.clientId}/protocols/${params.protocolId}`)
       .then(r => r.json())
-      .then(d => { setProtocol(d.protocol); setClient(d.client); setLoading(false) })
+      .then(d => {
+        setProtocol(d.protocol)
+        setClient(d.client)
+        if (d.protocol) {
+          setEditForm({
+            name: d.protocol.name ?? '',
+            stage: d.protocol.stage ?? '',
+            generationState: d.protocol.generation_state ?? '',
+            effectiveDate: d.protocol.effective_date ?? '',
+            sessionsPerWeek: d.protocol.sessions_per_week?.toString() ?? '',
+            complexityCeiling: d.protocol.complexity_ceiling?.toString() ?? '',
+            volumeTarget: d.protocol.volume_target ?? '',
+            calorieTarget: d.protocol.calorie_target?.toString() ?? '',
+            proteinTargetG: d.protocol.protein_target_g?.toString() ?? '',
+            carbTargetG: d.protocol.carb_target_g?.toString() ?? '',
+            fatTargetG: d.protocol.fat_target_g?.toString() ?? '',
+            mealFrequency: d.protocol.meal_frequency?.toString() ?? '',
+            notes: d.protocol.notes ?? '',
+            coachNotes: d.protocol.coach_notes ?? '',
+            clientFacingMessage: typeof d.protocol.protocol_payload?.clientFacingMessage === 'string'
+              ? d.protocol.protocol_payload.clientFacingMessage
+              : '',
+          })
+        }
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [params.clientId, params.protocolId])
+
+  function setFormField(key: keyof typeof editForm, value: string) {
+    setEditForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  function toNullableNumber(value: string) {
+    if (!value.trim()) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
 
   async function handleDownloadPDF() {
     if (!printRef.current || !protocol || !client) return
@@ -253,6 +311,104 @@ export default function ProtocolPDFPage() {
     } finally { setEmailing(false) }
   }
 
+  async function handleSaveEdits() {
+    if (!protocol) return
+    setSavingEdits(true)
+    setError('')
+    setSuccess('')
+    try {
+      const updatedPayload: Record<string, unknown> = { ...(protocol.protocol_payload ?? {}) }
+      const sessionStructure =
+        updatedPayload.sessionStructure && typeof updatedPayload.sessionStructure === 'object'
+          ? { ...(updatedPayload.sessionStructure as Record<string, unknown>) }
+          : null
+      const nutritionStructure =
+        updatedPayload.nutritionStructure && typeof updatedPayload.nutritionStructure === 'object'
+          ? { ...(updatedPayload.nutritionStructure as Record<string, unknown>) }
+          : null
+
+      if (sessionStructure) {
+        sessionStructure.sessionsPerWeek = toNullableNumber(editForm.sessionsPerWeek)
+        sessionStructure.complexityCeiling = toNullableNumber(editForm.complexityCeiling)
+        sessionStructure.volumeLevel = editForm.volumeTarget || null
+        updatedPayload.sessionStructure = sessionStructure
+      }
+
+      if (nutritionStructure) {
+        nutritionStructure.dailyCalories = toNullableNumber(editForm.calorieTarget)
+        nutritionStructure.proteinG = toNullableNumber(editForm.proteinTargetG)
+        nutritionStructure.carbG = toNullableNumber(editForm.carbTargetG)
+        nutritionStructure.fatG = toNullableNumber(editForm.fatTargetG)
+        nutritionStructure.mealFrequency = toNullableNumber(editForm.mealFrequency)
+        updatedPayload.nutritionStructure = nutritionStructure
+      }
+
+      updatedPayload.clientFacingMessage = editForm.clientFacingMessage
+
+      const res = await fetch(`/api/clients/${params.clientId}/protocols/${params.protocolId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          stage: editForm.stage,
+          generation_state: editForm.generationState || null,
+          effective_date: editForm.effectiveDate,
+          sessions_per_week: toNullableNumber(editForm.sessionsPerWeek),
+          complexity_ceiling: toNullableNumber(editForm.complexityCeiling),
+          volume_target: editForm.volumeTarget || null,
+          calorie_target: toNullableNumber(editForm.calorieTarget),
+          protein_target_g: toNullableNumber(editForm.proteinTargetG),
+          carb_target_g: toNullableNumber(editForm.carbTargetG),
+          fat_target_g: toNullableNumber(editForm.fatTargetG),
+          meal_frequency: toNullableNumber(editForm.mealFrequency),
+          notes: editForm.notes || null,
+          coach_notes: editForm.coachNotes || null,
+          protocol_payload: updatedPayload,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'Update failed')
+        return
+      }
+
+      setProtocol(data.protocol ?? null)
+      setEditMode(false)
+      setSuccess('Protocol updated')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch {
+      setError('Network error while saving changes')
+    } finally {
+      setSavingEdits(false)
+    }
+  }
+
+  async function handleDeleteProtocol() {
+    if (!protocol) return
+    const confirmed = window.confirm(`Delete "${protocol.name}"? This cannot be undone.`)
+    if (!confirmed) return
+
+    setDeleting(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/clients/${params.clientId}/protocols/${params.protocolId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'Delete failed')
+        return
+      }
+      router.push(`/clients/${params.clientId}/protocols`)
+      router.refresh()
+    } catch {
+      setError('Network error while deleting protocol')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
       <Loader2 className="w-6 h-6 animate-spin text-white/20" />
@@ -284,7 +440,16 @@ export default function ProtocolPDFPage() {
         </div>
         <div className="flex items-center gap-2">
           {emailSuccess && <span className="flex items-center gap-1.5 text-xs text-emerald-400"><CheckCircle size={13} /> PDF downloaded — attach it to the Gmail window that just opened</span>}
+          {success && <span className="text-xs text-emerald-400">{success}</span>}
           {error && <span className="text-xs text-red-400">{error}</span>}
+          <button onClick={() => setEditMode(current => !current)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white/6 border border-white/10 rounded-xl text-xs text-white/60 hover:text-white transition-colors">
+            {editMode ? <X size={13} /> : <Edit3 size={13} />} {editMode ? 'Close Edit' : 'Edit'}
+          </button>
+          <button onClick={handleDeleteProtocol} disabled={deleting}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 hover:text-red-200 transition-colors disabled:opacity-50">
+            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
+          </button>
           <button onClick={handleEmailPDF} disabled={emailing}
             className="flex items-center gap-1.5 px-3 py-2 bg-white/6 border border-white/10 rounded-xl text-xs text-white/60 hover:text-white transition-colors disabled:opacity-50">
             {emailing ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />} Email to Client
@@ -297,7 +462,83 @@ export default function ProtocolPDFPage() {
         </div>
       </div>
 
-      <div className="flex justify-center py-8 px-4">
+      <div className="flex flex-col items-center py-8 px-4">
+        {editMode && (
+          <div className="w-full max-w-[800px] mb-4 bg-[#111111] border border-white/10 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">Edit Protocol</p>
+                <p className="text-xs text-white/35">Update the key protocol fields without regenerating the entire plan.</p>
+              </div>
+              <button onClick={handleSaveEdits} disabled={savingEdits}
+                className="forge-btn-gold flex items-center gap-1.5 text-sm py-2 disabled:opacity-50">
+                {savingEdits ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Changes
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="forge-label">Protocol Name</label>
+                <input value={editForm.name} onChange={e => setFormField('name', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Effective Date</label>
+                <input type="date" value={editForm.effectiveDate} onChange={e => setFormField('effectiveDate', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Stage</label>
+                <input value={editForm.stage} onChange={e => setFormField('stage', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Generation State</label>
+                <input value={editForm.generationState} onChange={e => setFormField('generationState', e.target.value)} className="forge-input" maxLength={1} />
+              </div>
+              <div>
+                <label className="forge-label">Sessions / Week</label>
+                <input value={editForm.sessionsPerWeek} onChange={e => setFormField('sessionsPerWeek', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Complexity Ceiling</label>
+                <input value={editForm.complexityCeiling} onChange={e => setFormField('complexityCeiling', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Volume Target</label>
+                <input value={editForm.volumeTarget} onChange={e => setFormField('volumeTarget', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Meal Frequency</label>
+                <input value={editForm.mealFrequency} onChange={e => setFormField('mealFrequency', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Calories</label>
+                <input value={editForm.calorieTarget} onChange={e => setFormField('calorieTarget', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Protein (g)</label>
+                <input value={editForm.proteinTargetG} onChange={e => setFormField('proteinTargetG', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Carbs (g)</label>
+                <input value={editForm.carbTargetG} onChange={e => setFormField('carbTargetG', e.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Fats (g)</label>
+                <input value={editForm.fatTargetG} onChange={e => setFormField('fatTargetG', e.target.value)} className="forge-input" />
+              </div>
+            </div>
+            <div>
+              <label className="forge-label">Internal Notes</label>
+              <textarea rows={3} value={editForm.notes} onChange={e => setFormField('notes', e.target.value)} className="forge-input resize-none" />
+            </div>
+            <div>
+              <label className="forge-label">Coach Notes</label>
+              <textarea rows={3} value={editForm.coachNotes} onChange={e => setFormField('coachNotes', e.target.value)} className="forge-input resize-none" />
+            </div>
+            <div>
+              <label className="forge-label">Client Facing Message</label>
+              <textarea rows={4} value={editForm.clientFacingMessage} onChange={e => setFormField('clientFacingMessage', e.target.value)} className="forge-input resize-none" />
+            </div>
+          </div>
+        )}
         <div ref={printRef} className="bg-white w-full max-w-[800px] p-12 shadow-2xl" style={{ fontFamily: 'Arial, sans-serif', color: '#1a1a1a' }}>
 
           <div style={{ borderBottom: '3px solid #4B0082', paddingBottom: '20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

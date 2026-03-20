@@ -7,7 +7,7 @@ import {
   ArrowLeft, Plus, Dumbbell, Utensils, Heart, ClipboardList,
   Loader2, CheckCircle, AlertCircle, X, ChevronDown, ChevronUp,
   ToggleLeft, ToggleRight, Calendar, Zap, Layers, Sparkles,
-  Brain, MessageSquare, Edit3, Check
+  Brain, MessageSquare, Edit3, Check, Trash2
 } from 'lucide-react'
 
 type Protocol = {
@@ -84,6 +84,7 @@ export default function ProtocolsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -237,6 +238,32 @@ export default function ProtocolsPage() {
     setProtocols(prev => prev.map(p => p.id === id ? { ...p, is_active: !current } : p))
   }
 
+  async function handleDeleteProtocol(protocol: Protocol) {
+    const confirmed = window.confirm(`Delete "${protocol.name}"? This cannot be undone.`)
+    if (!confirmed) return
+
+    setDeletingId(protocol.id)
+    setError('')
+    try {
+      const res = await fetch(`/api/clients/${clientId}/protocols/${protocol.id}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'Delete failed')
+        return
+      }
+      setProtocols(prev => prev.filter(p => p.id !== protocol.id))
+      setExpanded(current => current === protocol.id ? null : current)
+      setSuccess('Protocol deleted')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch {
+      setError('Network error while deleting protocol')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const active = protocols.filter(p => p.is_active)
   const inactive = protocols.filter(p => !p.is_active)
   const filtered = filterType === 'all' ? protocols : protocols.filter(p => p.protocol_type === filterType)
@@ -319,6 +346,16 @@ export default function ProtocolsPage() {
                   className="px-2 py-1 bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30 rounded-lg text-[10px] font-mono uppercase tracking-wide hover:bg-[#D4AF37]/20 transition-colors">
                   View PDF
                 </Link>
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    void handleDeleteProtocol(p)
+                  }}
+                  disabled={deletingId === p.id}
+                  className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-[10px] font-mono uppercase tracking-wide hover:bg-red-500/20 transition-colors disabled:opacity-50 flex items-center gap-1">
+                  {deletingId === p.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                  Delete
+                </button>
               </div>
             </div>
           </div>
