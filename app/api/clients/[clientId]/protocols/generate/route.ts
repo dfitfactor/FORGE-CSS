@@ -11,6 +11,8 @@ import {
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
+const MAX_CONTEXT_DOCS = 2
+const MAX_CONTEXT_DOC_CHARS = 500
 
 function getAnthropicModel() {
   return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
@@ -188,7 +190,7 @@ export async function POST(
     // Extract text content from documents for AI context
     const docContexts: string[] = []
 
-    for (const doc of aiDocs) {
+    for (const doc of aiDocs.slice(0, MAX_CONTEXT_DOCS)) {
       if (!doc.file_data) continue
 
       const fileType = doc.file_type?.toLowerCase() ?? ''
@@ -208,7 +210,9 @@ export async function POST(
           if (!normalized) throw new Error('Invalid base64')
           const text = Buffer.from(normalized, 'base64')
             .toString('utf-8')
-            .slice(0, 2000) // cap at 2000 chars per doc
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, MAX_CONTEXT_DOC_CHARS)
           docContexts.push(`${label}\n${text}`)
         } catch {
           docContexts.push(`${label}\n[Could not read content]`)
@@ -232,11 +236,6 @@ export async function POST(
     }
 
     const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
-
-    const pdfDocs = aiDocs.filter(doc => {
-      const fileType = doc.file_type?.toLowerCase() ?? ''
-      return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
-    })
 
     const equipmentText =
       Array.isArray(client.available_equipment)
@@ -486,13 +485,11 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
 }`
 
     // CALL 1 — Core protocol (no mealPlan)
-    const userMessageContent: any[] = [{ type: 'text', text: prompt }]
-
     const response = await anthropic.messages.create({
       model: getAnthropicModel(),
-      max_tokens: 4000,
+      max_tokens: 2400,
       system: FORGE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessageContent }],
+      messages: [{ role: 'user', content: prompt }],
     })
 
     const content = response.content[0]
@@ -550,9 +547,9 @@ Include: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if ap
 Use REAL foods and EXACT gram/oz portions based on the macro targets above.
 The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
 
-      const mealPlanResponse = await anthropic.messages.create({
-        model: getAnthropicModel(),
-        max_tokens: 2000,
+        const mealPlanResponse = await anthropic.messages.create({
+          model: getAnthropicModel(),
+          max_tokens: 1200,
         system: 'You generate meal plans. Respond with ONLY a raw JSON array. No markdown, no backticks, no explanation.',
         messages: [{ role: 'user', content: mealPlanPrompt }],
       })

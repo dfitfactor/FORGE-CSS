@@ -12,6 +12,7 @@ const anthropic = new Anthropic({
 })
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'
+const MAX_PROTOCOL_PDF_ATTACHMENTS = 1
 
 function normalizeBase64(input: string | null | undefined): string | null {
   if (input === null || input === undefined) return null
@@ -213,7 +214,9 @@ export async function generateProtocol(
         if (!normalized) throw new Error('Invalid base64')
         const text = Buffer.from(normalized, 'base64')
           .toString('utf-8')
-          .slice(0, 2000)
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 700)
         docContexts.push(`${label}\n${text}`)
       } catch {
         docContexts.push(`${label}\n[Could not read content]`)
@@ -282,14 +285,14 @@ Output ONLY valid JSON matching this schema:
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 4096,
+      max_tokens: 2600,
     system: FORGE_SYSTEM_PROMPT,
     messages: [
       {
         role: 'user',
         content: ((): any[] => {
           const userMessageContent: any[] = [{ type: 'text', text: userPrompt }]
-          for (const doc of pdfDocs.slice(0, 3)) {
+          for (const doc of pdfDocs.slice(0, MAX_PROTOCOL_PDF_ATTACHMENTS)) {
             if (!doc.file_data) continue
             const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
             if (!pdfB64) continue
@@ -420,7 +423,9 @@ export async function generateWeeklyInsight(
         if (!normalized) throw new Error('Invalid base64')
         const text = Buffer.from(normalized, 'base64')
           .toString('utf-8')
-          .slice(0, 2000)
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 350)
         docContexts.push(`${label}\n${text}`)
       } catch {
         docContexts.push(`${label}\n[Could not read content]`)
@@ -473,7 +478,7 @@ Output ONLY JSON:
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 2048,
+      max_tokens: 1200,
     system: FORGE_SYSTEM_PROMPT,
     messages: [
       {
