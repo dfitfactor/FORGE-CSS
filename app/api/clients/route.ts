@@ -46,6 +46,12 @@ export async function GET(request: NextRequest) {
           c.id,
           c.full_name,
           c.email,
+          c.date_of_birth::text as date_of_birth,
+          CASE
+            WHEN c.date_of_birth IS NOT NULL
+            THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
+            ELSE NULL
+          END as age,
           c.status,
           c.primary_goal,
           c.current_stage,
@@ -80,6 +86,12 @@ export async function GET(request: NextRequest) {
           c.id,
           c.full_name,
           c.email,
+          c.date_of_birth::text as date_of_birth,
+          CASE
+            WHEN c.date_of_birth IS NOT NULL
+            THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
+            ELSE NULL
+          END as age,
           c.status,
           c.primary_goal,
           c.current_stage,

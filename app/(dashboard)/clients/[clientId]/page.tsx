@@ -10,6 +10,21 @@ import {
   TrendingUp, Clock, Zap, Activity, Ruler, ClipboardList, Edit, FileText 
 } from 'lucide-react'
 
+function calculateAge(dateOfBirth: string | null | undefined) {
+  if (!dateOfBirth) return null
+  const birthDate = new Date(`${dateOfBirth}T00:00:00`)
+  if (Number.isNaN(birthDate.getTime())) return null
+
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDiff = today.getMonth() - birthDate.getMonth()
+  const dayDiff = today.getDate() - birthDate.getDate()
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+    age -= 1
+  }
+  return age
+}
+
 async function getClientDetail(clientId: string, coachId: string) {
   const client = await db.queryOne<Record<string, any>>(
     `SELECT * FROM clients WHERE id = $1`,
@@ -68,6 +83,8 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
     const status = typeof client.status === 'string' && client.status.trim().length > 0 ? client.status.trim() : 'active'
     const primaryGoal = typeof client.primary_goal === 'string' && client.primary_goal.trim().length > 0 ? client.primary_goal.trim() : null
     const weightLbs = typeof client.weight_lbs === 'number' ? client.weight_lbs : Number(client.weight_lbs)
+    const dateOfBirth = typeof client.date_of_birth === 'string' && client.date_of_birth.trim().length > 0 ? client.date_of_birth.trim() : null
+    const age = calculateAge(dateOfBirth)
 
     const stageEnteredAt = client.stage_entered_at
     const weeksInStage = stageEnteredAt
@@ -132,6 +149,15 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                 <div className="text-xs text-forge-text-muted">In Stage</div>
                 <div className="text-sm font-medium text-forge-text-secondary">{weeksInStage}w</div>
               </div>
+              {dateOfBirth && (
+                <div>
+                  <div className="text-xs text-forge-text-muted">DOB / Age</div>
+                  <div className="text-sm font-medium text-forge-text-secondary">
+                    {new Date(`${dateOfBirth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {age !== null ? ` · ${age}` : ''}
+                  </div>
+                </div>
+              )}
               {Number.isFinite(weightLbs) && weightLbs > 0 && (
                 <div>
                   <div className="text-xs text-forge-text-muted">Weight</div>

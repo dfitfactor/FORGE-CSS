@@ -12,6 +12,7 @@ type FormState = {
   fullName: string
   email: string
   phone: string
+  dateOfBirth: string
   status: string
   primaryGoal: string
   motivation: string
@@ -78,7 +79,7 @@ export default function EditClientPage() {
   const [clientName, setClientName] = useState('')
 
   const [form, setForm] = useState<FormState>({
-    fullName: '', email: '', phone: '', status: 'active',
+    fullName: '', email: '', phone: '', dateOfBirth: '', status: 'active',
     primaryGoal: '', motivation: '', obstacles: '',
     weightLbs: '', bodyFatPct: '',
     programTier: '', sessionsPerMonth: '', targetSessionsPerWeek: 3,
@@ -100,6 +101,7 @@ export default function EditClientPage() {
           fullName: c.full_name ?? '',
           email: c.email ?? '',
           phone: c.phone ?? '',
+          dateOfBirth: c.date_of_birth ?? '',
           status: c.status ?? 'active',
           primaryGoal: c.primary_goal ?? '',
           motivation: c.motivation ?? '',
@@ -137,6 +139,7 @@ export default function EditClientPage() {
           fullName: form.fullName,
           email: form.email || undefined,
           phone: form.phone || undefined,
+          dateOfBirth: form.dateOfBirth || undefined,
           status: form.status,
           primaryGoal: form.primaryGoal || undefined,
           motivation: form.motivation || undefined,
@@ -227,6 +230,10 @@ export default function EditClientPage() {
             <div>
               <label className="forge-label">Phone</label>
               <input value={form.phone} onChange={e => set('phone', e.target.value)} className="forge-input" placeholder="+1 (555) 000-0000" />
+            </div>
+            <div>
+              <label className="forge-label">Date of Birth</label>
+              <input type="date" value={form.dateOfBirth} onChange={e => set('dateOfBirth', e.target.value)} className="forge-input" />
             </div>
             <div className="col-span-2">
               <label className="forge-label">Status</label>

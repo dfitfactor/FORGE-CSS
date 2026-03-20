@@ -10,6 +10,8 @@ import {
 
 type Client = {
   id: string; full_name: string; email: string
+  date_of_birth: string | null
+  age: number | null
   status: string
   current_stage: string | null
   primary_goal: string | null
@@ -260,6 +262,12 @@ export default function ClientsPage() {
                   <tr className="border-b border-white/8 bg-white/2">
                     <th className="text-left px-5 py-3"><ThBtn col="full_name" label="Client" /></th>
                     <th className="text-left px-4 py-3"><ThBtn col="current_stage" label="Stage" /></th>
+                    <th className="text-left px-4 py-3 hidden md:table-cell">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">DOB</span>
+                    </th>
+                    <th className="text-center px-4 py-3 hidden md:table-cell">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Age</span>
+                    </th>
                     <th className="text-center px-4 py-3"><ThBtn col="bar" label="BAR" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="dbi" label="DBI" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="bli" label="BLI" /></th>
@@ -287,6 +295,14 @@ export default function ClientsPage() {
                           ${STAGE_COLORS[c.current_stage ?? ''] ?? 'text-white/40 bg-white/5 border-white/10'}`}>
                           {c.current_stage ?? '—'}
                         </span>
+                      </td>
+                      <td className="px-4 py-3.5 hidden md:table-cell">
+                        <span className="text-xs text-white/35 font-mono">
+                          {c.date_of_birth ? new Date(c.date_of_birth + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'â€”'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center hidden md:table-cell">
+                        <span className="text-xs text-white/55 font-mono">{c.age ?? 'â€”'}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.bar_score} /></td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.dbi_score} invert /></td>

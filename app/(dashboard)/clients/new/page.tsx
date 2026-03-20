@@ -11,6 +11,7 @@ export default function NewClientPage() {
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     fullName: '', email: '', phone: '',
+    dateOfBirth: '',
     programTier: 'forge_core', primaryGoal: '',
     currentStage: 'foundations', status: 'active',
   })
@@ -31,6 +32,7 @@ export default function NewClientPage() {
           fullName: form.fullName,
           email: form.email || undefined,
           phone: form.phone || undefined,
+          dateOfBirth: form.dateOfBirth || undefined,
           programTier: form.programTier,
           primaryGoal: form.primaryGoal || undefined,
           currentStage: form.currentStage,
@@ -86,6 +88,11 @@ export default function NewClientPage() {
               <label className="forge-label">Phone</label>
               <input value={form.phone} onChange={e => set('phone', e.target.value)}
                 className="forge-input" placeholder="+1 (555) 000-0000" />
+            </div>
+            <div>
+              <label className="forge-label">Date of Birth</label>
+              <input type="date" value={form.dateOfBirth} onChange={e => set('dateOfBirth', e.target.value)}
+                className="forge-input" />
             </div>
           </div>
         </div>
