@@ -4,6 +4,20 @@ import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
+type JournalColumn = {
+  column_name: string
+}
+
+async function getJournalColumnSet() {
+  const columns = await db.query<JournalColumn>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_name = 'journal_entries'`
+  )
+
+  return new Set(columns.map((column) => column.column_name))
+}
+
 async function getJournalEntries(clientId: string) {
   try {
     return await db.query(
@@ -223,49 +237,53 @@ export async function PATCH(
     if (!entryId) {
       return NextResponse.json({ error: 'Journal entry ID required' }, { status: 400 })
     }
+    const columnSet = await getJournalColumnSet()
+    const updates: string[] = []
+    const values: unknown[] = []
+    let index = 1
+
+    const fieldMap: Array<[string, unknown]> = [
+      ['entry_date', body.entryDate || new Date().toISOString().split('T')[0]],
+      ['entry_type', body.entryType || 'daily_log'],
+      ['title', body.title || null],
+      ['body', body.body || null],
+      ['sleep_hours', body.sleepHours || null],
+      ['sleep_quality', body.sleepQuality || null],
+      ['stress_level', body.stressLevel || null],
+      ['energy_level', body.energyLevel || null],
+      ['hunger_level', body.hungerLevel || null],
+      ['mood', body.mood || null],
+      ['digestion_quality', body.digestionQuality || null],
+      ['travel_flag', body.travelFlag || false],
+      ['illness_flag', body.illnessFlag || false],
+      ['work_stress_flag', body.workStressFlag || false],
+      ['family_stress_flag', body.familyStressFlag || false],
+      ['coach_response', body.coachResponse || null],
+      ['is_private', body.isPrivate || false],
+    ]
+
+    for (const [columnName, value] of fieldMap) {
+      if (!columnSet.has(columnName)) continue
+      updates.push(`${columnName} = $${index}`)
+      values.push(value)
+      index++
+    }
+
+    if (columnSet.has('updated_at')) {
+      updates.push('updated_at = NOW()')
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: 'No editable journal columns found' }, { status: 500 })
+    }
+
+    values.push(entryId, params.clientId)
 
     await db.query(
       `UPDATE journal_entries
-       SET entry_date = $1,
-           entry_type = $2,
-           title = $3,
-           body = $4,
-           sleep_hours = $5,
-           sleep_quality = $6,
-           stress_level = $7,
-           energy_level = $8,
-           hunger_level = $9,
-           mood = $10,
-           digestion_quality = $11,
-           travel_flag = $12,
-           illness_flag = $13,
-           work_stress_flag = $14,
-           family_stress_flag = $15,
-           coach_response = $16,
-           is_private = $17,
-           updated_at = NOW()
-       WHERE id = $18 AND client_id = $19`,
-      [
-        body.entryDate || new Date().toISOString().split('T')[0],
-        body.entryType || 'daily_log',
-        body.title || null,
-        body.body || null,
-        body.sleepHours || null,
-        body.sleepQuality || null,
-        body.stressLevel || null,
-        body.energyLevel || null,
-        body.hungerLevel || null,
-        body.mood || null,
-        body.digestionQuality || null,
-        body.travelFlag || false,
-        body.illnessFlag || false,
-        body.workStressFlag || false,
-        body.familyStressFlag || false,
-        body.coachResponse || null,
-        body.isPrivate || false,
-        entryId,
-        params.clientId,
-      ]
+       SET ${updates.join(', ')}
+       WHERE id = $${index} AND client_id = $${index + 1}`,
+      values
     )
 
     const entry = await getJournalEntryById(entryId)
