@@ -84,6 +84,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
     const primaryGoal = typeof client.primary_goal === 'string' && client.primary_goal.trim().length > 0 ? client.primary_goal.trim() : null
     const weightLbs = typeof client.weight_lbs === 'number' ? client.weight_lbs : Number(client.weight_lbs)
     const dateOfBirth = typeof client.date_of_birth === 'string' && client.date_of_birth.trim().length > 0 ? client.date_of_birth.trim() : null
+    const gender = typeof client.gender === 'string' && client.gender.trim().length > 0 ? client.gender.trim() : null
     const age = calculateAge(dateOfBirth)
 
     const stageEnteredAt = client.stage_entered_at
@@ -155,6 +156,14 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                   <div className="text-sm font-medium text-forge-text-secondary">
                     {new Date(`${dateOfBirth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     {age !== null ? ` · ${age}` : ''}
+                  </div>
+                </div>
+              )}
+              {gender && (
+                <div>
+                  <div className="text-xs text-forge-text-muted">Gender</div>
+                  <div className="text-sm font-medium text-forge-text-secondary capitalize">
+                    {gender.replace(/_/g, ' ')}
                   </div>
                 </div>
               )}

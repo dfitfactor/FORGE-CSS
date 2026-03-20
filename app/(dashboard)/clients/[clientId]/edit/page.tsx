@@ -13,6 +13,7 @@ type FormState = {
   email: string
   phone: string
   dateOfBirth: string
+  gender: string
   status: string
   primaryGoal: string
   motivation: string
@@ -79,7 +80,7 @@ export default function EditClientPage() {
   const [clientName, setClientName] = useState('')
 
   const [form, setForm] = useState<FormState>({
-    fullName: '', email: '', phone: '', dateOfBirth: '', status: 'active',
+    fullName: '', email: '', phone: '', dateOfBirth: '', gender: '', status: 'active',
     primaryGoal: '', motivation: '', obstacles: '',
     weightLbs: '', bodyFatPct: '',
     programTier: '', sessionsPerMonth: '', targetSessionsPerWeek: 3,
@@ -102,6 +103,7 @@ export default function EditClientPage() {
           email: c.email ?? '',
           phone: c.phone ?? '',
           dateOfBirth: c.date_of_birth ?? '',
+          gender: c.gender ?? '',
           status: c.status ?? 'active',
           primaryGoal: c.primary_goal ?? '',
           motivation: c.motivation ?? '',
@@ -140,6 +142,7 @@ export default function EditClientPage() {
           email: form.email || undefined,
           phone: form.phone || undefined,
           dateOfBirth: form.dateOfBirth || undefined,
+          gender: form.gender || undefined,
           status: form.status,
           primaryGoal: form.primaryGoal || undefined,
           motivation: form.motivation || undefined,
@@ -234,6 +237,17 @@ export default function EditClientPage() {
             <div>
               <label className="forge-label">Date of Birth</label>
               <input type="date" value={form.dateOfBirth} onChange={e => set('dateOfBirth', e.target.value)} className="forge-input" />
+            </div>
+            <div>
+              <label className="forge-label">Gender</label>
+              <select value={form.gender} onChange={e => set('gender', e.target.value)} className="forge-input">
+                <option value="">Select gender...</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="non-binary">Non-binary</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+                <option value="other">Other</option>
+              </select>
             </div>
             <div className="col-span-2">
               <label className="forge-label">Status</label>
