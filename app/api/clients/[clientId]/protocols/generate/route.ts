@@ -4,6 +4,11 @@ import { db } from '@/lib/db'
 import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
+
+function getAnthropicModel() {
+  return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
+}
 
 function normalizeBase64(input: string | null | undefined): string | null {
   if (input === null || input === undefined) return null
@@ -52,6 +57,12 @@ export async function POST(
   try {
     const session = await getSession(request)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { error: 'Anthropic API key is not configured. Set ANTHROPIC_API_KEY in the deployment environment.' },
+        { status: 503 }
+      )
+    }
 
     const client = await db.queryOne<{
       coach_id: string; full_name: string; primary_goal: string
@@ -69,6 +80,13 @@ export async function POST(
 
     const body = await request.json()
     const { protocolType, coachDirectives } = body
+    const normalizedProtocolType =
+      protocolType === 'movement' ||
+      protocolType === 'nutrition' ||
+      protocolType === 'recovery' ||
+      protocolType === 'composite'
+        ? protocolType
+        : 'composite'
 
     const snapshot = await db.queryOne<{
       bar: number; bli: number; dbi: number; cdi: number; lsi: number; pps: number
@@ -219,7 +237,7 @@ export async function POST(
       c.did_for_self ? `self-care: ${c.did_for_self.slice(0, 60)}` : '',
     ].filter(Boolean).join(' | ')).filter(Boolean).join(' // ')
 
-    const prompt = `Generate a ${protocolType} protocol for this FORGE client.
+    const prompt = `Generate a ${normalizedProtocolType} protocol for this FORGE client.
 
 CLIENT: ${client.full_name}
 Stage: ${client.current_stage.toUpperCase()}
@@ -293,7 +311,7 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
     const userMessageContent: any[] = [{ type: 'text', text: prompt }]
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: getAnthropicModel(),
       max_tokens: 4000,
       system: FORGE_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessageContent }],
@@ -355,7 +373,7 @@ Use REAL foods and EXACT gram/oz portions based on the macro targets above.
 The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
 
       const mealPlanResponse = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: getAnthropicModel(),
         max_tokens: 2000,
         system: 'You generate meal plans. Respond with ONLY a raw JSON array. No markdown, no backticks, no explanation.',
         messages: [{ role: 'user', content: mealPlanPrompt }],

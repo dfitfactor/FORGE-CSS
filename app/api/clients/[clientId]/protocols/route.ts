@@ -2,6 +2,21 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+let protocolColumnCache: Set<string> | null = null
+
+async function getProtocolColumnSet() {
+  if (protocolColumnCache) return protocolColumnCache
+
+  const columns = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'protocols'`
+  )
+
+  protocolColumnCache = new Set(columns.map(column => column.column_name))
+  return protocolColumnCache
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -104,9 +119,34 @@ export async function PATCH(
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await request.json()
     const { id, isActive, coachNotes } = body
+    const protocolColumns = await getProtocolColumnSet()
+    const updates: string[] = []
+    const values: Array<string | boolean | null> = []
+
+    if (isActive !== undefined) {
+      values.push(Boolean(isActive))
+      updates.push(`is_active = $${values.length}`)
+    }
+
+    if (coachNotes !== undefined) {
+      values.push(coachNotes ?? null)
+      updates.push(`coach_notes = $${values.length}`)
+    }
+
+    if (protocolColumns.has('updated_at')) {
+      updates.push('updated_at = NOW()')
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ success: true, skipped: true })
+    }
+
+    values.push(id, params.clientId)
     await db.query(
-      `UPDATE protocols SET is_active = COALESCE($1, is_active), coach_notes = COALESCE($2, coach_notes), updated_at = NOW() WHERE id = $3 AND client_id = $4`,
-      [isActive ?? null, coachNotes ?? null, id, params.clientId]
+      `UPDATE protocols
+       SET ${updates.join(', ')}
+       WHERE id = $${values.length - 1} AND client_id = $${values.length}`,
+      values
     )
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

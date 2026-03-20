@@ -11,7 +11,7 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-const MODEL = 'claude-opus-4-6'
+const MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'
 
 function normalizeBase64(input: string | null | undefined): string | null {
   if (input === null || input === undefined) return null
