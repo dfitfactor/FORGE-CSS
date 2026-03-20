@@ -97,6 +97,8 @@ type GenerationContext = {
   bieSource?: 'snapshot' | 'estimated'
   generationState: string
   stage: string
+  protocolFrame?: string
+  physiqueFocus?: boolean
   dataPoints: { adherenceRecords: number; journalEntries: number; checkins: number; biomarkers: string; aiDocs: number }
 }
 
@@ -963,6 +965,16 @@ export default function ProtocolsPage() {
                               <p className="text-[10px] font-mono text-white/30 mb-1">GENERATION STATE</p>
                               <p className="text-sm font-bold text-[#D4AF37]">State {genContext.generationState}</p>
                               <p className="text-xs text-white/40 mt-1 capitalize">{genContext.stage} stage</p>
+                              {genContext.protocolFrame && genContext.protocolFrame !== genContext.stage && (
+                                <p className="text-[10px] text-emerald-300 mt-2">
+                                  Framing: {genContext.protocolFrame}
+                                </p>
+                              )}
+                              {genContext.physiqueFocus && (
+                                <p className="text-[10px] text-white/35 mt-1">
+                                  Physique-specific architecture preserved
+                                </p>
+                              )}
                               <p className="text-[10px] text-white/30 mt-2">
                                 BIE source: {genContext.bieSource === 'estimated' ? 'estimated from recent data' : 'latest snapshot'}
                               </p>

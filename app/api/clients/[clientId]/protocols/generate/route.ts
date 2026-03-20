@@ -149,6 +149,14 @@ function countKeywordHits(text: string, patterns: RegExp[]) {
   return patterns.reduce((count, pattern) => count + (pattern.test(normalized) ? 1 : 0), 0)
 }
 
+function buildSearchCorpus(parts: Array<string | null | undefined>) {
+  return parts.filter((part): part is string => Boolean(part)).join('\n').toLowerCase()
+}
+
+function detectPhysiqueFocus(corpus: string) {
+  return /(npc|bikini|figure|wellness|physique|show prep|stage lean|posing|glute|hamstring|delts|upper back)/i.test(corpus)
+}
+
 function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedProtocolCompat {
   if (!input.rationale) {
     input.rationale = [
@@ -576,11 +584,32 @@ export async function POST(
         cLsi: resolvedBie.lsi,
       }).state
     const bieSource = hasStoredSnapshot ? 'snapshot' : 'estimated'
+    const physiqueCorpus = buildSearchCorpus([
+      client.primary_goal,
+      client.motivation,
+      client.notes,
+      client.obstacles,
+      priorProtocolSummary,
+      docSummary,
+      journalSummary,
+      checkinSummary,
+    ])
+    const isPhysiqueFocused = detectPhysiqueFocus(physiqueCorpus)
+    const requiresBridgePhase =
+      isPhysiqueFocused &&
+      (resolvedBie.bar < 75 || resolvedBie.dbi >= 45 || resolvedBie.bli >= 45 || resolvedBie.lsi < 65)
+    const protocolFrame = requiresBridgePhase
+      ? 'Restoration-to-Development bridge'
+      : currentStage
+    const sportSpecificPriorities = isPhysiqueFocused
+      ? 'Glute and hamstring density, capped delts, upper-back shaping, waist illusion, performance-supportive carbs, and protective protein.'
+      : 'No special physique-sport emphasis detected.'
 
     const prompt = `Generate a ${normalizedProtocolType} protocol for this FORGE client.
 
 CLIENT: ${client.full_name}
 Stage: ${currentStage.toUpperCase()}
+Protocol Framing: ${protocolFrame}
 Program Tier: ${client.program_tier ?? 'Not set'}
 Primary Goal: ${client.primary_goal ?? 'General fitness and wellness'}
 Injuries: ${Array.isArray(client.injuries) ? client.injuries.join(', ') : (client.injuries || '') || 'None'}
@@ -597,6 +626,11 @@ BAR: ${resolvedBie.bar} | BLI: ${resolvedBie.bli} | DBI: ${resolvedBie.dbi} | CD
 
 MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurements?.body_fat_pct ?? 'unknown'} | Lean mass ${measurements?.lean_mass_lbs ?? 'unknown'}lb | Waist ${measurements?.waist_in ?? 'unknown'}in
 
+SPORT CONTEXT:
+Physique athlete focus detected: ${isPhysiqueFocused ? 'yes' : 'no'}
+Sport-specific priorities: ${sportSpecificPriorities}
+If physique athlete focus is detected with unstable adherence, use a Restoration-to-Development bridge instead of a generic Foundations reset.
+
 RECENT JOURNALS: ${journalSummary || 'No recent journal entries'}
 RECENT CHECK-INS: ${checkinSummary || 'No recent check-ins'}
 RECENT PROTOCOL HISTORY: ${priorProtocolSummary}
@@ -605,6 +639,9 @@ RECENT PROTOCOL HISTORY: ${priorProtocolSummary}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
 
 Protocol name must include ${client.full_name.split(' ')[0] || 'the client'}'s first name or their specific goal — never a generic name.
+
+Simplify execution by reducing decision burden and recovery cost, not by stripping away physique-specific architecture.
+For physique athletes, macros and meal structure must translate coherently into the meal plan and BSLDS structure.
 
 Respond with ONLY this JSON structure (no markdown, no backticks):
 {
@@ -673,6 +710,8 @@ EXECUTION RULES:
 - Define movement progression using Week 1-2 baseline, Week 3-4 progression trigger, Week 5+ advancement.
 - Protein must align with goal weight and calories must be justified as deficit, maintenance, or recovery.
 - Include adherence fallback, decision rules, monitoring system, and phase progression criteria.
+- For physique athletes with unstable adherence, use a Restoration-to-Development bridge instead of generic Foundations while preserving bodybuilding specificity.
+- Preserve glute/hamstring density, capped delts, upper-back shaping, waist illusion, performance-supportive carbs, protective protein, and macro-to-meal coherence.
 
 OUTPUT REQUIREMENTS:
 - Deliver a client protocol with protocol rationale, movement, nutrition, meal structure, recovery, monitoring, decision rules, and phase progression criteria.
@@ -730,6 +769,8 @@ Meal Frequency: ${generated.nutritionStructure?.mealFrequency ?? generated.nutri
 Meal Timing: ${generated.nutritionStructure?.mealTiming ?? generated.nutritionProtocol?.mealTiming}
 Injuries: ${Array.isArray(client.injuries) && client.injuries.length > 0 ? client.injuries.join(', ') : 'None'}
 ${coachDirectives ? 'Coach notes: ' + coachDirectives : ''}
+Physique athlete focus: ${isPhysiqueFocused ? 'yes' : 'no'}
+Protocol framing: ${protocolFrame}
 
 Return ONLY a JSON array (no markdown, no wrapper object):
 [
@@ -743,6 +784,7 @@ Return ONLY a JSON array (no markdown, no wrapper object):
 
 Include: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (training days), Dinner, Evening Snack (if applicable).
 Use REAL foods and EXACT gram/oz portions based on the macro targets above.
+For physique-athlete clients, preserve bodybuilding specificity with performance-supportive carbs, protective protein, and a coherent BSLDS translation that still feels easy to execute.
 The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
 
         const mealPlanResponse = await anthropic.messages.create({
@@ -794,6 +836,8 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         bieSource,
         generationState,
         stage: currentStage,
+        protocolFrame,
+        physiqueFocus: isPhysiqueFocused,
         measurements,
         dataPoints: {
           adherenceRecords: adherenceRecords.length,
