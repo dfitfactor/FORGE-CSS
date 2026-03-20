@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 let protocolColumnCache: Set<string> | null = null
+const tableColumnCache = new Map<string, Set<string>>()
 
 async function getProtocolColumnSet() {
   if (protocolColumnCache) return protocolColumnCache
@@ -15,6 +16,22 @@ async function getProtocolColumnSet() {
 
   protocolColumnCache = new Set(columns.map(column => column.column_name))
   return protocolColumnCache
+}
+
+async function getTableColumnSet(tableName: string) {
+  const cached = tableColumnCache.get(tableName)
+  if (cached) return cached
+
+  const columns = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName]
+  )
+
+  const columnSet = new Set(columns.map(column => column.column_name))
+  tableColumnCache.set(tableName, columnSet)
+  return columnSet
 }
 
 async function authorize(clientId: string, request: NextRequest) {
@@ -150,23 +167,43 @@ export async function DELETE(
       return NextResponse.json({ error: 'Protocol not found' }, { status: 404 })
     }
 
+    const [
+      adherenceColumns,
+      changeLogColumns,
+      timelineColumns,
+      protocolColumns,
+    ] = await Promise.all([
+      getTableColumnSet('adherence_records'),
+      getTableColumnSet('protocol_change_log'),
+      getTableColumnSet('timeline_events'),
+      getTableColumnSet('protocols'),
+    ])
+
     const [adherenceRef, changeLogRef, timelineRef, supersededRef] = await Promise.all([
-      db.queryOne<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM adherence_records WHERE protocol_id = $1`,
-        [params.protocolId]
-      ),
-      db.queryOne<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM protocol_change_log WHERE protocol_id = $1`,
-        [params.protocolId]
-      ),
-      db.queryOne<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM timeline_events WHERE related_protocol_id = $1`,
-        [params.protocolId]
-      ),
-      db.queryOne<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM protocols WHERE superseded_by = $1`,
-        [params.protocolId]
-      ),
+      adherenceColumns.has('protocol_id')
+        ? db.queryOne<{ count: string }>(
+            `SELECT COUNT(*)::text as count FROM adherence_records WHERE protocol_id = $1`,
+            [params.protocolId]
+          )
+        : Promise.resolve({ count: '0' }),
+      changeLogColumns.has('protocol_id')
+        ? db.queryOne<{ count: string }>(
+            `SELECT COUNT(*)::text as count FROM protocol_change_log WHERE protocol_id = $1`,
+            [params.protocolId]
+          )
+        : Promise.resolve({ count: '0' }),
+      timelineColumns.has('related_protocol_id')
+        ? db.queryOne<{ count: string }>(
+            `SELECT COUNT(*)::text as count FROM timeline_events WHERE related_protocol_id = $1`,
+            [params.protocolId]
+          )
+        : Promise.resolve({ count: '0' }),
+      protocolColumns.has('superseded_by')
+        ? db.queryOne<{ count: string }>(
+            `SELECT COUNT(*)::text as count FROM protocols WHERE superseded_by = $1`,
+            [params.protocolId]
+          )
+        : Promise.resolve({ count: '0' }),
     ])
 
     const blockers = [
