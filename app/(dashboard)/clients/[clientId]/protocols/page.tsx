@@ -91,6 +91,7 @@ export default function ProtocolsPage() {
   const [showGenerate, setShowGenerate] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filterType, setFilterType] = useState('all')
+  const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null)
 
   // Generation state
   const [genType, setGenType] = useState('composite')
@@ -134,6 +135,56 @@ export default function ProtocolsPage() {
 
   function setF(key: string, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  function resetForm() {
+    setForm({
+      name: '',
+      protocolType: 'movement',
+      stage: clientStage || 'foundations',
+      generationState: '',
+      effectiveDate: new Date().toISOString().split('T')[0],
+      movementTemplate: '',
+      sessionsPerWeek: '',
+      complexityCeiling: '',
+      volumeTarget: '',
+      calorieTarget: '',
+      proteinTargetG: '',
+      carbTargetG: '',
+      fatTargetG: '',
+      mealFrequency: '',
+      nutritionComplexity: '',
+      notes: '',
+      coachNotes: '',
+    })
+    setEditingProtocolId(null)
+  }
+
+  function handleEditProtocol(protocol: Protocol) {
+    setEditingProtocolId(protocol.id)
+    setGenerated(null)
+    setGenContext(null)
+    setShowGenerate(false)
+    setShowForm(true)
+    setForm({
+      name: protocol.name ?? '',
+      protocolType: protocol.protocol_type ?? 'movement',
+      stage: protocol.stage ?? clientStage ?? 'foundations',
+      generationState: protocol.generation_state ?? '',
+      effectiveDate: protocol.effective_date ?? new Date().toISOString().split('T')[0],
+      movementTemplate: protocol.movement_template ?? '',
+      sessionsPerWeek: protocol.sessions_per_week?.toString() ?? '',
+      complexityCeiling: protocol.complexity_ceiling?.toString() ?? '',
+      volumeTarget: protocol.volume_target ?? '',
+      calorieTarget: protocol.calorie_target?.toString() ?? '',
+      proteinTargetG: protocol.protein_target_g?.toString() ?? '',
+      carbTargetG: protocol.carb_target_g?.toString() ?? '',
+      fatTargetG: protocol.fat_target_g?.toString() ?? '',
+      mealFrequency: protocol.meal_frequency?.toString() ?? '',
+      nutritionComplexity: protocol.nutrition_complexity ?? '',
+      notes: protocol.notes ?? '',
+      coachNotes: protocol.coach_notes ?? '',
+    })
   }
 
   async function handleGenerate() {
@@ -203,27 +254,56 @@ export default function ProtocolsPage() {
     if (!form.name.trim()) { setError('Protocol name is required'); return }
     setSaving(true); setError('')
     try {
-      const res = await fetch('/api/clients/' + clientId + '/protocols', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          barAtGeneration: clientBIE.bar || null,
-          bliAtGeneration: clientBIE.bli || null,
-          dbiAtGeneration: clientBIE.dbi || null,
-          sessionsPerWeek: form.sessionsPerWeek ? Number(form.sessionsPerWeek) : null,
-          complexityCeiling: form.complexityCeiling ? Number(form.complexityCeiling) : null,
-          calorieTarget: form.calorieTarget ? Number(form.calorieTarget) : null,
-          proteinTargetG: form.proteinTargetG ? Number(form.proteinTargetG) : null,
-          carbTargetG: form.carbTargetG ? Number(form.carbTargetG) : null,
-          fatTargetG: form.fatTargetG ? Number(form.fatTargetG) : null,
-          mealFrequency: form.mealFrequency ? Number(form.mealFrequency) : null,
-          generatedBy: 'coach',
-        }),
-      })
+      const payload = {
+        name: form.name,
+        stage: form.stage,
+        generation_state: form.generationState || null,
+        effective_date: form.effectiveDate || new Date().toISOString().split('T')[0],
+        movementTemplate: form.movementTemplate || null,
+        sessions_per_week: form.sessionsPerWeek ? Number(form.sessionsPerWeek) : null,
+        complexity_ceiling: form.complexityCeiling ? Number(form.complexityCeiling) : null,
+        volume_target: form.volumeTarget || null,
+        calorie_target: form.calorieTarget ? Number(form.calorieTarget) : null,
+        protein_target_g: form.proteinTargetG ? Number(form.proteinTargetG) : null,
+        carb_target_g: form.carbTargetG ? Number(form.carbTargetG) : null,
+        fat_target_g: form.fatTargetG ? Number(form.fatTargetG) : null,
+        meal_frequency: form.mealFrequency ? Number(form.mealFrequency) : null,
+        nutrition_complexity: form.nutritionComplexity || null,
+        notes: form.notes || null,
+        coach_notes: form.coachNotes || null,
+      }
+
+      const res = await fetch(
+        editingProtocolId
+          ? '/api/clients/' + clientId + '/protocols/' + editingProtocolId
+          : '/api/clients/' + clientId + '/protocols',
+        {
+          method: editingProtocolId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            editingProtocolId
+              ? payload
+              : {
+                  ...form,
+                  barAtGeneration: clientBIE.bar || null,
+                  bliAtGeneration: clientBIE.bli || null,
+                  dbiAtGeneration: clientBIE.dbi || null,
+                  sessionsPerWeek: form.sessionsPerWeek ? Number(form.sessionsPerWeek) : null,
+                  complexityCeiling: form.complexityCeiling ? Number(form.complexityCeiling) : null,
+                  calorieTarget: form.calorieTarget ? Number(form.calorieTarget) : null,
+                  proteinTargetG: form.proteinTargetG ? Number(form.proteinTargetG) : null,
+                  carbTargetG: form.carbTargetG ? Number(form.carbTargetG) : null,
+                  fatTargetG: form.fatTargetG ? Number(form.fatTargetG) : null,
+                  mealFrequency: form.mealFrequency ? Number(form.mealFrequency) : null,
+                  generatedBy: 'coach',
+                }
+          ),
+        }
+      )
       if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Save failed'); return }
-      setSuccess('Protocol created')
+      setSuccess(editingProtocolId ? 'Protocol updated' : 'Protocol created')
       setShowForm(false)
+      resetForm()
       loadProtocols()
       setTimeout(() => setSuccess(''), 3000)
     } catch { setError('Network error') } finally { setSaving(false) }
@@ -341,8 +421,12 @@ export default function ProtocolsPage() {
               <div className="flex items-center gap-2">
                 <span className="font-mono">v{p.version}</span>
                 <Link
-                  href={`/clients/${clientId}/protocols/${p.id}`}
-                  onClick={e => e.stopPropagation()}
+                  href="#"
+                  onClick={e => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleEditProtocol(p)
+                  }}
                   className="px-2 py-1 bg-white/6 text-white/70 border border-white/10 rounded-lg text-[10px] font-mono uppercase tracking-wide hover:bg-white/10 transition-colors">
                   Edit
                 </Link>
@@ -390,7 +474,7 @@ export default function ProtocolsPage() {
               className="forge-btn-gold text-sm flex items-center gap-2">
               <Sparkles size={15} /> Generate with AI
             </button>
-            <button onClick={() => { setShowGenerate(false); setShowForm(true) }}
+            <button onClick={() => { setShowGenerate(false); resetForm(); setShowForm(true) }}
               className="px-3 py-2 bg-white/6 border border-white/10 rounded-xl text-xs text-white/50 hover:text-white transition-colors flex items-center gap-1.5">
               <Plus size={13} /> Manual
             </button>
@@ -783,7 +867,7 @@ export default function ProtocolsPage() {
           <div className="bg-[#111111] border border-white/10 rounded-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Manual Protocol</h2>
-              <button onClick={() => setShowForm(false)} className="text-white/30 hover:text-white"><X size={16} /></button>
+              <button onClick={() => { setShowForm(false); resetForm() }} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2"><label className="forge-label">Protocol Name</label><input value={form.name} onChange={e => setF('name', e.target.value)} className="forge-input" placeholder="e.g. Phase 1 Movement Protocol" /></div>
@@ -817,9 +901,9 @@ export default function ProtocolsPage() {
             <div><label className="forge-label">Protocol Notes</label><textarea rows={3} value={form.notes} onChange={e => setF('notes', e.target.value)} className="forge-input resize-none" placeholder="Protocol rationale and instructions..." /></div>
             <div><label className="forge-label">Coach Notes (internal)</label><textarea rows={2} value={form.coachNotes} onChange={e => setF('coachNotes', e.target.value)} className="forge-input resize-none" placeholder="Internal observations..." /></div>
             <button onClick={handleSaveManual} disabled={saving} className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50">
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Zap size={16} /> Create Protocol</>}
-            </button>
-          </div>
+                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Zap size={16} /> {editingProtocolId ? 'Update Protocol' : 'Create Protocol'}</>}
+              </button>
+            </div>
         )}
 
         {/* Protocol list */}
