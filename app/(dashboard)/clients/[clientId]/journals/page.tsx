@@ -129,7 +129,15 @@ export default function JournalsPage() {
         if (!r.ok) throw new Error(data.error ?? `Failed to load journal entries (${r.status})`)
         return data
       })
-      .then(d => { setEntries(Array.isArray(d.entries) ? d.entries : []); setLoading(false) })
+      .then(d => {
+        // TEMP DEBUG
+        console.log('[TEMP DEBUG][journals][page][GET] full response', d)
+        if (d.debug) {
+          console.log('[TEMP DEBUG][journals][page][GET] debug', d.debug)
+        }
+        setEntries(Array.isArray(d.entries) ? d.entries : [])
+        setLoading(false)
+      })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load journal entries')
         setLoading(false)
@@ -158,6 +166,8 @@ export default function JournalsPage() {
         }),
       })
       const data = await res.json().catch(() => ({}))
+      // TEMP DEBUG
+      console.log('[TEMP DEBUG][journals][page][POST] full response', data)
       if (!res.ok) { setError(data.error ?? 'Save failed'); return }
       setSuccess('Entry saved')
       setShowForm(false)

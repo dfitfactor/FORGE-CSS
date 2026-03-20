@@ -11,6 +11,12 @@ export async function GET(
   try {
     const session = await getSession(request)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // TEMP DEBUG
+    console.log('[TEMP DEBUG][journals][GET] request', {
+      clientId: params.clientId,
+      userId: session.id,
+      role: session.role,
+    })
     const client = await db.queryOne<{ coach_id: string }>(
       `SELECT coach_id FROM clients WHERE id = $1`, [params.clientId]
     )
@@ -30,7 +36,15 @@ export async function GET(
        LIMIT 100`,
       [params.clientId]
     )
-    return NextResponse.json({ entries })
+    const debug = {
+      clientId: params.clientId,
+      rowCount: entries.length,
+      firstEntryId: (entries[0] as { id?: string } | undefined)?.id ?? null,
+      firstEntryDate: (entries[0] as { entry_date?: string } | undefined)?.entry_date ?? null,
+    }
+    // TEMP DEBUG
+    console.log('[TEMP DEBUG][journals][GET] result', debug)
+    return NextResponse.json({ entries, debug })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -44,6 +58,12 @@ export async function POST(
   try {
     const session = await getSession(request)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // TEMP DEBUG
+    console.log('[TEMP DEBUG][journals][POST] request', {
+      clientId: params.clientId,
+      userId: session.id,
+      role: session.role,
+    })
     const client = await db.queryOne<{ coach_id: string }>(
       `SELECT coach_id FROM clients WHERE id = $1`, [params.clientId]
     )
@@ -84,6 +104,11 @@ export async function POST(
     if (!result?.id) {
       return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 })
     }
+    // TEMP DEBUG
+    console.log('[TEMP DEBUG][journals][POST] inserted', {
+      clientId: params.clientId,
+      insertedId: result.id,
+    })
 
     const entry = await db.queryOne(
       `SELECT id, entry_date::text, entry_type, title, body,
@@ -96,8 +121,21 @@ export async function POST(
        WHERE id = $1`,
       [result.id]
     )
+    const countRow = await db.queryOne<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM journal_entries
+       WHERE client_id = $1`,
+      [params.clientId]
+    )
+    const debug = {
+      clientId: params.clientId,
+      insertedId: result.id,
+      clientJournalCount: Number(countRow?.count ?? 0),
+    }
+    // TEMP DEBUG
+    console.log('[TEMP DEBUG][journals][POST] result', debug)
 
-    return NextResponse.json({ success: true, id: result.id, entry })
+    return NextResponse.json({ success: true, id: result.id, entry, debug })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
