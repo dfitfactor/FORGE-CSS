@@ -124,13 +124,19 @@ export default function DocumentsPage() {
     } finally { setUploading(false) }
   }
 
-  async function handleView(doc: { file_data?: string; mime_type?: string; file_name?: string }) {
-    if (!doc.file_data) { alert('No file data available'); return }
+  async function handleView(doc: Doc) {
     try {
-      const byteChars = atob(doc.file_data)
+      const res = await fetch(`/api/clients/${clientId}/documents?id=${doc.id}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.document?.file_data) {
+        alert(data.error ?? 'No file data available')
+        return
+      }
+
+      const byteChars = atob(data.document.file_data)
       const byteArr = new Uint8Array(byteChars.length)
       for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i)
-      const blob = new Blob([byteArr], { type: doc.mime_type ?? 'application/octet-stream' })
+      const blob = new Blob([byteArr], { type: data.document.file_type ?? 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       window.open(url, '_blank')
     } catch { alert('Could not open file') }
@@ -267,7 +273,6 @@ export default function DocumentsPage() {
                     </div>
                     {doc.notes && <p className="text-xs text-white/35 mt-1">{doc.notes}</p>}
                   </div>
-                  <button onClick={() => handleView(doc)} title="View document" className="text-white/15 hover:text-blue-400 transition-colors flex-shrink-0 p-1"><Eye size={14} /></button>
                   <button onClick={() => handleView(doc)} title="View document" className="text-white/15 hover:text-blue-400 transition-colors flex-shrink-0 p-1"><Eye size={14} /></button>
                   <button onClick={() => handleDelete(doc.id, doc.file_name)} className="text-white/15 hover:text-red-400 transition-colors flex-shrink-0 p-1"><Trash2 size={14} /></button>
                 </div>

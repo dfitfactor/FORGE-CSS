@@ -37,6 +37,37 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const docId = searchParams.get('id')
+
+    if (docId) {
+      const document = await db.queryOne<{
+        id: string
+        file_name: string
+        file_type: string
+        file_size: number
+        document_type: string
+        title: string | null
+        notes: string | null
+        include_in_ai: boolean
+        created_at: string
+        file_data: string | null
+      }>(
+        `SELECT id, file_name, file_type, file_size, document_type,
+                title, notes, include_in_ai, created_at::text,
+                encode(file_data, 'base64') as file_data
+         FROM client_documents
+         WHERE client_id = $1 AND id = $2`,
+        [params.clientId, docId]
+      )
+
+      if (!document) {
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+      }
+
+      return NextResponse.json({ document })
+    }
+
     const documents = await db.query<{
       id: string; file_name: string; file_type: string; file_size: number
       document_type: string; title: string | null; notes: string | null
