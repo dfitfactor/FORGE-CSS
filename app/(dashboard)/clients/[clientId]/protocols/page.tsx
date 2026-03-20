@@ -343,6 +343,12 @@ export default function ProtocolsPage() {
                 <Link
                   href={`/clients/${clientId}/protocols/${p.id}`}
                   onClick={e => e.stopPropagation()}
+                  className="px-2 py-1 bg-white/6 text-white/70 border border-white/10 rounded-lg text-[10px] font-mono uppercase tracking-wide hover:bg-white/10 transition-colors">
+                  Edit
+                </Link>
+                <Link
+                  href={`/clients/${clientId}/protocols/${p.id}`}
+                  onClick={e => e.stopPropagation()}
                   className="px-2 py-1 bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30 rounded-lg text-[10px] font-mono uppercase tracking-wide hover:bg-[#D4AF37]/20 transition-colors">
                   View PDF
                 </Link>
