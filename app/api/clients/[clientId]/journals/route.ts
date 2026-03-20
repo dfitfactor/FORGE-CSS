@@ -2,6 +2,8 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -24,7 +26,7 @@ export async function GET(
               coach_response, is_private, created_at::text
        FROM journal_entries
        WHERE client_id = $1
-       ORDER BY entry_date DESC, created_at DESC
+       ORDER BY entry_date ASC, created_at ASC
        LIMIT 100`,
       [params.clientId]
     )
@@ -79,7 +81,23 @@ export async function POST(
         body.isPrivate || false,
       ]
     )
-    return NextResponse.json({ success: true, id: result?.id })
+    if (!result?.id) {
+      return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 })
+    }
+
+    const entry = await db.queryOne(
+      `SELECT id, entry_date::text, entry_type, title, body,
+              sleep_hours, sleep_quality, stress_level, energy_level,
+              hunger_level, mood, digestion_quality,
+              travel_flag, illness_flag, work_stress_flag, family_stress_flag,
+              extracted_signals, signals_extracted,
+              coach_response, is_private, created_at::text
+       FROM journal_entries
+       WHERE id = $1`,
+      [result.id]
+    )
+
+    return NextResponse.json({ success: true, id: result.id, entry })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })

@@ -2,6 +2,59 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+type CheckinColumnType = {
+  column_name: string
+  data_type: string
+  udt_name: string
+}
+
+function parseInteger(value: unknown) {
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseBoolean(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') return true
+    if (value.toLowerCase() === 'false') return false
+  }
+  return null
+}
+
+async function getClientCheckinColumnMap() {
+  const columns = await db.query<CheckinColumnType>(
+    `SELECT column_name, data_type, udt_name
+     FROM information_schema.columns
+     WHERE table_name = 'client_checkins'`
+  )
+
+  return new Map(columns.map((column) => [column.column_name, column]))
+}
+
+function formatArrayValue(
+  columns: Map<string, CheckinColumnType>,
+  columnName: string,
+  value: unknown
+) {
+  if (!Array.isArray(value)) return null
+
+  const cleaned = value
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+
+  if (cleaned.length === 0) return null
+
+  const column = columns.get(columnName)
+  if (!column) return cleaned
+  if (column.data_type === 'ARRAY' || column.udt_name.startsWith('_')) return cleaned
+  if (column.udt_name === 'json' || column.udt_name === 'jsonb') return JSON.stringify(cleaned)
+
+  return cleaned.join(', ')
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -41,6 +94,7 @@ export async function POST(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
     const body = await request.json()
+    const columns = await getClientCheckinColumnMap()
     const result = await db.queryOne<{ id: string }>(
       `INSERT INTO client_checkins (
         client_id, logged_by, checkin_type, checkin_date,
@@ -62,27 +116,27 @@ export async function POST(
         params.clientId, session.id,
         body.checkinType || 'weekly',
         body.checkinDate || new Date().toISOString().split('T')[0],
-        body.workoutConsistency || null,
-        body.workoutTypes || null,
+        parseInteger(body.workoutConsistency),
+        formatArrayValue(columns, 'workout_types', body.workoutTypes),
         body.workoutsEnjoyed || null,
         body.workoutsCompleted || null,
-        body.nutritionAdherence || null,
-        body.mealFocus || null,
+        parseInteger(body.nutritionAdherence),
+        formatArrayValue(columns, 'meal_focus', body.mealFocus),
         body.nutritionChallenges || null,
         body.proteinAdherence || null,
         body.foodJournalingDays || null,
         body.nutritionDrift || null,
         body.hydrationRange || null,
-        body.digestionRating || null,
-        body.digestionIssues ?? null,
-        body.sleepQuality || null,
+        parseInteger(body.digestionRating),
+        parseBoolean(body.digestionIssues),
+        parseInteger(body.sleepQuality),
         body.sleepHoursAvg || null,
-        body.sleepDisturbances ?? null,
+        parseBoolean(body.sleepDisturbances),
         body.sleepResponse || null,
         body.sleepHygiene || null,
-        body.mindsetRating || null,
+        parseInteger(body.mindsetRating),
         body.positiveAffirmations || null,
-        body.stressRating || null,
+        parseInteger(body.stressRating),
         body.stressStrategies || null,
         body.movementVsUsual || null,
         body.recoveryQuality || null,
@@ -95,7 +149,7 @@ export async function POST(
         body.gratefulFor || null,
         body.didForSelf || null,
         body.additionalNotes || null,
-        body.basedOnLogs ?? null,
+        parseBoolean(body.basedOnLogs),
         body.coachNotes || null,
       ]
     )

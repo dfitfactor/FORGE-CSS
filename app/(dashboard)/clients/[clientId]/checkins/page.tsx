@@ -84,6 +84,83 @@ function RatingButtons({ value, max, onChange }: { value: string; max: number; o
   )
 }
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs font-mono uppercase tracking-widest text-[#D4AF37]/70 border-b border-white/6 pb-2">{title}</p>
+      {children}
+    </div>
+  )
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <label className="forge-label">{label}</label>
+      {hint && <p className="text-xs text-white/30 -mt-1">{hint}</p>}
+      {children}
+    </div>
+  )
+}
+
+function OptionButtons({
+  field,
+  form,
+  setF,
+  options,
+}: {
+  field: string
+  form: Record<string, string | string[] | boolean>
+  setF: (key: string, value: string | string[] | boolean) => void
+  options: string[]
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(opt => (
+        <button key={opt} type="button"
+          onClick={() => setF(field, String(form[field]) === opt ? '' : opt)}
+          className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+            String(form[field]) === opt
+              ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/40'
+              : 'bg-white/4 text-white/40 border-white/10 hover:border-white/25'
+          }`}>
+          {opt}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function CheckboxGroup({
+  field,
+  form,
+  toggleArray,
+  isChecked,
+  options,
+}: {
+  field: string
+  form: Record<string, string | string[] | boolean>
+  toggleArray: (key: string, value: string) => void
+  isChecked: (key: string, value: string) => boolean
+  options: string[]
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(opt => (
+        <button key={opt} type="button"
+          onClick={() => toggleArray(field, opt)}
+          className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+            isChecked(field, opt)
+              ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/40'
+              : 'bg-white/4 text-white/40 border-white/10 hover:border-white/25'
+          }`}>
+          {opt}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function CheckinsPage() {
   const params = useParams<{ clientId: string }>()
   const clientId = params?.clientId as string
@@ -188,61 +265,6 @@ export default function CheckinsPage() {
 
   const filtered = checkins.filter(c => c.checkin_type === activeTab)
 
-  function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-      <div className="space-y-4">
-        <p className="text-xs font-mono uppercase tracking-widest text-[#D4AF37]/70 border-b border-white/6 pb-2">{title}</p>
-        {children}
-      </div>
-    )
-  }
-
-  function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-    return (
-      <div className="space-y-2">
-        <label className="forge-label">{label}</label>
-        {hint && <p className="text-xs text-white/30 -mt-1">{hint}</p>}
-        {children}
-      </div>
-    )
-  }
-
-  function OptionButtons({ field, options }: { field: string; options: string[] }) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {options.map(opt => (
-          <button key={opt} type="button"
-            onClick={() => setF(field, String(form[field]) === opt ? '' : opt)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-              String(form[field]) === opt
-                ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/40'
-                : 'bg-white/4 text-white/40 border-white/10 hover:border-white/25'
-            }`}>
-            {opt}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  function CheckboxGroup({ field, options }: { field: string; options: string[] }) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {options.map(opt => (
-          <button key={opt} type="button"
-            onClick={() => toggleArray(field, opt)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-              isChecked(field, opt)
-                ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/40'
-                : 'bg-white/4 text-white/40 border-white/10 hover:border-white/25'
-            }`}>
-            {opt}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -304,7 +326,7 @@ export default function CheckinsPage() {
                     <RatingButtons value={String(form.workoutConsistency)} max={10} onChange={v => setF('workoutConsistency', v)} />
                   </Field>
                   <Field label="What types of workouts did you complete?">
-                    <CheckboxGroup field="workoutTypes" options={['Strength Training', 'Cardio', 'Flexibility/Stretching', 'Other']} />
+                    <CheckboxGroup field="workoutTypes" form={form} toggleArray={toggleArray} isChecked={isChecked} options={['Strength Training', 'Cardio', 'Flexibility/Stretching', 'Other']} />
                   </Field>
                   <Field label="Please list any specific workouts or activities you enjoyed:">
                     <textarea rows={2} value={String(form.workoutsEnjoyed)} onChange={e => setF('workoutsEnjoyed', e.target.value)} className="forge-input resize-none" placeholder="e.g. Hip thrust PR, loved the HIIT class..." />
@@ -316,7 +338,7 @@ export default function CheckinsPage() {
                     <RatingButtons value={String(form.nutritionAdherence)} max={10} onChange={v => setF('nutritionAdherence', v)} />
                   </Field>
                   <Field label="What types of meals did you focus on?">
-                    <CheckboxGroup field="mealFocus" options={['Whole Foods', 'Balanced Meals', 'Meal Prepping', 'Other']} />
+                    <CheckboxGroup field="mealFocus" form={form} toggleArray={toggleArray} isChecked={isChecked} options={['Whole Foods', 'Balanced Meals', 'Meal Prepping', 'Other']} />
                   </Field>
                   <Field label="Any challenges with nutrition this week?">
                     <textarea rows={2} value={String(form.nutritionChallenges)} onChange={e => setF('nutritionChallenges', e.target.value)} className="forge-input resize-none" placeholder="e.g. Ate out 3x, skipped breakfast..." />
@@ -346,7 +368,7 @@ export default function CheckinsPage() {
                     <RatingButtons value={String(form.sleepQuality)} max={10} onChange={v => setF('sleepQuality', v)} />
                   </Field>
                   <Field label="Average hours of sleep per night:">
-                    <OptionButtons field="sleepHoursAvg" options={['< 5', '5-6', '6-7', '7-8', '8+']} />
+                    <OptionButtons field="sleepHoursAvg" form={form} setF={setF} options={['< 5', '5-6', '6-7', '7-8', '8+']} />
                   </Field>
                   <Field label="Any sleep disturbances?">
                     <div className="flex gap-3">
@@ -411,43 +433,43 @@ export default function CheckinsPage() {
               <>
                 <Section title="Nutrition">
                   <Field label="Food journaling days" hint="Count days you logged all meals with reasonable accuracy">
-                    <OptionButtons field="foodJournalingDays" options={['0', '1-2', '3-4', '5 or more']} />
+                    <OptionButtons field="foodJournalingDays" form={form} setF={setF} options={['0', '1-2', '3-4', '5 or more']} />
                   </Field>
                   <Field label="Nutrition drift frequency" hint="How often did foods outside the plan show up?">
-                    <OptionButtons field="nutritionDrift" options={['Not at all', '1-2 times', '3-4 times', '5 or more times']} />
+                    <OptionButtons field="nutritionDrift" form={form} setF={setF} options={['Not at all', '1-2 times', '3-4 times', '5 or more times']} />
                   </Field>
                   <Field label="Protein adherence" hint="How often did you meet your protein target?">
-                    <OptionButtons field="proteinAdherence" options={['>95%', '85-95%', '70-85%', '<70%', 'Unsure']} />
+                    <OptionButtons field="proteinAdherence" form={form} setF={setF} options={['>95%', '85-95%', '70-85%', '<70%', 'Unsure']} />
                   </Field>
                   <Field label="Average daily hydration:">
-                    <OptionButtons field="hydrationRange" options={['≥ 1 gallon/day', '80-100 oz/day', '60-80 oz/day', '< 60 oz/day']} />
+                    <OptionButtons field="hydrationRange" form={form} setF={setF} options={['≥ 1 gallon/day', '80-100 oz/day', '60-80 oz/day', '< 60 oz/day']} />
                   </Field>
                 </Section>
 
                 <Section title="Sleep">
                   <Field label="Average nightly sleep:">
-                    <OptionButtons field="sleepHoursAvg" options={['< 5', '5-6', '7-8', '8+']} />
+                    <OptionButtons field="sleepHoursAvg" form={form} setF={setF} options={['< 5', '5-6', '7-8', '8+']} />
                   </Field>
                   <Field label="After nights of shorter sleep, how did your body respond?">
-                    <OptionButtons field="sleepResponse" options={['Felt rested and functional', 'Slightly tired but manageable', 'Crashed or struggled significantly', 'Inconsistent']} />
+                    <OptionButtons field="sleepResponse" form={form} setF={setF} options={['Felt rested and functional', 'Slightly tired but manageable', 'Crashed or struggled significantly', 'Inconsistent']} />
                   </Field>
                   <Field label="Overall sleep hygiene this period:">
-                    <OptionButtons field="sleepHygiene" options={['Very supportive', 'Mostly supportive', 'Inconsistent', 'Poor / not supportive']} />
+                    <OptionButtons field="sleepHygiene" form={form} setF={setF} options={['Very supportive', 'Mostly supportive', 'Inconsistent', 'Poor / not supportive']} />
                   </Field>
                 </Section>
 
                 <Section title="Movement & Recovery">
                   <Field label="Movement vs your usual routine (excluding workouts):">
-                    <OptionButtons field="movementVsUsual" options={['Less', 'About the same', 'More']} />
+                    <OptionButtons field="movementVsUsual" form={form} setF={setF} options={['Less', 'About the same', 'More']} />
                   </Field>
                   <Field label="Workouts completed:">
-                    <OptionButtons field="workoutsCompleted" options={['All planned workouts', 'Missed 1 workout', 'Missed 2+ workouts', 'No workouts completed']} />
+                    <OptionButtons field="workoutsCompleted" form={form} setF={setF} options={['All planned workouts', 'Missed 1 workout', 'Missed 2+ workouts', 'No workouts completed']} />
                   </Field>
                   <Field label="Recovery between workouts:">
-                    <OptionButtons field="recoveryQuality" options={['Good - Ready for next sessions', 'Moderate - Some lingering soreness', 'Slow - Persistent fatigue affected training']} />
+                    <OptionButtons field="recoveryQuality" form={form} setF={setF} options={['Good - Ready for next sessions', 'Moderate - Some lingering soreness', 'Slow - Persistent fatigue affected training']} />
                   </Field>
                   <Field label="Energy level this period:">
-                    <OptionButtons field="energyLevel" options={['Low', 'Steady', 'High', 'Inconsistent']} />
+                    <OptionButtons field="energyLevel" form={form} setF={setF} options={['Low', 'Steady', 'High', 'Inconsistent']} />
                   </Field>
                 </Section>
 

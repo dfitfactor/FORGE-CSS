@@ -118,15 +118,22 @@ export default function JournalsPage() {
 
   useEffect(() => {
     if (!clientId) return
-    fetch('/api/clients/' + clientId).then(r => r.json()).then(d => setClientName(d.client?.full_name ?? '')).catch(() => {})
+    fetch('/api/clients/' + clientId, { cache: 'no-store' }).then(r => r.json()).then(d => setClientName(d.client?.full_name ?? '')).catch(() => {})
     loadEntries()
   }, [clientId])
 
   function loadEntries() {
-    fetch('/api/clients/' + clientId + '/journals')
-      .then(r => r.json())
-      .then(d => { setEntries(d.entries ?? []); setLoading(false) })
-      .catch(() => setLoading(false))
+    fetch('/api/clients/' + clientId + '/journals', { cache: 'no-store' })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(data.error ?? `Failed to load journal entries (${r.status})`)
+        return data
+      })
+      .then(d => { setEntries(Array.isArray(d.entries) ? d.entries : []); setLoading(false) })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load journal entries')
+        setLoading(false)
+      })
   }
 
   function setF(key: string, value: string | boolean) {
@@ -150,13 +157,18 @@ export default function JournalsPage() {
           digestionQuality: form.digestionQuality ? Number(form.digestionQuality) : undefined,
         }),
       })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Save failed'); return }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
       setSuccess('Entry saved')
       setShowForm(false)
       setForm(emptyForm)
-      loadEntries()
+      if (data.entry) {
+        setEntries(prev => [...prev.filter(entry => entry.id !== data.entry.id), data.entry as Entry])
+      } else {
+        loadEntries()
+      }
       setTimeout(() => setSuccess(''), 3000)
-    } catch { setError('Network error') } finally { setSaving(false) }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Network error') } finally { setSaving(false) }
   }
 
   async function handleDelete(id: string) {
