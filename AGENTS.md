@@ -30,16 +30,20 @@ You MUST follow this sequence:
 
 The system must determine which protocol module to use BEFORE generating output.
 
-If `client_type` is explicitly provided in input, bypass inference and use the specified module directly.
+If `client_type` is explicitly provided in input, normalize it first, then validate it, then use the specified module directly.
 
 Routing rules:
 
 0. If `client_type` is explicitly provided:
+   - Normalize it before validation and routing
+   - If `client_type` == `lifestyle`, convert it to `general_population`
+   - Validate only canonical values:
+     - `competitor`
+     - `general_population`
    - `competitor` -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
    - `general_population` -> Use `general_population_protocol_prompt.md`
-   - `lifestyle` -> Use `general_population_protocol_prompt.md`
    - This override takes priority over all other routing logic
-   - If the provided value is not `competitor`, `general_population`, or `lifestyle`:
+   - If the normalized value is not `competitor` or `general_population`:
      - reject the override
      - fall back to inference logic
      - log: "Invalid client_type provided — using inference"
