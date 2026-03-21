@@ -196,17 +196,56 @@ async function getTableColumnSet(tableName: string) {
   return set
 }
 
+function selectColumnOrNull(columns: Set<string>, columnName: string) {
+  return columns.has(columnName)
+    ? columnName
+    : `NULL::text AS ${columnName}`
+}
+
+function buildProtocolSelect(columns: Set<string>) {
+  const textOrNull = (columnName: string) => selectColumnOrNull(columns, columnName)
+
+  return [
+    'id',
+    'client_id',
+    textOrNull('version'),
+    textOrNull('is_active'),
+    'name',
+    'protocol_type',
+    'stage',
+    textOrNull('generation_state'),
+    textOrNull('sessions_per_week'),
+    textOrNull('session_frequency'),
+    textOrNull('complexity_ceiling'),
+    textOrNull('volume_target'),
+    textOrNull('calorie_target'),
+    textOrNull('protein_target_g'),
+    textOrNull('carb_target_g'),
+    textOrNull('fat_target_g'),
+    textOrNull('meal_frequency'),
+    textOrNull('nutrition_complexity'),
+    textOrNull('bar_at_generation'),
+    'effective_date::text AS effective_date',
+    'created_at::text AS created_at',
+    textOrNull('generated_by'),
+    textOrNull('notes'),
+    textOrNull('coach_notes'),
+    textOrNull('protocol_payload'),
+    textOrNull('activation_block'),
+    textOrNull('primary_block'),
+    textOrNull('accessory_block'),
+    textOrNull('finisher_block'),
+  ].join(', ')
+}
+
 async function getActiveProtocolRow(clientId: string, section: SupportedProtocolType) {
   const types = section === 'movement' ? ['movement', 'composite'] : ['nutrition', 'composite']
   const preferred = section
+  const columns = await getTableColumnSet('protocols')
+  const selectClause = buildProtocolSelect(columns)
 
   return db.queryOne<ProtocolRow>(
-    `SELECT id, client_id, version, is_active, name, protocol_type, stage, generation_state,
-            sessions_per_week, session_frequency, complexity_ceiling, volume_target,
-            calorie_target, protein_target_g, carb_target_g, fat_target_g,
-            meal_frequency, nutrition_complexity, bar_at_generation,
-            effective_date::text, created_at::text, generated_by, notes, coach_notes,
-            protocol_payload, activation_block, primary_block, accessory_block, finisher_block
+    `SELECT ${selectClause}
      FROM protocols
      WHERE client_id = $1
        AND is_active = true
@@ -219,14 +258,11 @@ async function getActiveProtocolRow(clientId: string, section: SupportedProtocol
 
 async function getProtocolHistory(clientId: string, section: SupportedProtocolType) {
   const types = section === 'movement' ? ['movement', 'composite'] : ['nutrition', 'composite']
+  const columns = await getTableColumnSet('protocols')
+  const selectClause = buildProtocolSelect(columns)
 
   const rows = await db.query<ProtocolRow>(
-    `SELECT id, client_id, version, is_active, name, protocol_type, stage, generation_state,
-            sessions_per_week, session_frequency, complexity_ceiling, volume_target,
-            calorie_target, protein_target_g, carb_target_g, fat_target_g,
-            meal_frequency, nutrition_complexity, bar_at_generation,
-            effective_date::text, created_at::text, generated_by, notes, coach_notes,
-            protocol_payload, activation_block, primary_block, accessory_block, finisher_block
+    `SELECT ${selectClause}
      FROM protocols
      WHERE client_id = $1
        AND protocol_type = ANY($2::text[])
