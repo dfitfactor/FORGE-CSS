@@ -59,7 +59,7 @@ export async function POST(
         `• Calories: ${ns.dailyCalories} kcal/day`,
         `• Protein: ${ns.proteinG}g | Carbs: ${ns.carbG}g | Fats: ${ns.fatG}g`,
         `• Meals per day: ${ns.mealFrequency}`,
-        `• Hydration: ${ns.hydrationTargetOz ?? 90} oz/day`,
+        `• Hydration: ≥ ${ns.hydrationTargetOz ?? 90} oz/day`,
         ns.mealTiming ? `• Timing: ${ns.mealTiming}` : '',
         '',
       ].filter(Boolean).join('\n') : '',

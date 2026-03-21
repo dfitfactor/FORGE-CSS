@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Mail, Loader2, CheckCircle, Edit3, Save, Trash2, X } from 'lucide-react'
+import { normalizeLoad } from '@/lib/protocol-overrides'
 
 type Protocol = {
   id: string; name: string; protocol_type: string; stage: string
@@ -421,9 +422,39 @@ export default function ProtocolPDFPage() {
     </div>
   )
 
-  const ss = protocol.protocol_payload?.sessionStructure as Record<string, unknown> | undefined
+  const rawSessionStructure = protocol.protocol_payload?.sessionStructure as Record<string, unknown> | undefined
   const ns = protocol.protocol_payload?.nutritionStructure as Record<string, unknown> | undefined
   const rs = protocol.protocol_payload?.recoveryStructure as Record<string, unknown> | undefined
+  const normalizedSessionStructure = rawSessionStructure
+    ? {
+        ...rawSessionStructure,
+        activationBlock: Array.isArray(rawSessionStructure.activationBlock)
+          ? (rawSessionStructure.activationBlock as ExerciseRow[]).map(exercise => ({
+              ...exercise,
+              loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
+            }))
+          : rawSessionStructure.activationBlock,
+        primaryBlock: Array.isArray(rawSessionStructure.primaryBlock)
+          ? (rawSessionStructure.primaryBlock as ExerciseRow[]).map(exercise => ({
+              ...exercise,
+              loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
+            }))
+          : rawSessionStructure.primaryBlock,
+        accessoryBlock: Array.isArray(rawSessionStructure.accessoryBlock)
+          ? (rawSessionStructure.accessoryBlock as ExerciseRow[]).map(exercise => ({
+              ...exercise,
+              loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
+            }))
+          : rawSessionStructure.accessoryBlock,
+        finisherBlock: Array.isArray(rawSessionStructure.finisherBlock)
+          ? (rawSessionStructure.finisherBlock as ExerciseRow[]).map(exercise => ({
+              ...exercise,
+              loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
+            }))
+          : rawSessionStructure.finisherBlock,
+      }
+    : undefined
+  const ss = (normalizedSessionStructure ?? {}) as Record<string, unknown>
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -570,7 +601,7 @@ export default function ProtocolPDFPage() {
             </div>
           )}
 
-          {ss && (
+          {normalizedSessionStructure && (
             <div style={{ marginBottom: '28px' }}>
               <SectionHeader title="Movement Protocol" color="#2d6a4f" />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
@@ -632,7 +663,7 @@ export default function ProtocolPDFPage() {
               )}
               {Boolean((ns as any).hydrationTargetOz) && (
                 <div style={{ marginTop: '12px', fontSize: '11px', color: '#555', background: '#f0f8ff', padding: '10px', borderRadius: '6px', border: '1px solid #d0e8f8' }}>
-                  <strong>Hydration Target:</strong> {String(ns.hydrationTargetOz)} oz/day
+                  <strong>Hydration Target:</strong> ≥ {String(ns.hydrationTargetOz)} oz/day
                   {(ns.hydrationSchedule as Array<Record<string, string>>)?.map((h, i) => (
                     <div key={i} style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#888' }}>{h.timing}</span>
