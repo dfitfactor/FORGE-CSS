@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import {
   applyMovementOverrides,
   applyNutritionOverrides,
+  buildOverrideIntelligenceSummary,
   type MovementExecutionLogEntry,
   type NutritionStructure,
   type ProtocolOverride,
@@ -97,6 +98,7 @@ export type MovementWorkspaceData = {
   }) | null
   history: ProtocolHistoryItem[]
   changeLog: ChangeLogEntry[]
+  overrideIntelligence: ReturnType<typeof buildOverrideIntelligenceSummary>
 }
 
 export type NutritionWorkspaceData = {
@@ -300,7 +302,12 @@ export async function loadMovementWorkspace(clientId: string): Promise<MovementW
   const history = await getProtocolHistory(clientId, 'movement')
 
   if (!protocol) {
-    return { protocol: null, history, changeLog: [] }
+    return {
+      protocol: null,
+      history,
+      changeLog: [],
+      overrideIntelligence: buildOverrideIntelligenceSummary([]),
+    }
   }
 
   const payload = asRecord(protocol.protocol_payload)
@@ -312,6 +319,18 @@ export async function loadMovementWorkspace(clientId: string): Promise<MovementW
   const executionLog = sanitizeExecutionLog(payload.movementExecutionLog)
   const movementView = applyMovementOverrides(sessionStructure, overrides)
   const changeLog = await getChangeLog(protocol.id)
+  const intelligencePayloads = await db.query<{ protocol_payload: Record<string, unknown> | null }>(
+    `SELECT protocol_payload
+     FROM protocols
+     WHERE client_id = $1
+       AND protocol_type = ANY($2::text[])
+     ORDER BY created_at DESC
+     LIMIT 5`,
+    [clientId, ['movement', 'composite']]
+  )
+  const overrideIntelligence = buildOverrideIntelligenceSummary(
+    intelligencePayloads.map(item => item.protocol_payload)
+  )
 
   return {
     protocol: {
@@ -324,6 +343,7 @@ export async function loadMovementWorkspace(clientId: string): Promise<MovementW
     },
     history,
     changeLog,
+    overrideIntelligence,
   }
 }
 

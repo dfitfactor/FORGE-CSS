@@ -58,6 +58,8 @@ export type MovementExercise = ExerciseBlock & {
   block: keyof Pick<SessionStructure, 'activationBlock' | 'primaryBlock' | 'accessoryBlock' | 'finisherBlock'>
   original: ExerciseBlock
   adjusted: boolean
+  removed?: boolean
+  variation?: string
 }
 
 export type NutritionMealPlanEntry = {
@@ -78,6 +80,17 @@ export type NutritionStructure = {
   keyGuidelines?: string[]
   disruption_protocol?: string
   mealPlan?: NutritionMealPlanEntry[]
+}
+
+export function normalizeLoad(load: string | null | undefined, exerciseName: string) {
+  if (load && load.trim() !== '') return load
+
+  const normalizedExercise = exerciseName.toLowerCase()
+  if (normalizedExercise.includes('band')) return 'Light band'
+  if (normalizedExercise.includes('bridge')) return 'Bodyweight'
+  if (normalizedExercise.includes('activation')) return 'Technique weight'
+
+  return 'Bodyweight'
 }
 
 export type OverrideIntelligenceSummary = {
@@ -330,10 +343,16 @@ export function buildMovementExercises(
     const items = sessionStructure?.[block] ?? []
     acc[block] = items.map((exercise, index) => ({
       ...exercise,
+      loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
       id: createExerciseId(block, index, exercise.exerciseName),
       block,
-      original: { ...exercise },
+      original: {
+        ...exercise,
+        loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
+      },
       adjusted: false,
+      removed: false,
+      variation: undefined,
     }))
     return acc
   }, {
@@ -382,6 +401,8 @@ export function applyMovementOverrides(
     if (typeof change.loadGuidance === 'string') exercise.loadGuidance = change.loadGuidance
     if (typeof change.coachingCue === 'string') exercise.coachingCue = change.coachingCue
     if (typeof change.swapOption === 'string') exercise.swapOption = change.swapOption
+    if (typeof change.removed === 'boolean') exercise.removed = change.removed
+    if (typeof change.variation === 'string') exercise.variation = change.variation
     exercise.adjusted = true
   }
 
