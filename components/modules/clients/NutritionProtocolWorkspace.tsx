@@ -1,8 +1,8 @@
 'use client'
 
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, History, RotateCcw, SlidersHorizontal, Utensils, Zap } from 'lucide-react'
+import { ArrowLeft, Download, History, Loader2, RotateCcw, SlidersHorizontal, Utensils, Zap } from 'lucide-react'
 import type { NutritionWorkspaceData } from '@/lib/protocol-workspaces'
 
 type Props = {
@@ -41,8 +41,10 @@ function macroValue(value: number | undefined) {
 }
 
 export default function NutritionProtocolWorkspace({ clientId, clientName, initialData }: Props) {
+  const printRef = useRef<HTMLDivElement>(null)
   const [data, setData] = useState(initialData)
   const [submitting, setSubmitting] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [overrideForm, setOverrideForm] = useState<OverrideFormState>({
@@ -164,9 +166,53 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
     )
   }
 
+  async function handleDownloadPdf() {
+    if (!printRef.current || !protocol) return
+
+    setDownloadingPdf(true)
+    setError(null)
+
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: html2canvas } = await import('html2canvas')
+
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#0a0a0a',
+        logging: false,
+      })
+
+      const imageData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const imageHeight = (canvas.height * pdfWidth) / canvas.width
+
+      let heightLeft = imageHeight
+      let position = 0
+
+      pdf.addImage(imageData, 'PNG', 0, position, pdfWidth, imageHeight)
+      heightLeft -= pdfHeight
+
+      while (heightLeft > 0) {
+        position = heightLeft - imageHeight
+        pdf.addPage()
+        pdf.addImage(imageData, 'PNG', 0, position, pdfWidth, imageHeight)
+        heightLeft -= pdfHeight
+      }
+
+      pdf.save(`${clientName.replace(/\s+/g, '_')}_nutrition_protocol.pdf`)
+    } catch {
+      setError('Unable to download nutrition PDF right now.')
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div ref={printRef} className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link href={`/clients/${clientId}`} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/6 text-white/50 hover:text-white">
@@ -180,6 +226,14 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
           <div className="flex gap-2">
             <button type="button" onClick={() => void refreshWorkspace()} className="rounded-xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-white/55 hover:text-white">
               Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownloadPdf()}
+              disabled={downloadingPdf}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-white/55 hover:text-white disabled:opacity-60"
+            >
+              {downloadingPdf ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Download PDF
             </button>
             <Link href={`/clients/${clientId}/protocols`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-white/55 hover:text-white">
               <Zap size={12} /> Manage Protocols
