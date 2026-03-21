@@ -367,7 +367,7 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
       const canvas = await html2canvas(printRef.current, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#ffffff',
         logging: false,
       })
 
@@ -410,7 +410,7 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
-      <div ref={printRef} className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link
@@ -1013,6 +1013,89 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+      <div className="pointer-events-none fixed -left-[10000px] top-0 w-[900px] bg-white text-[#2f2f2f]" ref={printRef}>
+        <div className="px-10 py-8">
+          <div className="border-b border-[#8f8f8f] pb-4">
+            <div className="text-[24px] font-semibold uppercase tracking-[0.18em] text-[#3d3d3d]">Movement Protocol</div>
+            <div className="mt-2 text-[12px] uppercase tracking-[0.12em] text-[#767676]">
+              {clientName} | {protocol.name} | {protocol.effectiveDate}
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-[#8f8f8f] pt-2">
+            <div className="text-[15px] font-bold uppercase tracking-[0.04em] text-[#3d3d3d]">Movement Targets</div>
+            <table className="mt-3 w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#efefef]">
+                  <th className="border border-[#d0d0d0] px-3 py-2 text-left">Plan</th>
+                  <th className="border border-[#d0d0d0] px-3 py-2 text-left">Sessions / Week</th>
+                  <th className="border border-[#d0d0d0] px-3 py-2 text-left">Volume</th>
+                  <th className="border border-[#d0d0d0] px-3 py-2 text-left">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border border-[#d0d0d0] px-3 py-2 font-medium">Protocol</td>
+                  <td className="border border-[#d0d0d0] px-3 py-2">{protocol.sessionStructure?.sessionsPerWeek ?? '-'}</td>
+                  <td className="border border-[#d0d0d0] px-3 py-2">{protocol.sessionStructure?.volumeLevel ?? '-'}</td>
+                  <td className="border border-[#d0d0d0] px-3 py-2">{protocol.generationState ?? '-'}</td>
+                </tr>
+                <tr>
+                  <td className="border border-[#d0d0d0] px-3 py-2 font-medium">Adjusted</td>
+                  <td className="border border-[#d0d0d0] px-3 py-2">{protocol.adjustedSessionStructure?.sessionsPerWeek ?? protocol.sessionStructure?.sessionsPerWeek ?? '-'}</td>
+                  <td className="border border-[#d0d0d0] px-3 py-2">{protocol.adjustedSessionStructure?.volumeLevel ?? protocol.sessionStructure?.volumeLevel ?? '-'}</td>
+                  <td className="border border-[#d0d0d0] px-3 py-2">{protocol.generationState ?? '-'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {(Object.keys(protocol.displayBlocks) as BlockKey[]).map(blockKey => {
+            const block = protocol.displayBlocks[blockKey].filter(exercise => !exercise.removed)
+            if (!block.length) return null
+
+            return (
+              <div key={`export-${blockKey}`} className="mt-8 border-t border-[#8f8f8f] pt-2">
+                <div className="text-[15px] font-bold uppercase tracking-[0.04em] text-[#3d3d3d]">{BLOCK_LABELS[blockKey]}</div>
+                <table className="mt-3 w-full border-collapse text-[12px]">
+                  <thead>
+                    <tr className="bg-[#efefef]">
+                      <th className="border border-[#d0d0d0] px-3 py-2 text-left">Exercise</th>
+                      <th className="border border-[#d0d0d0] px-3 py-2 text-left">Sets</th>
+                      <th className="border border-[#d0d0d0] px-3 py-2 text-left">Reps</th>
+                      <th className="border border-[#d0d0d0] px-3 py-2 text-left">Load</th>
+                      <th className="border border-[#d0d0d0] px-3 py-2 text-left">Tempo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.map(exercise => (
+                      <tr key={`export-${exercise.id}`}>
+                        <td className="border border-[#d0d0d0] px-3 py-2 font-medium">
+                          {exercise.exerciseName}
+                          {exercise.variation ? <div className="text-[11px] text-[#767676]">{exercise.variation}</div> : null}
+                        </td>
+                        <td className="border border-[#d0d0d0] px-3 py-2">{exercise.sets}</td>
+                        <td className="border border-[#d0d0d0] px-3 py-2">{exercise.reps}</td>
+                        <td className="border border-[#d0d0d0] px-3 py-2">{normalizeLoad(exercise.loadGuidance, exercise.exerciseName)}</td>
+                        <td className="border border-[#d0d0d0] px-3 py-2">{exercise.tempo ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+
+          <div className="mt-8 border-t border-[#8f8f8f] pt-2">
+            <div className="text-[15px] font-bold uppercase tracking-[0.04em] text-[#3d3d3d]">Coach Adjustment Summary</div>
+            <ul className="mt-3 list-disc pl-5 text-[12px] leading-6 text-[#505050]">
+              {(data.overrideIntelligence.bullets.length > 0 ? data.overrideIntelligence.bullets : ['No override patterns have accumulated yet.']).map((item, index) => (
+                <li key={`summary-${index}`}>{item}</li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>

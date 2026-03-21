@@ -37,7 +37,7 @@ function formatTimestamp(value: string) {
 }
 
 function macroValue(value: number | undefined) {
-  return typeof value === 'number' ? value : '—'
+  return typeof value === 'number' ? value : '-'
 }
 
 export default function NutritionProtocolWorkspace({ clientId, clientName, initialData }: Props) {
@@ -179,7 +179,7 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
       const canvas = await html2canvas(printRef.current, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#ffffff',
         logging: false,
       })
 
@@ -212,7 +212,7 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
-      <div ref={printRef} className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link href={`/clients/${clientId}`} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/6 text-white/50 hover:text-white">
@@ -436,6 +436,90 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
           </>
         )}
       </div>
+      {protocol ? (
+        <div className="pointer-events-none fixed -left-[10000px] top-0 w-[900px] bg-white text-[#2f2f2f]" ref={printRef}>
+          <div className="px-10 py-8">
+            <div className="border-b border-[#8f8f8f] pb-4">
+              <div className="text-[24px] font-semibold uppercase tracking-[0.18em] text-[#3d3d3d]">Nutrition Protocol</div>
+              <div className="mt-2 text-[12px] uppercase tracking-[0.12em] text-[#767676]">
+                {clientName} | {protocol.name} | {protocol.effectiveDate}
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-[#8f8f8f] pt-2">
+              <div className="text-[15px] font-bold uppercase tracking-[0.04em] text-[#3d3d3d]">Nutrition Targets</div>
+              <table className="mt-3 w-full border-collapse text-[12px]">
+                <thead>
+                  <tr className="bg-[#efefef]">
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Plan</th>
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Calories</th>
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Protein</th>
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Carbs</th>
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Fat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-[#d0d0d0] px-3 py-2 font-medium">Protocol</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.dailyCalories)} kcal</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.proteinG)} g</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.carbG)} g</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.fatG)} g</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-[#d0d0d0] px-3 py-2 font-medium">Adjusted</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.dailyCalories)} kcal</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.proteinG)} g</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.carbG)} g</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.fatG)} g</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-8 border-t border-[#8f8f8f] pt-2">
+              <div className="text-[15px] font-bold uppercase tracking-[0.04em] text-[#3d3d3d]">Sample Training Day Meal Plan (Structure)</div>
+              <table className="mt-3 w-full border-collapse text-[12px]">
+                <thead>
+                  <tr className="bg-[#efefef]">
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Meal</th>
+                    <th className="border border-[#d0d0d0] px-3 py-2 text-left">Example</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(protocol.adjustedNutritionStructure?.mealPlan ?? protocol.nutritionStructure?.mealPlan ?? []).map((meal, index) => (
+                    <tr key={`${meal.time}-${index}`}>
+                      <td className="border border-[#d0d0d0] px-3 py-2 font-medium">{meal.meal || meal.time || `Meal ${index + 1}`}</td>
+                      <td className="border border-[#d0d0d0] px-3 py-2">{meal.foods || meal.notes || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-8 border-t border-[#8f8f8f] pt-2">
+              <div className="text-[15px] font-bold uppercase tracking-[0.04em] text-[#3d3d3d]">Macronutrient Execution & Timing</div>
+              <div className="mt-4">
+                <div className="text-[14px] font-semibold text-[#3d3d3d]">Protein (Foundation)</div>
+                <ul className="mt-2 list-disc pl-5 text-[12px] leading-6 text-[#505050]">
+                  <li>{macroValue(protocol.adjustedNutritionStructure?.proteinG ?? protocol.nutritionStructure?.proteinG)} g daily</li>
+                  <li>Protein stays anchored across the full week.</li>
+                  <li>Distribute protein across meals for recovery and appetite control.</li>
+                  <li>Use the adjusted plan when coach overrides are active.</li>
+                </ul>
+              </div>
+              <div className="mt-5">
+                <div className="text-[14px] font-semibold text-[#3d3d3d]">Carbohydrates (Performance & Shape)</div>
+                <ul className="mt-2 list-disc pl-5 text-[12px] leading-6 text-[#505050]">
+                  <li>Center carbs around training and higher-demand parts of the day.</li>
+                  <li>Reduce complexity before reducing consistency.</li>
+                  <li>Coach substitutions and digestion changes remain layered over the protocol.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
