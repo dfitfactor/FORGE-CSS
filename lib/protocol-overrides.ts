@@ -58,6 +58,7 @@ export type MovementExercise = ExerciseBlock & {
   block: keyof Pick<SessionStructure, 'activationBlock' | 'primaryBlock' | 'accessoryBlock' | 'finisherBlock'>
   original: ExerciseBlock
   adjusted: boolean
+  added?: boolean
   removed?: boolean
   variation?: string
 }
@@ -383,6 +384,41 @@ export function applyMovementOverrides(
       continue
     }
 
+    if (override.target.startsWith('add:')) {
+      const blockKey = override.target.replace('add:', '') as keyof typeof blocks
+      if (!(blockKey in blocks)) continue
+
+      const change = override.change
+      const exerciseName = typeof change.exerciseName === 'string' && change.exerciseName.trim()
+        ? change.exerciseName.trim()
+        : 'Coach Added Exercise'
+
+      blocks[blockKey].push({
+        id: `override:${override.id}`,
+        block: blockKey,
+        exerciseName,
+        sets: typeof change.sets === 'number' ? change.sets : 3,
+        reps: typeof change.reps === 'string' ? change.reps : '8-12',
+        tempo: typeof change.tempo === 'string' ? change.tempo : undefined,
+        rest: typeof change.rest === 'string' ? change.rest : undefined,
+        loadGuidance: normalizeLoad(typeof change.loadGuidance === 'string' ? change.loadGuidance : null, exerciseName),
+        coachingCue: typeof change.coachingCue === 'string' ? change.coachingCue : undefined,
+        swapOption: typeof change.swapOption === 'string' ? change.swapOption : undefined,
+        original: {
+          exerciseName: 'Added by coach',
+          sets: 0,
+          reps: '-',
+          tempo: undefined,
+          loadGuidance: '-',
+        },
+        adjusted: true,
+        added: true,
+        removed: false,
+        variation: typeof change.variation === 'string' ? change.variation : undefined,
+      })
+      continue
+    }
+
     const allExercises = [
       ...blocks.activationBlock,
       ...blocks.primaryBlock,
@@ -401,6 +437,7 @@ export function applyMovementOverrides(
     if (typeof change.loadGuidance === 'string') exercise.loadGuidance = change.loadGuidance
     if (typeof change.coachingCue === 'string') exercise.coachingCue = change.coachingCue
     if (typeof change.swapOption === 'string') exercise.swapOption = change.swapOption
+    if (typeof change.added === 'boolean') exercise.added = change.added
     if (typeof change.removed === 'boolean') exercise.removed = change.removed
     if (typeof change.variation === 'string') exercise.variation = change.variation
     exercise.adjusted = true

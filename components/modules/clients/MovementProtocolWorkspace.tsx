@@ -50,6 +50,17 @@ type ExecutionLogFormState = {
   notes: string
 }
 
+type AddExerciseState = {
+  block: BlockKey
+  exerciseName: string
+  sets: string
+  reps: string
+  loadGuidance: string
+  tempo: string
+  variation: string
+  reason: string
+}
+
 type BlockKey = 'activationBlock' | 'primaryBlock' | 'accessoryBlock' | 'finisherBlock'
 
 const BLOCK_LABELS: Record<BlockKey, string> = {
@@ -78,6 +89,7 @@ function summarizeChange(change: Record<string, unknown>) {
   if (typeof change.variation === 'string' && change.variation.trim()) parts.push(`variation ${change.variation}`)
   if (typeof change.sessionsPerWeek === 'number') parts.push(`sessions/week ${change.sessionsPerWeek}`)
   if (typeof change.volumeLevel === 'string') parts.push(`volume ${change.volumeLevel}`)
+  if (change.added === true) parts.push('coach-added exercise')
   if (change.removed === true) parts.push('removed from adjusted plan')
   return parts.join(' | ') || 'Coach adjustment recorded'
 }
@@ -151,6 +163,16 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
     completedReps: '',
     load: '',
     notes: '',
+  })
+  const [addExerciseForm, setAddExerciseForm] = useState<AddExerciseState>({
+    block: 'accessoryBlock',
+    exerciseName: '',
+    sets: '',
+    reps: '',
+    loadGuidance: '',
+    tempo: '',
+    variation: '',
+    reason: '',
   })
 
   const protocol = data.protocol
@@ -338,6 +360,56 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
       completedReps: '',
       load: '',
       notes: '',
+    }))
+  }
+
+  async function handleAddExerciseSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!protocol) return
+
+    if (!addExerciseForm.exerciseName.trim()) {
+      setError('Add an exercise name before saving.')
+      return
+    }
+    if (!addExerciseForm.reason.trim()) {
+      setError('Add a coach reason before adding an exercise.')
+      return
+    }
+
+    const parsedSets = Number(addExerciseForm.sets || '0')
+    if (!Number.isFinite(parsedSets) || parsedSets <= 0) {
+      setError('Sets must be a valid number for the added exercise.')
+      return
+    }
+
+    await submitAction(
+      {
+        action: 'add_override',
+        protocolId: protocol.id,
+        target: `add:${addExerciseForm.block}`,
+        change: {
+          added: true,
+          exerciseName: addExerciseForm.exerciseName.trim(),
+          sets: parsedSets,
+          reps: addExerciseForm.reps.trim() || '8-12',
+          loadGuidance: normalizeLoad(addExerciseForm.loadGuidance.trim(), addExerciseForm.exerciseName.trim()),
+          tempo: addExerciseForm.tempo.trim(),
+          variation: addExerciseForm.variation.trim(),
+        },
+        reason: addExerciseForm.reason.trim(),
+      },
+      'Coach-added exercise applied'
+    )
+
+    setAddExerciseForm(current => ({
+      ...current,
+      exerciseName: '',
+      sets: '',
+      reps: '',
+      loadGuidance: '',
+      tempo: '',
+      variation: '',
+      reason: '',
     }))
   }
 
@@ -567,14 +639,20 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
                               <div>
                                 <div className="text-xs font-mono uppercase tracking-widest text-white/30">Protocol</div>
                                 <div className="mt-2 space-y-1 text-sm text-white/45">
-                                  <div className="font-medium text-white/60">{exercise.original.exerciseName}</div>
-                                  <div>
-                                    {exercise.original.sets} sets x {exercise.original.reps}
-                                  </div>
-                                  <div>
-                                    Load: {normalizeLoad(exercise.original.loadGuidance, exercise.original.exerciseName)}
-                                  </div>
-                                  <div>Tempo: {exercise.original.tempo ?? '-'}</div>
+                                  {exercise.added ? (
+                                    <div className="font-medium text-white/60">Added by coach</div>
+                                  ) : (
+                                    <>
+                                      <div className="font-medium text-white/60">{exercise.original.exerciseName}</div>
+                                      <div>
+                                        {exercise.original.sets} sets x {exercise.original.reps}
+                                      </div>
+                                      <div>
+                                        Load: {normalizeLoad(exercise.original.loadGuidance, exercise.original.exerciseName)}
+                                      </div>
+                                      <div>Tempo: {exercise.original.tempo ?? '-'}</div>
+                                    </>
+                                  )}
                                 </div>
                               </div>
 
@@ -736,6 +814,80 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
               </div>
             </div>
             <div className="space-y-6">
+              <form onSubmit={handleAddExerciseSubmit} className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+                <div className="flex items-center gap-2">
+                  <Plus size={14} className="text-[#D4AF37]" />
+                  <h2 className="text-sm font-semibold text-white">Add Exercise</h2>
+                </div>
+                <p className="mt-2 text-sm text-white/45">
+                  Build onto the AI plan by adding a new movement directly into one of the existing protocol blocks.
+                </p>
+                <div className="mt-4 space-y-3">
+                  <select
+                    value={addExerciseForm.block}
+                    onChange={event => setAddExerciseForm(current => ({ ...current, block: event.target.value as BlockKey }))}
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {(Object.keys(BLOCK_LABELS) as BlockKey[]).map(block => (
+                      <option key={block} value={block}>{BLOCK_LABELS[block]}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={addExerciseForm.exerciseName}
+                    onChange={event => setAddExerciseForm(current => ({ ...current, exerciseName: event.target.value }))}
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="Exercise name"
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      value={addExerciseForm.sets}
+                      onChange={event => setAddExerciseForm(current => ({ ...current, sets: event.target.value }))}
+                      className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                      placeholder="Sets"
+                    />
+                    <input
+                      value={addExerciseForm.reps}
+                      onChange={event => setAddExerciseForm(current => ({ ...current, reps: event.target.value }))}
+                      className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                      placeholder="Reps"
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      value={addExerciseForm.loadGuidance}
+                      onChange={event => setAddExerciseForm(current => ({ ...current, loadGuidance: event.target.value }))}
+                      className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                      placeholder="Load"
+                    />
+                    <input
+                      value={addExerciseForm.tempo}
+                      onChange={event => setAddExerciseForm(current => ({ ...current, tempo: event.target.value }))}
+                      className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                      placeholder="Tempo"
+                    />
+                  </div>
+                  <input
+                    value={addExerciseForm.variation}
+                    onChange={event => setAddExerciseForm(current => ({ ...current, variation: event.target.value }))}
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="Variation"
+                  />
+                  <textarea
+                    value={addExerciseForm.reason}
+                    onChange={event => setAddExerciseForm(current => ({ ...current, reason: event.target.value }))}
+                    className="min-h-[84px] w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="Coach reason"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-semibold text-black disabled:opacity-60"
+                >
+                  <Plus size={14} /> Add Exercise to Plan
+                </button>
+              </form>
+
               <form onSubmit={handleSessionOverrideSubmit} className="rounded-2xl border border-white/8 bg-[#111111] p-5">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal size={14} className="text-[#D4AF37]" />
@@ -870,16 +1022,25 @@ export default function MovementProtocolWorkspace({ clientId, clientName, initia
                               <tr key={exercise.id} className="border-t border-white/6 align-top">
                                 <td className="px-4 py-3">
                                   <div className="font-medium text-white">{exercise.exerciseName}</div>
+                                  {exercise.added ? (
+                                    <div className="mt-1 text-xs text-emerald-300">Coach added</div>
+                                  ) : null}
                                   {exercise.variation ? (
                                     <div className="mt-1 text-xs text-[#D4AF37]">Variation: {exercise.variation}</div>
                                   ) : null}
                                 </td>
                                 <td className="px-4 py-3 text-white/40">
-                                  <div>{exercise.original.sets} sets x {exercise.original.reps}</div>
-                                  <div className="mt-1">
-                                    Load {normalizeLoad(exercise.original.loadGuidance, exercise.original.exerciseName)}
-                                  </div>
-                                  <div className="mt-1">Tempo {exercise.original.tempo ?? '-'}</div>
+                                  {exercise.added ? (
+                                    <div>Added by coach</div>
+                                  ) : (
+                                    <>
+                                      <div>{exercise.original.sets} sets x {exercise.original.reps}</div>
+                                      <div className="mt-1">
+                                        Load {normalizeLoad(exercise.original.loadGuidance, exercise.original.exerciseName)}
+                                      </div>
+                                      <div className="mt-1">Tempo {exercise.original.tempo ?? '-'}</div>
+                                    </>
+                                  )}
                                 </td>
                                 <td className={`px-4 py-3 ${exercise.adjusted ? 'text-[#D4AF37]' : 'text-white/75'}`}>
                                   <div>{exercise.sets} sets x {exercise.reps}</div>
