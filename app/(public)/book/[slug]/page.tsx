@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -33,6 +33,10 @@ type BookingFormState = {
   booking_time: string
   notes: string
 }
+
+type SelectedBookingTarget =
+  | ({ kind: 'service' } & Service)
+  | ({ kind: 'package' } & Package)
 
 const INITIAL_FORM: BookingFormState = {
   client_name: '',
@@ -73,11 +77,11 @@ export default function PublicBookingDetailPage() {
     void loadOptions()
   }, [])
 
-  const selected = useMemo(() => {
+  const selectedTarget = useMemo<SelectedBookingTarget | null>(() => {
     const service = services.find((item) => item.slug === params.slug)
-    if (service) return { type: 'service' as const, item: service }
+    if (service) return { kind: 'service', ...service }
     const pkg = packages.find((item) => item.slug === params.slug)
-    if (pkg) return { type: 'package' as const, item: pkg }
+    if (pkg) return { kind: 'package', ...pkg }
     return null
   }, [packages, params.slug, services])
 
@@ -94,8 +98,11 @@ export default function PublicBookingDetailPage() {
         notes: form.notes || null,
       }
 
-      if (selected?.type === 'service') payload.service_id = selected.item.id
-      if (selected?.type === 'package') payload.package_id = selected.item.id
+      if (selectedTarget?.kind === 'service') {
+        payload.service_id = selectedTarget.id
+      } else if (selectedTarget?.kind === 'package') {
+        payload.package_id = selectedTarget.id
+      }
 
       const res = await fetch('/api/public/bookings', {
         method: 'POST',
@@ -120,7 +127,7 @@ export default function PublicBookingDetailPage() {
     )
   }
 
-  if (!selected) {
+  if (!selectedTarget) {
     return (
       <div className="px-6 py-20">
         <div className="mx-auto max-w-3xl rounded-3xl border border-black/10 bg-white p-10 text-center shadow-sm">
@@ -132,8 +139,8 @@ export default function PublicBookingDetailPage() {
     )
   }
 
-  const isFree = Number(selected.item.price_cents ?? 0) <= 0
-  const requiredForms = selected.type === 'service' && Array.isArray(selected.item.required_forms) ? selected.item.required_forms : []
+  const isFree = Number(selectedTarget.price_cents ?? 0) <= 0
+  const requiredForms = selectedTarget.kind === 'service' && Array.isArray(selectedTarget.required_forms) ? selectedTarget.required_forms : []
 
   return (
     <div className="px-6 py-12">
@@ -141,26 +148,26 @@ export default function PublicBookingDetailPage() {
         <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-[#2B154A]/8 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[#2B154A]">
-              {selected.type === 'service' ? 'Session' : 'Package'}
+              {selectedTarget.kind === 'service' ? 'Session' : 'Package'}
             </span>
-            {selected.type === 'package' ? (
+            {selectedTarget.kind === 'package' ? (
               <span className="rounded-full bg-[#D4AF37]/15 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[#8f6c07]">
-                {stageLabel(selected.item.forge_stage)}
+                {stageLabel(selectedTarget.forge_stage)}
               </span>
             ) : null}
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-[#1b140d]">{selected.item.name}</h1>
-          <p className="mt-3 text-base text-black/60">{selected.item.description || 'A FORGË booking option tailored to your current needs and stage.'}</p>
+          <h1 className="mt-5 text-3xl font-semibold text-[#1b140d]">{selectedTarget.name}</h1>
+          <p className="mt-3 text-base text-black/60">{selectedTarget.description || 'A FORGË booking option tailored to your current needs and stage.'}</p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-[#f6f1e2] p-4">
               <div className="text-xs uppercase tracking-[0.2em] text-black/45">Duration</div>
-              <div className="mt-2 text-lg font-semibold text-[#1b140d]">{formatDurationLabel(selected.item.duration_minutes)}</div>
+              <div className="mt-2 text-lg font-semibold text-[#1b140d]">{formatDurationLabel(selectedTarget.duration_minutes)}</div>
             </div>
             <div className="rounded-2xl bg-[#f6f1e2] p-4">
               <div className="text-xs uppercase tracking-[0.2em] text-black/45">Price</div>
-              <div className="mt-2 text-lg font-semibold text-[#1b140d]">{formatPriceFromCents(selected.item.price_cents)}</div>
+              <div className="mt-2 text-lg font-semibold text-[#1b140d]">{formatPriceFromCents(selectedTarget.price_cents)}</div>
             </div>
           </div>
 

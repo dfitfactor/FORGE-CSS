@@ -1,4 +1,4 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 
 export const SERVICE_CATEGORIES = ['assessment', 'training', 'coaching', 'nutrition', 'wellness'] as const
 export const SERVICE_TYPES = ['single', 'included', 'addon', 'makeup', 'waitlist'] as const
@@ -87,22 +87,15 @@ export const publicBookingSchema = z.object({
   booking_date: z.string().trim().min(1),
   booking_time: z.string().trim().min(1),
   notes: z.string().trim().max(5000).optional().nullable(),
-}).superRefine((value, ctx) => {
-  if (!value.service_id && !value.package_id) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'service_id or package_id is required',
-      path: ['service_id'],
-    })
-  }
-  if (value.service_id && value.package_id) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Provide only one of service_id or package_id',
-      path: ['package_id'],
-    })
-  }
 })
+  .refine((value) => Boolean(value.service_id || value.package_id), {
+    message: 'service_id or package_id is required',
+    path: ['service_id'],
+  })
+  .refine((value) => !(value.service_id && value.package_id), {
+    message: 'Provide only one of service_id or package_id',
+    path: ['package_id'],
+  })
 
 export function formatPriceFromCents(priceCents: number | null | undefined) {
   if (!priceCents || priceCents <= 0) return 'Free'
@@ -133,4 +126,3 @@ export function stageLabel(stage: string | null | undefined) {
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
 }
-
