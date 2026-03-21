@@ -3,11 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, Users, Sparkles, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, Clock3, LayoutDashboard, LayoutGrid, Users, Sparkles, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/services', label: 'Services', icon: LayoutGrid },
+  { href: '/bookings', label: 'Bookings', icon: Calendar },
+  { href: '/availability', label: 'Availability', icon: Clock3 },
   { href: '/ai-insights', label: 'AI Insights', icon: Sparkles },
 ]
 

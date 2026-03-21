@@ -1,0 +1,317 @@
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
+import { CheckCircle2, ChevronDown, Copy, ExternalLink, Loader2, XCircle } from 'lucide-react'
+import { formatDurationLabel } from '@/lib/booking'
+
+type Booking = {
+  id: string
+  client_name: string
+  client_email: string
+  client_phone: string | null
+  booking_date: string
+  booking_time: string
+  duration_minutes: number | null
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  payment_status: 'unpaid' | 'paid' | 'waived'
+  attended: boolean | null
+  notes: string | null
+  service_name: string | null
+  package_name: string | null
+}
+
+const STATUS_OPTIONS = ['all', 'pending', 'confirmed', 'completed', 'cancelled', 'no_show'] as const
+
+const STATUS_BADGES: Record<string, string> = {
+  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  confirmed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  completed: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+  cancelled: 'border-red-500/30 bg-red-500/10 text-red-300',
+  no_show: 'border-white/15 bg-white/5 text-white/55',
+}
+
+const PAYMENT_BADGES: Record<string, string> = {
+  unpaid: 'border-red-500/30 bg-red-500/10 text-red-300',
+  paid: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  waived: 'border-white/15 bg-white/5 text-white/55',
+}
+
+function startOfWeek(date: Date) {
+  const copy = new Date(date)
+  const day = copy.getDay()
+  copy.setDate(copy.getDate() - day)
+  copy.setHours(0, 0, 0, 0)
+  return copy
+}
+
+function endOfWeek(date: Date) {
+  const start = startOfWeek(date)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 7)
+  return end
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function formatBookingDate(date: string, time: string) {
+  const timestamp = new Date(`${date}T${time}`)
+  if (Number.isNaN(timestamp.getTime())) return `${date} · ${time}`
+  return timestamp.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function availableActions(status: Booking['status']) {
+  const actions: Array<{ label: string; value: Booking['status'] }> = []
+  if (status === 'pending') {
+    actions.push({ label: 'Confirm', value: 'confirmed' }, { label: 'Cancel', value: 'cancelled' })
+  }
+  if (status === 'confirmed') {
+    actions.push(
+      { label: 'Mark Complete', value: 'completed' },
+      { label: 'Mark No Show', value: 'no_show' },
+      { label: 'Cancel', value: 'cancelled' }
+    )
+  }
+  if (status === 'completed') actions.push({ label: 'Mark No Show', value: 'no_show' })
+  if (status === 'no_show') actions.push({ label: 'Confirm', value: 'confirmed' }, { label: 'Cancel', value: 'cancelled' })
+  if (status === 'cancelled') actions.push({ label: 'Confirm', value: 'confirmed' })
+  return actions
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+      <div className="text-3xl font-semibold text-white">{value}</div>
+      <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/35">{label}</div>
+    </div>
+  )
+}
+
+export default function BookingsPage() {
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [loading, setLoading] = useState(true)
+  const [updatingId, setUpdatingId] = useState('')
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]>('all')
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  async function loadBookings() {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/bookings', { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load bookings')
+      setBookings(Array.isArray(data.bookings) ? data.bookings : [])
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load bookings')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadBookings()
+  }, [])
+
+  async function updateBooking(bookingId: string, status: Booking['status']) {
+    setUpdatingId(bookingId)
+    setError('')
+    try {
+      const payload: Record<string, unknown> = { status }
+      if (status === 'completed') payload.attended = true
+      if (status === 'no_show') payload.attended = false
+
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update booking')
+      await loadBookings()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update booking')
+    } finally {
+      setUpdatingId('')
+    }
+  }
+
+  async function copyBookingLink() {
+    try {
+      await navigator.clipboard.writeText('https://forge-css.vercel.app/book')
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('Unable to copy booking page link')
+    }
+  }
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((booking) => {
+      if (statusFilter !== 'all' && booking.status !== statusFilter) return false
+      if (!search.trim()) return true
+      const query = search.trim().toLowerCase()
+      return booking.client_name.toLowerCase().includes(query) || booking.client_email.toLowerCase().includes(query)
+    })
+  }, [bookings, search, statusFilter])
+
+  const stats = useMemo(() => {
+    const now = new Date()
+    const todayKey = now.toISOString().slice(0, 10)
+    const weekStart = startOfWeek(now)
+    const weekEnd = endOfWeek(now)
+    const monthStart = startOfMonth(now)
+
+    const withDates = bookings.map((booking) => ({
+      ...booking,
+      timestamp: new Date(`${booking.booking_date}T${booking.booking_time}`),
+    }))
+
+    return {
+      today: withDates.filter((booking) => booking.booking_date === todayKey).length,
+      week: withDates.filter((booking) => booking.timestamp >= weekStart && booking.timestamp < weekEnd).length,
+      pending: withDates.filter((booking) => booking.status === 'pending').length,
+      completedMonth: withDates.filter((booking) => booking.status === 'completed' && booking.timestamp >= monthStart).length,
+    }
+  }, [bookings])
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">Bookings</h1>
+          <p className="mt-1 text-sm text-white/40">Manage booking requests, confirmations, and attendance.</p>
+        </div>
+
+        {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Today's Bookings" value={stats.today} />
+          <StatCard label="This Week" value={stats.week} />
+          <StatCard label="Pending Confirmation" value={stats.pending} />
+          <StatCard label="Completed This Month" value={stats.completedMonth} />
+        </div>
+
+        <div className="rounded-2xl border border-white/8 bg-[#111111] p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setStatusFilter(option)}
+                  className={`rounded-xl px-3 py-2 text-sm capitalize transition-colors ${statusFilter === option ? 'bg-[#D4AF37] text-black' : 'bg-white/6 text-white/60 hover:text-white'}`}
+                >
+                  {option === 'all' ? 'All' : option.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by client name or email"
+              className="forge-input w-full max-w-sm"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+          </div>
+        ) : filteredBookings.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-[#111111] p-12 text-center">
+            <XCircle className="mx-auto h-10 w-10 text-white/20" />
+            <h2 className="mt-4 text-lg font-semibold text-white">No bookings yet</h2>
+            <p className="mt-2 text-sm text-white/40">Share the public booking page to start collecting requests.</p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <button onClick={() => void copyBookingLink()} className="forge-btn-gold inline-flex items-center gap-2">
+                <Copy size={15} />
+                {copied ? 'Copied booking link' : 'Copy booking page link'}
+              </button>
+              <Link href="/book" target="_blank" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white">
+                <ExternalLink size={15} />
+                View booking page
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35">
+                  <tr>
+                    <th className="px-4 py-3">Client</th>
+                    <th className="px-4 py-3">Service / Package</th>
+                    <th className="px-4 py-3">Date &amp; Time</th>
+                    <th className="px-4 py-3">Duration</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Payment</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBookings.map((booking) => (
+                    <tr key={booking.id} className="border-t border-white/6 align-top text-white/70">
+                      <td className="px-4 py-4">
+                        <div className="font-medium text-white">{booking.client_name}</div>
+                        <div className="mt-1 text-xs text-white/35">{booking.client_email}</div>
+                      </td>
+                      <td className="px-4 py-4 text-white/60">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</td>
+                      <td className="px-4 py-4 text-white/60">{formatBookingDate(booking.booking_date, booking.booking_time)}</td>
+                      <td className="px-4 py-4 text-white/60">{formatDurationLabel(booking.duration_minutes)}</td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>
+                          {booking.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>
+                          {booking.payment_status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <details className="group relative inline-block text-left">
+                          <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white">
+                            Actions
+                            <ChevronDown size={14} className="transition group-open:rotate-180" />
+                          </summary>
+                          <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-white/10 bg-[#0d0d0d] p-2 shadow-2xl">
+                            {availableActions(booking.status).length > 0 ? (
+                              availableActions(booking.status).map((action) => (
+                                <button
+                                  key={action.value}
+                                  onClick={() => void updateBooking(booking.id, action.value)}
+                                  disabled={updatingId === booking.id}
+                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
+                                >
+                                  {action.value === 'completed' ? <CheckCircle2 size={14} /> : <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />}
+                                  {updatingId === booking.id ? 'Updating...' : action.label}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-xs text-white/35">No actions available</div>
+                            )}
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
