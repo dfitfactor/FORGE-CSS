@@ -30,7 +30,14 @@ You MUST follow this sequence:
 
 The system must determine which protocol module to use BEFORE generating output.
 
+If `client_type` is explicitly provided in input, bypass inference and use the specified module directly.
+
 Routing rules:
+
+0. If `client_type` is explicitly provided:
+   - `competitor` -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
+   - `general_population` -> Use `general_population_protocol_prompt.md`
+   - This override takes priority over all other routing logic
 
 1. If client is a physique competitor (NPC, bodybuilding, bikini, prep phase, stage goal):
    -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
@@ -52,6 +59,7 @@ Routing rules:
 
 Before generating any protocol, the system must explicitly determine:
 
+- whether `client_type` was explicitly provided
 - client type (competitor vs general population)
 - current phase (if available)
 - behavioral capacity (BAR if available)
