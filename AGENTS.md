@@ -38,6 +38,10 @@ Routing rules:
    - `competitor` -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
    - `general_population` -> Use `general_population_protocol_prompt.md`
    - This override takes priority over all other routing logic
+   - If the provided value is not `competitor` or `general_population`:
+     - reject the override
+     - fall back to inference logic
+     - log: "Invalid client_type provided — using inference"
 
 1. If client is a physique competitor (NPC, bodybuilding, bikini, prep phase, stage goal):
    -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
