@@ -81,6 +81,17 @@ function getDocumentPriority(document: Pick<AiDocumentContextRow, 'document_type
   return 4
 }
 
+function normalizeHeader(header: string) {
+  return header.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function parseSpreadsheetNumber(value: string) {
+  const cleaned = value.replace(/[^0-9.\-]/g, '').trim()
+  if (!cleaned) return null
+  const parsed = Number(cleaned)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
   const fileType = doc.file_type?.toLowerCase() ?? ''
   const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
@@ -124,17 +135,125 @@ function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
       const normalized = normalizeBase64(doc.file_data)
       if (!normalized) throw new Error('Invalid base64')
       const workbook = XLSX.read(Buffer.from(normalized, 'base64'), { type: 'buffer' })
+      const targetColumns = [
+        'entry date',
+        'entry time',
+        'type',
+        'meal',
+        'summary',
+        'brand',
+        'serving',
+        'calories',
+        'protein',
+        'carbs',
+        'fat',
+      ]
+
       const sheetSummaries = workbook.SheetNames.slice(0, 3).map((sheetName) => {
         const worksheet = workbook.Sheets[sheetName]
-        const csv = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false }).replace(/\s+/g, ' ').trim()
-        return csv ? `[Sheet: ${sheetName}] ${csv.slice(0, Math.max(120, Math.floor(charLimit / 2)))}` : ''
+        const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(worksheet, {
+          header: 1,
+          blankrows: false,
+          raw: false,
+          defval: '',
+        })
+
+        if (!rows.length) return ''
+
+        const headerRowIndex = rows.findIndex((row) =>
+          row.some((cell) => String(cell).trim().length > 0)
+        )
+        if (headerRowIndex === -1) return ''
+
+        const headerRow = rows[headerRowIndex].map((cell) => String(cell).trim())
+        const normalizedHeaders = headerRow.map((cell) => normalizeHeader(cell))
+        const selectedIndexes = normalizedHeaders
+          .map((header, index) => ({ header, index }))
+          .filter(({ header }) => targetColumns.some((target) => header.includes(target)))
+          .map(({ index }) => index)
+
+        const effectiveIndexes = selectedIndexes.length > 0
+          ? selectedIndexes
+          : headerRow
+              .map((cell, index) => ({ cell, index }))
+              .filter(({ cell }) => cell)
+              .slice(0, 8)
+              .map(({ index }) => index)
+
+        const entryRows = rows
+          .slice(headerRowIndex + 1)
+          .filter((row) => row.some((cell) => String(cell).trim().length > 0))
+          .slice(0, 12)
+
+        const caloriesIndex = normalizedHeaders.findIndex((header) => header.includes('calories'))
+        const proteinIndex = normalizedHeaders.findIndex((header) => header.includes('protein'))
+        const carbsIndex = normalizedHeaders.findIndex((header) => header.includes('carb'))
+        const fatIndex = normalizedHeaders.findIndex((header) => header === 'fat' || header.includes('fat '))
+        const mealIndex = normalizedHeaders.findIndex((header) => header.includes('meal'))
+        const summaryIndex = normalizedHeaders.findIndex((header) => header.includes('summary'))
+        const entryTypeIndex = normalizedHeaders.findIndex((header) => header === 'type' || header.includes('entry type'))
+
+        if (!entryRows.length) {
+          return `[Sheet: ${sheetName}] Columns: ${effectiveIndexes.map((index) => headerRow[index]).filter(Boolean).join(', ')}`
+        }
+
+        const nutritionRows = nutritionHint
+          ? entryRows.filter((row) => {
+              const typeValue = entryTypeIndex >= 0 ? String(row[entryTypeIndex] ?? '').toLowerCase() : ''
+              return !typeValue || typeValue.includes('food intake') || typeValue.includes('meal') || typeValue.includes('food')
+            })
+          : entryRows
+
+        const macroTotals = nutritionHint
+          ? nutritionRows.reduce(
+              (totals, row) => ({
+                calories: totals.calories + (caloriesIndex >= 0 ? parseSpreadsheetNumber(String(row[caloriesIndex] ?? '')) ?? 0 : 0),
+                protein: totals.protein + (proteinIndex >= 0 ? parseSpreadsheetNumber(String(row[proteinIndex] ?? '')) ?? 0 : 0),
+                carbs: totals.carbs + (carbsIndex >= 0 ? parseSpreadsheetNumber(String(row[carbsIndex] ?? '')) ?? 0 : 0),
+                fat: totals.fat + (fatIndex >= 0 ? parseSpreadsheetNumber(String(row[fatIndex] ?? '')) ?? 0 : 0),
+              }),
+              { calories: 0, protein: 0, carbs: 0, fat: 0 }
+            )
+          : null
+
+        const uniqueMeals = nutritionHint && mealIndex >= 0
+          ? Array.from(new Set(
+              nutritionRows
+                .map((row) => String(row[mealIndex] ?? '').trim())
+                .filter(Boolean)
+            ))
+          : []
+
+        const summarizedRows = entryRows.map((row) =>
+          effectiveIndexes
+            .map((index) => {
+              const header = headerRow[index]
+              const value = String(row[index] ?? '').replace(/\s+/g, ' ').trim()
+              return header && value ? `${header}: ${value}` : ''
+            })
+            .filter(Boolean)
+            .join(' | ')
+        ).filter(Boolean)
+
+        const nutritionSummaryLine = nutritionHint
+          ? [
+              `Entries: ${nutritionRows.length}`,
+              macroTotals && macroTotals.calories > 0 ? `Calories logged: ${Math.round(macroTotals.calories)}` : '',
+              macroTotals && macroTotals.protein > 0 ? `Protein logged: ${Math.round(macroTotals.protein)}g` : '',
+              macroTotals && macroTotals.carbs > 0 ? `Carbs logged: ${Math.round(macroTotals.carbs)}g` : '',
+              macroTotals && macroTotals.fat > 0 ? `Fat logged: ${Math.round(macroTotals.fat)}g` : '',
+              uniqueMeals.length > 0 ? `Meals seen: ${uniqueMeals.slice(0, 6).join(', ')}` : '',
+            ].filter(Boolean).join(' | ')
+          : ''
+
+        return [`[Sheet: ${sheetName}]`, nutritionSummaryLine, ...summarizedRows].filter(Boolean).join('\n')
       }).filter(Boolean)
 
       if (sheetSummaries.length > 0) {
         return [label, noteText, nutritionContext, ...sheetSummaries]
           .filter(Boolean)
           .join('\n')
-          .slice(0, Math.max(charLimit + 200, charLimit))
+          .slice(0, Math.max(charLimit * 3, 1200))
       }
     } catch {
       // Fall through to metadata-only spreadsheet summary.
