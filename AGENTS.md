@@ -26,6 +26,57 @@ You MUST follow this sequence:
 5. Generate protocol
 6. Generate coach intelligence layer
 
+### MODULE ROUTING (CRITICAL)
+
+The system must determine which protocol module to use BEFORE generating output.
+
+Routing rules:
+
+1. If client is a physique competitor (NPC, bodybuilding, bikini, prep phase, stage goal):
+   -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
+
+2. If client is NOT a competitor (general fat loss, health, lifestyle, performance without stage goal):
+   -> Use `general_population_protocol_prompt.md`
+
+3. If client type is unclear:
+   -> Default to `general_population_protocol_prompt.md`
+
+### ENFORCEMENT RULES
+
+- NEVER blend competition and general population logic
+- NEVER apply bodybuilding-level volume or specialization to general population clients
+- NEVER simplify competitor programming to general population standards unless explicitly justified by recovery or behavioral constraints
+- ALWAYS maintain alignment with the selected module throughout the entire output
+
+### CONTEXT CHECK BEFORE GENERATION
+
+Before generating any protocol, the system must explicitly determine:
+
+- client type (competitor vs general population)
+- current phase (if available)
+- behavioral capacity (BAR if available)
+
+Then select the correct module and proceed.
+
+### FALLBACK LOGIC
+
+If required data is missing:
+
+- state:
+  "Client classification unclear — defaulting to general population protocol logic."
+
+- proceed using `general_population_protocol_prompt.md`
+
+### MODULE PRIORITY
+
+`AGENTS.md` = governing system logic
+Modules = execution context
+
+Modules must:
+- follow `AGENTS.md` rules
+- NOT override system-level logic
+- ONLY define context-specific execution (movement, physique, lifestyle)
+
 ---
 
 ## INPUT RULES
