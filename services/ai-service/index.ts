@@ -4,6 +4,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+import * as XLSX from 'xlsx'
 import { BIEVariables, ForgeStage, GenerationState } from '../../lib/bie-engine'
 import { db } from '../../lib/db'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '../../lib/protocol-overrides'
@@ -14,6 +15,16 @@ const anthropic = new Anthropic({
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'
 const MAX_PROTOCOL_PDF_ATTACHMENTS = 1
+const MAX_INSIGHT_PDF_ATTACHMENTS = 2
+
+type AiDocumentContextRow = {
+  title: string | null
+  document_type: string | null
+  notes: string | null
+  file_data: string | null
+  file_type: string | null
+  file_name: string | null
+}
 
 function normalizeBase64(input: string | null | undefined): string | null {
   if (input === null || input === undefined) return null
@@ -59,6 +70,135 @@ function canonicalizeDocumentBase64(
   }
 
   return decoded.toString('base64')
+}
+
+function getDocumentPriority(document: Pick<AiDocumentContextRow, 'document_type' | 'title' | 'file_name'>) {
+  const searchText = `${document.document_type ?? ''} ${document.title ?? ''} ${document.file_name ?? ''}`.toLowerCase()
+  if (document.document_type === 'nutrition_log' || /food journal|nutrition log|meal log|macro log|diet log/.test(searchText)) return 0
+  if (document.document_type === 'protocol_reference') return 1
+  if (document.document_type === 'assessment' || document.document_type === 'intake_form' || document.document_type === 'questionnaire') return 2
+  if (document.document_type === 'lab_report' || document.document_type === 'medical_history') return 3
+  return 4
+}
+
+function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
+  const fileType = doc.file_type?.toLowerCase() ?? ''
+  const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
+  const noteText = doc.notes?.trim() ? `Notes: ${doc.notes.trim()}` : ''
+  const searchText = `${doc.document_type ?? ''} ${doc.title ?? ''} ${doc.file_name ?? ''} ${doc.notes ?? ''}`.toLowerCase()
+  const nutritionHint = /food journal|nutrition log|meal log|macro log|diet log/.test(searchText) || doc.document_type === 'nutrition_log'
+  const nutritionContext = nutritionHint
+    ? 'This is nutrition evidence. Use it to assess meal consistency, likely protein adequacy, calorie sufficiency, food quality, and coach follow-up gaps.'
+    : ''
+  const isSpreadsheet =
+    fileType.includes('spreadsheet') ||
+    fileType.includes('excel') ||
+    fileType.includes('sheet') ||
+    (doc.file_name?.toLowerCase().endsWith('.xls') ?? false) ||
+    (doc.file_name?.toLowerCase().endsWith('.xlsx') ?? false)
+
+  if (
+    fileType.includes('text') ||
+    fileType.includes('plain') ||
+    fileType.includes('csv') ||
+    (doc.file_name?.endsWith('.txt') ?? false) ||
+    (doc.file_name?.endsWith('.md') ?? false) ||
+    (doc.file_name?.endsWith('.csv') ?? false)
+  ) {
+    try {
+      const normalized = normalizeBase64(doc.file_data)
+      if (!normalized) throw new Error('Invalid base64')
+      const text = Buffer.from(normalized, 'base64')
+        .toString('utf-8')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, charLimit)
+      return [label, noteText, nutritionContext, text].filter(Boolean).join('\n')
+    } catch {
+      return [label, noteText, nutritionContext, '[Could not read content]'].filter(Boolean).join('\n')
+    }
+  }
+
+  if (isSpreadsheet) {
+    try {
+      const normalized = normalizeBase64(doc.file_data)
+      if (!normalized) throw new Error('Invalid base64')
+      const workbook = XLSX.read(Buffer.from(normalized, 'base64'), { type: 'buffer' })
+      const sheetSummaries = workbook.SheetNames.slice(0, 3).map((sheetName) => {
+        const worksheet = workbook.Sheets[sheetName]
+        const csv = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false }).replace(/\s+/g, ' ').trim()
+        return csv ? `[Sheet: ${sheetName}] ${csv.slice(0, Math.max(120, Math.floor(charLimit / 2)))}` : ''
+      }).filter(Boolean)
+
+      if (sheetSummaries.length > 0) {
+        return [label, noteText, nutritionContext, ...sheetSummaries]
+          .filter(Boolean)
+          .join('\n')
+          .slice(0, Math.max(charLimit + 200, charLimit))
+      }
+    } catch {
+      // Fall through to metadata-only spreadsheet summary.
+    }
+
+    return [
+      label,
+      noteText,
+      nutritionContext,
+      nutritionHint
+        ? '[Spreadsheet nutrition/food journal uploaded - likely contains line-item meals, portions, and macro totals. Use it as primary dietary evidence even if workbook parsing is incomplete.]'
+        : '[Spreadsheet document uploaded - use title, type, and notes as context.]',
+    ].filter(Boolean).join('\n')
+  }
+
+  if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
+    return [
+      label,
+      noteText,
+      nutritionContext,
+      nutritionHint
+        ? '[PDF nutrition/food journal uploaded - treat as primary dietary evidence even when only metadata is available.]'
+        : '[PDF document uploaded - use title, document type, and notes as context.]',
+    ].filter(Boolean).join('\n')
+  }
+
+  if (
+    fileType.includes('image') ||
+    fileType.includes('jpeg') ||
+    fileType.includes('png') ||
+    (doc.file_name?.toLowerCase().match(/\.(jpe?g|png|webp|gif)$/) ?? false)
+  ) {
+    return [label, noteText, nutritionContext, `[Image document - ${doc.document_type ?? 'visual reference'} visual reference]`].filter(Boolean).join('\n')
+  }
+
+  return [label, noteText, nutritionContext, `[Document uploaded: ${doc.file_name}]`].filter(Boolean).join('\n')
+}
+
+async function fetchAiDocumentContext(clientId: string, summaryCharLimit: number) {
+  const aiDocs = await db.query<AiDocumentContextRow>(
+    `SELECT title, document_type, notes, file_type, file_name,
+            encode(file_data, 'base64') as file_data
+     FROM client_documents
+     WHERE client_id = $1 AND include_in_ai = true
+     ORDER BY created_at DESC
+     LIMIT 8`,
+    [clientId]
+  )
+
+  const prioritizedDocs = [...aiDocs].sort((a, b) => getDocumentPriority(a) - getDocumentPriority(b))
+  const docContexts = prioritizedDocs
+    .slice(0, 5)
+    .map(doc => buildDocumentSummary(doc, summaryCharLimit))
+    .filter(Boolean)
+  const pdfDocs = prioritizedDocs.filter(doc => {
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
+  })
+
+  return {
+    summary: docContexts.length > 0 ? docContexts.join('\n\n') : 'None',
+    pdfDocs,
+    hasNutritionLog: prioritizedDocs.some(doc => getDocumentPriority(doc) === 0),
+  }
 }
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -430,76 +570,16 @@ export async function generateWeeklyInsight(
   recommendations: string[]
   confidenceScore: number
 }> {
-  // Pull AI-enabled documents and decode content for better insight context.
-  const aiDocs = await db.query<{
-    title: string | null
-    document_type: string | null
-    file_data: string | null
-    file_type: string | null
-    file_name: string | null
-  }>(
-    `SELECT title, document_type, file_type, file_name,
-            encode(file_data, 'base64') as file_data
-     FROM client_documents
-     WHERE client_id = $1 AND include_in_ai = true
-     ORDER BY created_at DESC LIMIT 5`,
-    [client.clientId]
-  )
-
-  const docContexts: string[] = []
-  for (const doc of aiDocs) {
-    if (!doc.file_data) continue
-
-    const fileType = doc.file_type?.toLowerCase() ?? ''
-    const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
-
-    if (
-      fileType.includes('text') ||
-      fileType.includes('plain') ||
-      fileType.includes('csv') ||
-      (doc.file_name?.endsWith('.txt') ?? false) ||
-      (doc.file_name?.endsWith('.md') ?? false) ||
-      (doc.file_name?.endsWith('.csv') ?? false)
-    ) {
-      try {
-        const normalized = normalizeBase64(doc.file_data)
-        if (!normalized) throw new Error('Invalid base64')
-        const text = Buffer.from(normalized, 'base64')
-          .toString('utf-8')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 350)
-        docContexts.push(`${label}\n${text}`)
-      } catch {
-        docContexts.push(`${label}\n[Could not read content]`)
-      }
-    } else if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
-      docContexts.push(`${label}\n[PDF document uploaded — use title and document type as context]`)
-    } else if (
-      fileType.includes('image') ||
-      fileType.includes('jpeg') ||
-      fileType.includes('png') ||
-      (doc.file_name?.toLowerCase().match(/\.(jpe?g|png|webp|gif)$/) ?? false)
-    ) {
-      docContexts.push(`${label}\n[Image document — ${doc.document_type ?? 'visual reference'} visual reference]`)
-    } else {
-      docContexts.push(`${label}\n[Document uploaded: ${doc.file_name}]`)
-    }
-  }
-
-  const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
-
-  const pdfDocs = aiDocs.filter(doc => {
-    const fileType = doc.file_type?.toLowerCase() ?? ''
-    return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
-  })
+  const documentContext = await fetchAiDocumentContext(client.clientId, 350)
+  const docSummary = documentContext.summary
+  const pdfDocs = documentContext.pdfDocs
 
   const prompt = `Generate a weekly behavioral intelligence insight for this FORGE client.
 
 CLIENT: ${client.fullName} | Stage: ${client.stage} | State: ${client.generationState}
 
 WEEKLY DATA:
-BAR Change: ${weeklyData.currentVsPreviousBAR.previous.toFixed(1)} â†’ ${weeklyData.currentVsPreviousBAR.current.toFixed(1)}
+BAR Change: ${weeklyData.currentVsPreviousBAR.previous.toFixed(1)} -> ${weeklyData.currentVsPreviousBAR.current.toFixed(1)}
 Sessions completed: ${weeklyData.adherenceRecords.filter(r => r.completed).length}/${weeklyData.adherenceRecords.length}
 Journal highlights: ${weeklyData.journalHighlights.join(' | ')}
 ${weeklyData.biomarkerChanges ? `Biomarker changes: ${JSON.stringify(weeklyData.biomarkerChanges)}` : ''}
@@ -509,6 +589,8 @@ BAR: ${client.currentBIE.bar.toFixed(1)}, BLI: ${client.currentBIE.bli.toFixed(1
 
 CLIENT DOCUMENTS (AI-enabled):
 ${docSummary}
+
+${documentContext.hasNutritionLog ? 'A nutrition or food-journal document is present in the AI-enabled documents. Treat it as a primary evidence source for dietary pattern analysis.' : ''}
 
 Output ONLY JSON:
 {
@@ -521,14 +603,14 @@ Output ONLY JSON:
 
   const response = await anthropic.messages.create({
     model: MODEL,
-      max_tokens: 1200,
+    max_tokens: 1200,
     system: FORGE_SYSTEM_PROMPT,
     messages: [
       {
         role: 'user',
-        content: ((): any[] => {
+        content: (() => {
           const userMessageContent: any[] = [{ type: 'text', text: prompt }]
-          for (const doc of pdfDocs.slice(0, 3)) {
+          for (const doc of pdfDocs.slice(0, MAX_INSIGHT_PDF_ATTACHMENTS)) {
             if (!doc.file_data) continue
             const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
             if (!pdfB64) continue
@@ -569,60 +651,9 @@ export async function generateCoachQueryInsight(
   recommendations: string[]
   confidenceScore: number
 }> {
-  const aiDocs = await db.query<{
-    title: string | null
-    document_type: string | null
-    file_data: string | null
-    file_type: string | null
-    file_name: string | null
-  }>(
-    `SELECT title, document_type, file_type, file_name,
-            encode(file_data, 'base64') as file_data
-     FROM client_documents
-     WHERE client_id = $1 AND include_in_ai = true
-     ORDER BY created_at DESC LIMIT 5`,
-    [client.clientId]
-  )
-
-  const docContexts: string[] = []
-  for (const doc of aiDocs) {
-    if (!doc.file_data) continue
-
-    const fileType = doc.file_type?.toLowerCase() ?? ''
-    const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
-
-    if (
-      fileType.includes('text') ||
-      fileType.includes('plain') ||
-      fileType.includes('csv') ||
-      (doc.file_name?.endsWith('.txt') ?? false) ||
-      (doc.file_name?.endsWith('.md') ?? false) ||
-      (doc.file_name?.endsWith('.csv') ?? false)
-    ) {
-      try {
-        const normalized = normalizeBase64(doc.file_data)
-        if (!normalized) throw new Error('Invalid base64')
-        const text = Buffer.from(normalized, 'base64')
-          .toString('utf-8')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 350)
-        docContexts.push(`${label}\n${text}`)
-      } catch {
-        docContexts.push(`${label}\n[Could not read content]`)
-      }
-    } else if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
-      docContexts.push(`${label}\n[PDF document uploaded - use title and document type as context]`)
-    } else {
-      docContexts.push(`${label}\n[Document uploaded: ${doc.file_name}]`)
-    }
-  }
-
-  const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
-  const pdfDocs = aiDocs.filter(doc => {
-    const fileType = doc.file_type?.toLowerCase() ?? ''
-    return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
-  })
+  const documentContext = await fetchAiDocumentContext(client.clientId, 350)
+  const docSummary = documentContext.summary
+  const pdfDocs = documentContext.pdfDocs
 
   const prompt = `You are answering a coach's targeted insight request for a FORGE client.
 
@@ -647,7 +678,9 @@ ${insightRequest.checkinSummary.length > 0 ? insightRequest.checkinSummary.join(
 CLIENT DOCUMENTS (AI-enabled):
 ${docSummary}
 
-Return a focused coach-facing answer. Be specific about food-pattern gaps, under-target intake, journal themes, and what should be addressed next when the evidence supports it.
+${documentContext.hasNutritionLog ? 'A nutrition or food-journal document is present. Prioritize it when answering food-intake, meal-pattern, protein-target, calorie-sufficiency, and nutrition-adherence questions.' : ''}
+
+Return a focused coach-facing answer. Be specific about food-pattern gaps, under-target intake, journal themes, and what should be addressed next when the evidence supports it. If nutrition-log evidence is available, reference it before broader inference.
 
 Output ONLY JSON:
 {
@@ -665,9 +698,9 @@ Output ONLY JSON:
     messages: [
       {
         role: 'user',
-        content: ((): any[] => {
+        content: (() => {
           const userMessageContent: any[] = [{ type: 'text', text: prompt }]
-          for (const doc of pdfDocs.slice(0, 2)) {
+          for (const doc of pdfDocs.slice(0, MAX_INSIGHT_PDF_ATTACHMENTS)) {
             if (!doc.file_data) continue
             const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
             if (!pdfB64) continue

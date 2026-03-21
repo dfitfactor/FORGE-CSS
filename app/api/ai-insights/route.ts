@@ -54,7 +54,7 @@ async function ensureAiInsightsTable() {
 }
 
 async function getCoachClients(coachId: string, role: string) {
-  return db.query<{
+  const rows = await db.query<{
     id: string
     full_name: string
     current_stage: string | null
@@ -68,6 +68,27 @@ async function getCoachClients(coachId: string, role: string) {
      ORDER BY full_name ASC`,
     role === 'admin' ? [] : [coachId]
   )
+
+  const byName = new Map<string, (typeof rows)[number]>()
+  for (const client of rows) {
+    const normalizedName = client.full_name?.trim().toLowerCase()
+    if (!normalizedName) continue
+
+    const existing = byName.get(normalizedName)
+    if (!existing) {
+      byName.set(normalizedName, client)
+      continue
+    }
+
+    const existingScore = Number(Boolean(existing.primary_goal)) + Number(Boolean(existing.current_stage)) + Number(Boolean(existing.program_tier)) + Number((existing.injuries?.length ?? 0) > 0)
+    const currentScore = Number(Boolean(client.primary_goal)) + Number(Boolean(client.current_stage)) + Number(Boolean(client.program_tier)) + Number((client.injuries?.length ?? 0) > 0)
+
+    if (currentScore > existingScore) {
+      byName.set(normalizedName, client)
+    }
+  }
+
+  return Array.from(byName.values())
 }
 
 async function buildClientContext(clientId: string) {

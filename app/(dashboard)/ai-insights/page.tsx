@@ -23,6 +23,20 @@ type ClientOption = {
   full_name: string
 }
 
+function dedupeClientOptions(rows: ClientOption[]) {
+  const byName = new Map<string, ClientOption>()
+
+  for (const client of rows) {
+    const normalizedName = client.full_name?.trim().toLowerCase()
+    if (!normalizedName) continue
+    if (!byName.has(normalizedName)) {
+      byName.set(normalizedName, client)
+    }
+  }
+
+  return Array.from(byName.values())
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', {
     month: 'short',
@@ -57,7 +71,7 @@ export default function AIInsightsPage() {
       }
 
       setInsights(Array.isArray(data.insights) ? data.insights : [])
-      const nextClients = Array.isArray(data.clients) ? data.clients : []
+      const nextClients = dedupeClientOptions(Array.isArray(data.clients) ? data.clients : [])
       setClients(nextClients)
       if (!selectedClientId && nextClients.length > 0) {
         setSelectedClientId(nextClients[0].id)

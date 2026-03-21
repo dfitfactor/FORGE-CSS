@@ -7,26 +7,125 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
+type DashboardClientRow = {
+  id: string
+  full_name: string
+  email: string | null
+  date_of_birth: string | null
+  gender: string | null
+  status: string
+  primary_goal: string | null
+  current_stage: string | null
+  bar_score: number | null
+  dbi_score: number | null
+  bli_score: number | null
+  snapshot_updated_at: string | null
+  needs_attention: boolean
+}
+
+function getClientInfoScore(client: DashboardClientRow) {
+  let score = 0
+  if (client.email?.trim()) score += 1
+  if (client.date_of_birth) score += 1
+  if (client.gender?.trim()) score += 1
+  if (client.primary_goal?.trim()) score += 1
+  if (client.current_stage?.trim()) score += 1
+  if (client.bar_score !== null && client.bar_score !== undefined) score += 1
+  if (client.dbi_score !== null && client.dbi_score !== undefined) score += 1
+  if (client.bli_score !== null && client.bli_score !== undefined) score += 1
+  if (client.snapshot_updated_at) score += 1
+  return score
+}
+
+function dedupeSparseClientRows(rows: DashboardClientRow[]) {
+  const byName = new Map<string, DashboardClientRow>()
+
+  for (const client of rows) {
+    const normalizedName = client.full_name?.trim().toLowerCase()
+    if (!normalizedName) continue
+
+    const existing = byName.get(normalizedName)
+    if (!existing) {
+      byName.set(normalizedName, client)
+      continue
+    }
+
+    const existingScore = getClientInfoScore(existing)
+    const currentScore = getClientInfoScore(client)
+    const existingSparse = existingScore <= 1
+    const currentSparse = currentScore <= 1
+
+    if (existingSparse && currentScore > existingScore) {
+      byName.set(normalizedName, client)
+    } else if (!existingSparse && currentSparse) {
+      continue
+    } else if (currentScore > existingScore) {
+      byName.set(normalizedName, client)
+    }
+  }
+
+  return Array.from(byName.values())
+}
+
+function dedupeRecentActivityRows(rows: Array<{
+  client_name: string
+  event_type: string
+  title: string
+  event_date: string
+}>) {
+  const seen = new Set<string>()
+
+  return rows.filter((row) => {
+    const key = [
+      row.client_name.trim().toLowerCase(),
+      row.event_type.trim().toLowerCase(),
+      row.title.trim().toLowerCase(),
+      row.event_date,
+    ].join('::')
+
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 async function getDashboardStats(coachId: string) {
   try {
-    const [clientStats, alerts, recentActivity] = await Promise.all([
-      db.queryOne<{
-        total: number
-        active: number
-        paused: number
-        needs_attention: number
-      }>(`
-        SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-          COUNT(CASE WHEN status = 'paused' THEN 1 END) as paused,
-          COUNT(CASE WHEN EXISTS (
-            SELECT 1 FROM behavioral_snapshots bs 
-            WHERE bs.client_id = clients.id 
-            AND bs.snapshot_date >= CURRENT_DATE - INTERVAL '7 days'
-            AND (bs.dbi_score > 50 OR bs.bar_score < 50)
-          ) THEN 1 END) as needs_attention
-        FROM clients WHERE coach_id = $1 AND status != 'churned'
+    const [clientRows, alerts, recentActivity] = await Promise.all([
+      db.query<DashboardClientRow>(`
+        SELECT
+          c.id,
+          c.full_name,
+          c.email,
+          c.date_of_birth::text as date_of_birth,
+          c.gender,
+          c.status,
+          c.primary_goal,
+          c.current_stage,
+          CAST(bs.bar_score AS FLOAT) AS bar_score,
+          CAST(bs.dbi_score AS FLOAT) AS dbi_score,
+          CAST(bs.bli_score AS FLOAT) AS bli_score,
+          bs.snapshot_updated_at,
+          COALESCE(bs.needs_attention, false) AS needs_attention
+        FROM clients c
+        LEFT JOIN LATERAL (
+          SELECT
+            updated_at AS snapshot_updated_at,
+            bar_score,
+            dbi_score,
+            bli_score,
+            (
+              snapshot_date >= CURRENT_DATE - INTERVAL '7 days'
+              AND (dbi_score > 50 OR bar_score < 50)
+            ) AS needs_attention
+          FROM behavioral_snapshots
+          WHERE client_id = c.id
+          ORDER BY snapshot_date DESC, updated_at DESC
+          LIMIT 1
+        ) bs ON true
+        WHERE c.coach_id = $1
+          AND c.status != 'churned'
+        ORDER BY bs.snapshot_updated_at DESC NULLS LAST, c.full_name ASC
       `, [coachId]),
 
       db.query<{
@@ -88,7 +187,15 @@ async function getDashboardStats(coachId: string) {
       })(),
     ])
 
-    return { clientStats, alerts, recentActivity }
+    const clients = dedupeSparseClientRows(clientRows)
+    const clientStats = {
+      total: clients.length,
+      active: clients.filter((client) => client.status === 'active').length,
+      paused: clients.filter((client) => client.status === 'paused').length,
+      needs_attention: clients.filter((client) => client.status === 'active' && client.needs_attention).length,
+    }
+
+    return { clientStats, alerts, recentActivity: dedupeRecentActivityRows(recentActivity) }
   } catch (err) {
     console.error('[dashboard] getDashboardStats failed:', err)
     return {
