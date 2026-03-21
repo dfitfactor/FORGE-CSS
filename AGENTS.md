@@ -37,8 +37,9 @@ Routing rules:
 0. If `client_type` is explicitly provided:
    - `competitor` -> Use `npc_bikini_protocol_prompt.md` (or appropriate competition module)
    - `general_population` -> Use `general_population_protocol_prompt.md`
+   - `lifestyle` -> Use `general_population_protocol_prompt.md`
    - This override takes priority over all other routing logic
-   - If the provided value is not `competitor` or `general_population`:
+   - If the provided value is not `competitor`, `general_population`, or `lifestyle`:
      - reject the override
      - fall back to inference logic
      - log: "Invalid client_type provided — using inference"
