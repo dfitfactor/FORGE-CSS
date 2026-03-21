@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BIEVariables, ForgeStage, GenerationState } from '../../lib/bie-engine'
 import { db } from '../../lib/db'
-import { buildOverrideIntelligenceSummary } from '../../lib/protocol-overrides'
+import { buildOverrideIntelligenceSummary, normalizeLoad } from '../../lib/protocol-overrides'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -136,6 +136,15 @@ export type ExerciseBlock = {
   loadGuidance?: string
   coachingCue?: string
   swapOption?: string
+}
+
+function ensureExerciseLoads(exercises: ExerciseBlock[] | undefined) {
+  if (!Array.isArray(exercises)) return exercises
+
+  return exercises.map(exercise => ({
+    ...exercise,
+    loadGuidance: normalizeLoad(exercise.loadGuidance, exercise.exerciseName),
+  }))
 }
 
 // â”€â”€â”€ System Prompts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -296,6 +305,7 @@ Generate a complete ${protocolType} protocol. Apply the correct generation state
 - If repeated fatigue flags appear, reduce intensity, frequency, or complexity.
 - If adherence issues appear, simplify the structure.
 - If consistent progression signals appear, advance load or complexity conservatively.
+- Every exercise must include a load value. Use "Bodyweight" for bodyweight movements, "Light band" or "Moderate band" for banded work, "Technique weight" for activation work, and "X-Y lb" for loaded movements. Load must never be null, empty, or omitted.
 Output ONLY valid JSON matching this schema:
 {
   "name": "Protocol name",
@@ -341,6 +351,12 @@ Output ONLY valid JSON matching this schema:
   try {
     const clean = content.text.replace(/```json\n?|\n?```/g, '').trim()
     const generated = JSON.parse(clean) as GeneratedProtocol
+    if (generated.sessionStructure) {
+      generated.sessionStructure.activationBlock = ensureExerciseLoads(generated.sessionStructure.activationBlock) ?? []
+      generated.sessionStructure.primaryBlock = ensureExerciseLoads(generated.sessionStructure.primaryBlock) ?? []
+      generated.sessionStructure.accessoryBlock = ensureExerciseLoads(generated.sessionStructure.accessoryBlock) ?? []
+      generated.sessionStructure.finisherBlock = ensureExerciseLoads(generated.sessionStructure.finisherBlock)
+    }
     generated.override_summary = coachAdjustmentSummary
     generated.influenced_by_overrides = overrideIntelligence.hasInfluence
     return generated
@@ -513,6 +529,145 @@ Output ONLY JSON:
         content: ((): any[] => {
           const userMessageContent: any[] = [{ type: 'text', text: prompt }]
           for (const doc of pdfDocs.slice(0, 3)) {
+            if (!doc.file_data) continue
+            const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
+            if (!pdfB64) continue
+            userMessageContent.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: pdfB64,
+              },
+            })
+          }
+          return userMessageContent
+        })(),
+      },
+    ],
+  })
+
+  const content = response.content[0]
+  if (content.type !== 'text') throw new Error('Unexpected response type')
+
+  const clean = content.text.replace(/```json\n?|\n?```/g, '').trim()
+  return JSON.parse(clean)
+}
+
+export async function generateCoachQueryInsight(
+  client: ClientContext,
+  insightRequest: {
+    query: string
+    journalHighlights: string[]
+    adherenceNotes: string[]
+    checkinSummary: string[]
+  }
+): Promise<{
+  title: string
+  summary: string
+  fullAnalysis: string
+  recommendations: string[]
+  confidenceScore: number
+}> {
+  const aiDocs = await db.query<{
+    title: string | null
+    document_type: string | null
+    file_data: string | null
+    file_type: string | null
+    file_name: string | null
+  }>(
+    `SELECT title, document_type, file_type, file_name,
+            encode(file_data, 'base64') as file_data
+     FROM client_documents
+     WHERE client_id = $1 AND include_in_ai = true
+     ORDER BY created_at DESC LIMIT 5`,
+    [client.clientId]
+  )
+
+  const docContexts: string[] = []
+  for (const doc of aiDocs) {
+    if (!doc.file_data) continue
+
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    const label = `[${doc.document_type?.toUpperCase() ?? 'DOCUMENT'}: ${doc.title ?? doc.file_name}]`
+
+    if (
+      fileType.includes('text') ||
+      fileType.includes('plain') ||
+      fileType.includes('csv') ||
+      (doc.file_name?.endsWith('.txt') ?? false) ||
+      (doc.file_name?.endsWith('.md') ?? false) ||
+      (doc.file_name?.endsWith('.csv') ?? false)
+    ) {
+      try {
+        const normalized = normalizeBase64(doc.file_data)
+        if (!normalized) throw new Error('Invalid base64')
+        const text = Buffer.from(normalized, 'base64')
+          .toString('utf-8')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 350)
+        docContexts.push(`${label}\n${text}`)
+      } catch {
+        docContexts.push(`${label}\n[Could not read content]`)
+      }
+    } else if (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false)) {
+      docContexts.push(`${label}\n[PDF document uploaded - use title and document type as context]`)
+    } else {
+      docContexts.push(`${label}\n[Document uploaded: ${doc.file_name}]`)
+    }
+  }
+
+  const docSummary = docContexts.length > 0 ? docContexts.join('\n\n') : 'None'
+  const pdfDocs = aiDocs.filter(doc => {
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
+  })
+
+  const prompt = `You are answering a coach's targeted insight request for a FORGE client.
+
+CLIENT: ${client.fullName} | Stage: ${client.stage} | State: ${client.generationState}
+PRIMARY GOAL: ${client.primaryGoal}
+
+COACH QUESTION:
+${insightRequest.query}
+
+CURRENT BIE:
+BAR: ${client.currentBIE.bar.toFixed(1)}, BLI: ${client.currentBIE.bli.toFixed(1)}, DBI: ${client.currentBIE.dbi.toFixed(1)}, CDI: ${client.currentBIE.cdi.toFixed(1)}, LSI: ${client.currentBIE.lsi.toFixed(1)}, PPS: ${client.currentBIE.pps.toFixed(1)}
+
+RECENT JOURNAL HIGHLIGHTS:
+${insightRequest.journalHighlights.length > 0 ? insightRequest.journalHighlights.join(' | ') : 'None'}
+
+RECENT ADHERENCE / COACHING NOTES:
+${insightRequest.adherenceNotes.length > 0 ? insightRequest.adherenceNotes.join(' | ') : 'None'}
+
+RECENT CHECK-IN SIGNALS:
+${insightRequest.checkinSummary.length > 0 ? insightRequest.checkinSummary.join(' | ') : 'None'}
+
+CLIENT DOCUMENTS (AI-enabled):
+${docSummary}
+
+Return a focused coach-facing answer. Be specific about food-pattern gaps, under-target intake, journal themes, and what should be addressed next when the evidence supports it.
+
+Output ONLY JSON:
+{
+  "title": "Brief insight title",
+  "summary": "2-3 sentence summary for coach dashboard",
+  "fullAnalysis": "Full analysis paragraph for coach review",
+  "recommendations": ["Action 1", "Action 2", "Action 3"],
+  "confidenceScore": <0.0-1.0>
+}`
+
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 1400,
+    system: FORGE_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: ((): any[] => {
+          const userMessageContent: any[] = [{ type: 'text', text: prompt }]
+          for (const doc of pdfDocs.slice(0, 2)) {
             if (!doc.file_data) continue
             const pdfB64 = canonicalizeDocumentBase64(doc.file_data, 'pdf')
             if (!pdfB64) continue

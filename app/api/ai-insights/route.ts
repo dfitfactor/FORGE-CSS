@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { generateWeeklyInsight, type ClientContext } from '@/services/ai-service'
+import { generateCoachQueryInsight, generateWeeklyInsight, type ClientContext } from '@/services/ai-service'
 import type { ForgeStage, GenerationState } from '@/lib/bie-engine'
 
 type InsightRow = {
@@ -188,6 +188,72 @@ async function buildClientContext(clientId: string) {
   }
 }
 
+async function getFocusedInsightInputs(clientId: string) {
+  const [journalRows, adherenceRows, checkinRows] = await Promise.all([
+    db.query<{ body: string | null; title: string | null; entry_date: string }>(
+      `SELECT body, title, entry_date::text
+       FROM journal_entries
+       WHERE client_id = $1
+       ORDER BY entry_date DESC
+       LIMIT 8`,
+      [clientId]
+    ),
+    db.query<{ record_type: string; completion_pct: number | null; client_notes: string | null }>(
+      `SELECT record_type, completion_pct, client_notes
+       FROM adherence_records
+       WHERE client_id = $1
+       ORDER BY record_date DESC
+       LIMIT 8`,
+      [clientId]
+    ),
+    db.query<{
+      nutrition_adherence: number | null
+      protein_adherence: string | null
+      food_journaling_days: string | null
+      nutrition_drift: string | null
+      what_worked: string | null
+      challenges: string | null
+      goals_next_week: string | null
+      additional_notes: string | null
+      checkin_date: string
+    }>(
+      `SELECT nutrition_adherence, protein_adherence, food_journaling_days, nutrition_drift,
+              what_worked, challenges, goals_next_week, additional_notes, checkin_date::text
+       FROM client_checkins
+       WHERE client_id = $1
+       ORDER BY checkin_date DESC, created_at DESC
+       LIMIT 6`,
+      [clientId]
+    ),
+  ])
+
+  return {
+    journalHighlights: journalRows
+      .map(row => [row.title, row.body].filter(Boolean).join(': ').trim())
+      .filter(Boolean),
+    adherenceNotes: adherenceRows
+      .map(row => [row.record_type, row.completion_pct !== null ? `${row.completion_pct}%` : null, row.client_notes].filter(Boolean).join(' | '))
+      .filter(Boolean),
+    checkinSummary: checkinRows
+      .map(row =>
+        [
+          row.checkin_date,
+          row.nutrition_adherence !== null ? `nutrition adherence ${row.nutrition_adherence}/10` : null,
+          row.protein_adherence,
+          row.food_journaling_days ? `food journaling ${row.food_journaling_days}` : null,
+          row.nutrition_drift,
+          row.what_worked,
+          row.challenges,
+          row.goals_next_week,
+          row.additional_notes,
+        ]
+          .filter(Boolean)
+          .join(' | ')
+      )
+      .filter(Boolean),
+  }
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession(request)
   if (!session) {
@@ -195,9 +261,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const clients = await getCoachClients(session.id, session.role)
     const hasTable = await ensureAiInsightsTable()
     if (!hasTable) {
-      return NextResponse.json({ insights: [], available: false, error: 'ai_insights table is not available in this environment.' })
+      return NextResponse.json({
+        insights: [],
+        clients: clients.map(client => ({ id: client.id, full_name: client.full_name })),
+        available: false,
+        error: 'ai_insights table is not available in this environment.',
+      })
     }
 
     const insights = await db.query<InsightRow>(
@@ -220,7 +292,11 @@ export async function GET(request: NextRequest) {
       session.role === 'admin' ? [] : [session.id]
     )
 
-    return NextResponse.json({ insights, available: true })
+    return NextResponse.json({
+      insights,
+      clients: clients.map(client => ({ id: client.id, full_name: client.full_name })),
+      available: true,
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -238,14 +314,104 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Anthropic API key is not configured.' }, { status: 503 })
     }
 
+    const body = await request.json().catch(() => ({}))
+    const mode = typeof body.mode === 'string' ? body.mode : 'generate'
+    const requestedClientId = typeof body.clientId === 'string' ? body.clientId : null
+    const allClients = await getCoachClients(session.id, session.role)
+
+    if (mode === 'query') {
+      if (!requestedClientId) {
+        return NextResponse.json({ error: 'Client is required for targeted insight queries.' }, { status: 400 })
+      }
+
+      const coachQuery = typeof body.query === 'string' ? body.query.trim() : ''
+      if (!coachQuery) {
+        return NextResponse.json({ error: 'Insight question is required.' }, { status: 400 })
+      }
+
+      const client = allClients.find(item => item.id === requestedClientId)
+      if (!client) {
+        return NextResponse.json({ error: 'Client not found for this coach.' }, { status: 404 })
+      }
+
+      const context = await buildClientContext(client.id)
+      if (!context) {
+        return NextResponse.json({ error: 'Unable to build client context for this insight.' }, { status: 500 })
+      }
+
+      const focusedInputs = await getFocusedInsightInputs(client.id)
+      const insight = await generateCoachQueryInsight(context.client, {
+        query: coachQuery,
+        ...focusedInputs,
+      })
+
+      const hasTable = await ensureAiInsightsTable()
+      let storedInsight: InsightRow | null = null
+
+      if (hasTable) {
+        const aiInsightColumns = await getAiInsightsColumnSet()
+        const insertColumns = ['client_id', 'insight_date', 'insight_type', 'title', 'summary']
+        const insertValues: unknown[] = [client.id, new Date().toISOString().split('T')[0], 'coaching_suggestion', insight.title, insight.summary]
+
+        const optionalColumns: Array<[string, unknown]> = [
+          ['full_analysis', insight.fullAnalysis],
+          ['recommendations', insight.recommendations],
+          ['confidence_score', insight.confidenceScore],
+          ['source_variables', ['journals', 'checkins', 'adherence', 'documents', 'coach_query']],
+          ['model_used', process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'],
+        ]
+
+        for (const [column, value] of optionalColumns) {
+          if (aiInsightColumns.has(column)) {
+            insertColumns.push(column)
+            insertValues.push(value)
+          }
+        }
+
+        const placeholders = insertValues.map((_, index) => `$${index + 1}`).join(', ')
+        storedInsight = await db.queryOne<InsightRow>(
+          `INSERT INTO ai_insights (${insertColumns.join(', ')})
+           VALUES (${placeholders})
+           RETURNING id,
+                     client_id,
+                     '' as client_name,
+                     insight_date::text,
+                     insight_type,
+                     title,
+                     summary,
+                     full_analysis,
+                     recommendations,
+                     CAST(confidence_score AS FLOAT) as confidence_score,
+                     created_at::text`,
+          insertValues
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        insight: storedInsight
+          ? { ...storedInsight, client_name: client.full_name }
+          : {
+              id: `temp-${Date.now()}`,
+              client_id: client.id,
+              client_name: client.full_name,
+              insight_date: new Date().toISOString().split('T')[0],
+              insight_type: 'coaching_suggestion',
+              title: insight.title,
+              summary: insight.summary,
+              full_analysis: insight.fullAnalysis,
+              recommendations: insight.recommendations,
+              confidence_score: insight.confidenceScore,
+              created_at: new Date().toISOString(),
+            },
+      })
+    }
+
     const hasTable = await ensureAiInsightsTable()
     if (!hasTable) {
       return NextResponse.json({ error: 'ai_insights table is not available in this environment.' }, { status: 503 })
     }
 
-    const body = await request.json().catch(() => ({}))
-    const requestedClientId = typeof body.clientId === 'string' ? body.clientId : null
-    const allClients = await getCoachClients(session.id, session.role)
     const clients = requestedClientId
       ? allClients.filter(client => client.id === requestedClientId)
       : allClients.filter(client => true).slice(0, 8)

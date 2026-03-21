@@ -18,6 +18,11 @@ type Insight = {
   created_at: string
 }
 
+type ClientOption = {
+  id: string
+  full_name: string
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', {
     month: 'short',
@@ -30,9 +35,13 @@ export default function AIInsightsPage() {
   const [insights, setInsights] = useState<Insight[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [querying, setQuerying] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [available, setAvailable] = useState(true)
+  const [clients, setClients] = useState<ClientOption[]>([])
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [insightQuery, setInsightQuery] = useState('')
 
   async function loadInsights() {
     setLoading(true)
@@ -48,6 +57,11 @@ export default function AIInsightsPage() {
       }
 
       setInsights(Array.isArray(data.insights) ? data.insights : [])
+      const nextClients = Array.isArray(data.clients) ? data.clients : []
+      setClients(nextClients)
+      if (!selectedClientId && nextClients.length > 0) {
+        setSelectedClientId(nextClients[0].id)
+      }
       setAvailable(data.available !== false)
 
       if (data.error) {
@@ -89,6 +103,48 @@ export default function AIInsightsPage() {
       setError('Network error while generating AI insights')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleQueryInsight() {
+    if (!selectedClientId) {
+      setError('Select a client before requesting an insight.')
+      return
+    }
+    if (!insightQuery.trim()) {
+      setError('Add a question or focus area for the insight.')
+      return
+    }
+
+    setQuerying(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await fetch('/api/ai-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'query',
+          clientId: selectedClientId,
+          query: insightQuery.trim(),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to get targeted insight')
+        return
+      }
+
+      if (data.insight) {
+        setInsights(current => [data.insight as Insight, ...current])
+      }
+      setSuccess('Insight generated')
+    } catch {
+      setError('Network error while generating targeted insight')
+    } finally {
+      setQuerying(false)
     }
   }
 
@@ -165,6 +221,47 @@ export default function AIInsightsPage() {
             <div className="mt-1 font-mono text-xs uppercase tracking-wide text-white/35">
               Clients Covered
             </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-[#D4AF37]" />
+            <h2 className="text-sm font-semibold text-white">Get Insight</h2>
+          </div>
+          <p className="mt-2 text-sm text-white/45">
+            Ask for a targeted client analysis using uploaded documents, journals, check-ins, and adherence signals.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-[240px_1fr_auto]">
+            <select
+              value={selectedClientId}
+              onChange={event => setSelectedClientId(event.target.value)}
+              className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+            >
+              <option value="">Select client</option>
+              {clients.map(client => (
+                <option key={client.id} value={client.id}>
+                  {client.full_name}
+                </option>
+              ))}
+            </select>
+            <textarea
+              value={insightQuery}
+              onChange={event => setInsightQuery(event.target.value)}
+              className="min-h-[84px] rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+              placeholder="Example: Review this client's food journal and check-ins. Are they meeting protein and calorie targets, what patterns are low, and what journal themes should be addressed next?"
+            />
+            <button
+              onClick={() => void handleQueryInsight()}
+              disabled={querying}
+              className="forge-btn-gold h-fit self-start disabled:opacity-50"
+            >
+              {querying ? (
+                <span className="flex items-center gap-2"><Loader2 size={15} className="animate-spin" /> Getting...</span>
+              ) : (
+                'Get Insight'
+              )}
+            </button>
           </div>
         </div>
 
