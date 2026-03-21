@@ -6,6 +6,8 @@ import {
   type NutritionStructure,
   type ProtocolOverride,
   type SessionStructure,
+  sanitizeExecutionLog,
+  sanitizeProtocolOverrides,
 } from '@/lib/protocol-overrides'
 
 type SupportedProtocolType = 'movement' | 'nutrition'
@@ -117,45 +119,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : []
-}
-
-function sanitizeProtocolOverrides(value: unknown): ProtocolOverride[] {
-  return asArray<Record<string, unknown>>(value)
-    .filter(item => typeof item.id === 'string' && typeof item.protocol_id === 'string' && typeof item.section === 'string')
-    .map(item => ({
-      id: String(item.id),
-      protocol_id: String(item.protocol_id),
-      section: item.section === 'nutrition' ? 'nutrition' : 'movement',
-      target: String(item.target ?? ''),
-      change: asRecord(item.change),
-      reason: String(item.reason ?? ''),
-      created_by: String(item.created_by ?? 'coach'),
-      timestamp: String(item.timestamp ?? new Date().toISOString()),
-      coach_note: typeof item.coach_note === 'string' ? item.coach_note : null,
-      reverted_at: typeof item.reverted_at === 'string' ? item.reverted_at : null,
-      reverted_by: typeof item.reverted_by === 'string' ? item.reverted_by : null,
-      revert_reason: typeof item.revert_reason === 'string' ? item.revert_reason : null,
-    }))
-}
-
-function sanitizeExecutionLog(value: unknown): MovementExecutionLogEntry[] {
-  return asArray<Record<string, unknown>>(value)
-    .filter(item => typeof item.id === 'string' && typeof item.exercise_id === 'string')
-    .map(item => ({
-      id: String(item.id),
-      protocol_id: String(item.protocol_id ?? ''),
-      section: 'movement' as const,
-      exercise_id: String(item.exercise_id),
-      exercise_name: String(item.exercise_name ?? ''),
-      completed_sessions: typeof item.completed_sessions === 'number' ? item.completed_sessions : null,
-      completed_sets: typeof item.completed_sets === 'number' ? item.completed_sets : null,
-      completed_reps: typeof item.completed_reps === 'string' ? item.completed_reps : null,
-      load: typeof item.load === 'string' ? item.load : null,
-      notes: typeof item.notes === 'string' ? item.notes : null,
-      created_by: String(item.created_by ?? 'coach'),
-      timestamp: String(item.timestamp ?? new Date().toISOString()),
-    }))
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 }
 
 function deriveSessionStructure(protocol: ProtocolRow) {

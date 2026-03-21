@@ -8,6 +8,7 @@ import {
   computePPS,
   extractSignalsFromCheckIn,
 } from '@/lib/bie-engine'
+import { buildOverrideIntelligenceSummary } from '@/lib/protocol-overrides'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
@@ -17,6 +18,8 @@ const MAX_CONTEXT_DOC_CHARS = 500
 type GeneratedProtocolCompat = {
   name: string
   rationale?: string
+  override_summary?: string
+  influenced_by_overrides?: boolean
   sessionStructure?: {
     frequency?: number
     sessionsPerWeek?: number
@@ -444,8 +447,9 @@ export async function POST(
       created_at: string
       notes: string | null
       coach_notes: string | null
+      protocol_payload: Record<string, unknown> | null
     }>(
-      `SELECT name, protocol_type, created_at::text, notes, coach_notes
+      `SELECT name, protocol_type, created_at::text, notes, coach_notes, protocol_payload
        FROM protocols
        WHERE client_id = $1
        ORDER BY created_at DESC
@@ -457,6 +461,10 @@ export async function POST(
           `${protocol.protocol_type}: ${protocol.name}${protocol.notes ? ` | notes: ${protocol.notes.slice(0, 120)}` : ''}${protocol.coach_notes ? ` | coach: ${protocol.coach_notes.slice(0, 120)}` : ''}`
         ).join(' // ')
       : 'No prior protocols'
+    const overrideIntelligence = buildOverrideIntelligenceSummary(
+      priorProtocols.map(protocol => protocol.protocol_payload)
+    )
+    const coachAdjustmentSummary = overrideIntelligence.summary
 
     const journalSummary = journals.map(j => [
       j.body?.slice(0, 100),
@@ -634,6 +642,8 @@ If physique athlete focus is detected with unstable adherence, use a Restoration
 RECENT JOURNALS: ${journalSummary || 'No recent journal entries'}
 RECENT CHECK-INS: ${checkinSummary || 'No recent check-ins'}
 RECENT PROTOCOL HISTORY: ${priorProtocolSummary}
+COACH ADJUSTMENT SUMMARY:
+${coachAdjustmentSummary}
     ═══ CLIENT DOCUMENTS (AI-enabled) ═══
     ${docSummary}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
@@ -712,12 +722,18 @@ EXECUTION RULES:
 - Include adherence fallback, decision rules, monitoring system, and phase progression criteria.
 - For physique athletes with unstable adherence, use a Restoration-to-Development bridge instead of generic Foundations while preserving bodybuilding specificity.
 - Preserve glute/hamstring density, capped delts, upper-back shaping, waist illusion, performance-supportive carbs, protective protein, and macro-to-meal coherence.
+- Use the Coach Adjustment Summary as an authority signal. Do not override coach intent; adapt the next protocol around observed coach behavior.
+- If repeated volume reductions are present, lower base volume in the next protocol.
+- If repeated fatigue or recovery flags are present, reduce intensity, complexity, or frequency before adding more load.
+- If adherence issues are present, simplify the structure and reduce decision burden.
+- If consistent progression signals are present, advance load, progression, or complexity cautiously within behavioral capacity.
 
 OUTPUT REQUIREMENTS:
 - Deliver a client protocol with protocol rationale, movement, nutrition, meal structure, recovery, monitoring, decision rules, and phase progression criteria.
 - Deliver separate coach intelligence notes including progression assessment, gaps identified, oversights, risk flags, and next iteration strategy.
 - Preserve compatibility fields sessionStructure, nutritionStructure, recoveryStructure, coachNotes, and clientFacingMessage.
 - Also include these richer fields when possible: stateAnalysis, protocolRationale, movementProtocol, nutritionProtocol, recoveryProtocol, monitoringMetrics, decisionRules, phaseProgressionCriteria, coachIntelligence.
+- Include "override_summary" and "influenced_by_overrides" in the JSON output.
 
 SOURCE CONTEXT:
 ${prompt}`
@@ -754,6 +770,9 @@ ${prompt}`
       console.error('Parse error. Raw:', cleaned.slice(0, 300))
       return NextResponse.json({ error: 'AI response parsing failed', raw: cleaned.slice(0, 500) }, { status: 500 })
     }
+
+    generated.override_summary = coachAdjustmentSummary
+    generated.influenced_by_overrides = overrideIntelligence.hasInfluence
 
     // CALL 2 — Meal plan only
     let mealPlan: any[] = []

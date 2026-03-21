@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BIEVariables, ForgeStage, GenerationState } from '../../lib/bie-engine'
 import { db } from '../../lib/db'
+import { buildOverrideIntelligenceSummary } from '../../lib/protocol-overrides'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -91,6 +92,8 @@ export type ProtocolGenerationRequest = {
 export type GeneratedProtocol = {
   name: string
   rationale: string
+  override_summary?: string
+  influenced_by_overrides?: boolean
   sessionStructure?: {
     frequency: number
     sessionsPerWeek: number
@@ -175,6 +178,18 @@ export async function generateProtocol(
   request: ProtocolGenerationRequest
 ): Promise<GeneratedProtocol> {
   const { client, protocolType, equipmentAvailable, previousProtocolSummary, coachDirectives } = request
+  const priorProtocols = await db.query<{ protocol_payload: Record<string, unknown> | null }>(
+    `SELECT protocol_payload
+     FROM protocols
+     WHERE client_id = $1
+     ORDER BY created_at DESC
+     LIMIT 3`,
+    [client.clientId]
+  )
+  const overrideIntelligence = buildOverrideIntelligenceSummary(
+    priorProtocols.map(protocol => protocol.protocol_payload)
+  )
+  const coachAdjustmentSummary = overrideIntelligence.summary
 
   // Pull AI-enabled documents and decode content for better protocol generation context.
   // Note: we only inline-decoded text-based files; for PDFs/images we provide placeholders
@@ -267,20 +282,29 @@ RECENT ADHERENCE:
 
 ${equipmentAvailable ? `AVAILABLE EQUIPMENT: ${equipmentAvailable.join(', ')}` : ''}
 ${previousProtocolSummary ? `PREVIOUS PROTOCOL SUMMARY: ${previousProtocolSummary}` : ''}
+COACH ADJUSTMENT SUMMARY:
+${coachAdjustmentSummary}
 ${client.recentJournalSummary ? `RECENT JOURNAL SIGNALS: ${client.recentJournalSummary}` : ''}
 ${coachDirectives ? `COACH DIRECTIVES: ${coachDirectives}` : ''}
 
 CLIENT DOCUMENTS (AI-enabled):
 ${docSummary}
 
-Generate a complete ${protocolType} protocol. Apply the correct generation state logic. 
+Generate a complete ${protocolType} protocol. Apply the correct generation state logic.
+- Adapt to coach behavior rather than overriding it.
+- If repeated volume reductions appear, lower base volume next.
+- If repeated fatigue flags appear, reduce intensity, frequency, or complexity.
+- If adherence issues appear, simplify the structure.
+- If consistent progression signals appear, advance load or complexity conservatively.
 Output ONLY valid JSON matching this schema:
 {
   "name": "Protocol name",
   "rationale": "Why this protocol matches their current behavioral state",
   "sessionStructure": { ... } or "nutritionStructure": { ... } or "recoveryStructure": { ... },
   "coachNotes": "Internal notes for the coach",
-  "clientFacingMessage": "Encouraging message for the client about this protocol"
+  "clientFacingMessage": "Encouraging message for the client about this protocol",
+  "override_summary": "Compact coach adjustment summary",
+  "influenced_by_overrides": true
 }`
 
   const response = await anthropic.messages.create({
@@ -316,7 +340,10 @@ Output ONLY valid JSON matching this schema:
 
   try {
     const clean = content.text.replace(/```json\n?|\n?```/g, '').trim()
-    return JSON.parse(clean) as GeneratedProtocol
+    const generated = JSON.parse(clean) as GeneratedProtocol
+    generated.override_summary = coachAdjustmentSummary
+    generated.influenced_by_overrides = overrideIntelligence.hasInfluence
+    return generated
   } catch {
     throw new Error('Failed to parse protocol from AI response')
   }

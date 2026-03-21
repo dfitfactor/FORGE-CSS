@@ -80,6 +80,224 @@ export type NutritionStructure = {
   mealPlan?: NutritionMealPlanEntry[]
 }
 
+export type OverrideIntelligenceSummary = {
+  summary: string
+  bullets: string[]
+  hasInfluence: boolean
+  metrics: {
+    volumeReductions: number
+    volumeIncreases: number
+    exerciseSwaps: number
+    loadAdjustments: number
+    fatigueFlags: number
+    adherenceFlags: number
+    calorieReductions: number
+    calorieIncreases: number
+    progressionSignals: number
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
+}
+
+export function sanitizeProtocolOverrides(value: unknown): ProtocolOverride[] {
+  return asArray<Record<string, unknown>>(value)
+    .filter(item => typeof item.id === 'string' && typeof item.protocol_id === 'string' && typeof item.section === 'string')
+    .map(item => ({
+      id: String(item.id),
+      protocol_id: String(item.protocol_id),
+      section: item.section === 'nutrition' ? 'nutrition' : 'movement',
+      target: String(item.target ?? ''),
+      change: asRecord(item.change),
+      reason: String(item.reason ?? ''),
+      created_by: String(item.created_by ?? 'coach'),
+      timestamp: String(item.timestamp ?? new Date().toISOString()),
+      coach_note: typeof item.coach_note === 'string' ? item.coach_note : null,
+      reverted_at: typeof item.reverted_at === 'string' ? item.reverted_at : null,
+      reverted_by: typeof item.reverted_by === 'string' ? item.reverted_by : null,
+      revert_reason: typeof item.revert_reason === 'string' ? item.revert_reason : null,
+    }))
+}
+
+export function sanitizeExecutionLog(value: unknown): MovementExecutionLogEntry[] {
+  return asArray<Record<string, unknown>>(value)
+    .filter(item => typeof item.id === 'string' && typeof item.exercise_id === 'string')
+    .map(item => ({
+      id: String(item.id),
+      protocol_id: String(item.protocol_id ?? ''),
+      section: 'movement' as const,
+      exercise_id: String(item.exercise_id),
+      exercise_name: String(item.exercise_name ?? ''),
+      completed_sessions: typeof item.completed_sessions === 'number' ? item.completed_sessions : null,
+      completed_sets: typeof item.completed_sets === 'number' ? item.completed_sets : null,
+      completed_reps: typeof item.completed_reps === 'string' ? item.completed_reps : null,
+      load: typeof item.load === 'string' ? item.load : null,
+      notes: typeof item.notes === 'string' ? item.notes : null,
+      created_by: String(item.created_by ?? 'coach'),
+      timestamp: String(item.timestamp ?? new Date().toISOString()),
+    }))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+}
+
+function countKeywordHits(text: string, patterns: RegExp[]) {
+  return patterns.reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0)
+}
+
+export function buildOverrideIntelligenceSummary(protocolPayloads: unknown[]): OverrideIntelligenceSummary {
+  const allOverrides = protocolPayloads.flatMap(payload => {
+    const record = asRecord(payload)
+    return [
+      ...sanitizeProtocolOverrides(record.movementOverrides),
+      ...sanitizeProtocolOverrides(record.nutritionOverrides),
+    ]
+  })
+  const activeOverrides = allOverrides.filter(override => !override.reverted_at)
+  const executionLogs = protocolPayloads.flatMap(payload => sanitizeExecutionLog(asRecord(payload).movementExecutionLog))
+
+  let volumeReductions = 0
+  let volumeIncreases = 0
+  let exerciseSwaps = 0
+  let loadAdjustments = 0
+  let fatigueFlags = 0
+  let adherenceFlags = 0
+  let calorieReductions = 0
+  let calorieIncreases = 0
+  let progressionSignals = 0
+
+  for (const override of activeOverrides) {
+    const change = asRecord(override.change)
+    const sourceText = `${override.reason} ${override.coach_note ?? ''} ${JSON.stringify(change)}`.toLowerCase()
+
+    if (
+      typeof change.sets === 'number' && change.sets < 3 ||
+      typeof change.sessionsPerWeek === 'number' && change.sessionsPerWeek < 3 ||
+      (typeof change.volumeLevel === 'string' && /(reduced|minimal|minim|minimum|deload|lower)/i.test(change.volumeLevel)) ||
+      /reduce volume|lower volume|deload|back off|pull back/.test(sourceText)
+    ) {
+      volumeReductions += 1
+    }
+
+    if (
+      typeof change.sets === 'number' && change.sets >= 4 ||
+      typeof change.sessionsPerWeek === 'number' && change.sessionsPerWeek >= 4 ||
+      /increase volume|add set|progress volume|advance volume/.test(sourceText)
+    ) {
+      volumeIncreases += 1
+      progressionSignals += 1
+    }
+
+    if (
+      typeof change.exerciseName === 'string' ||
+      typeof change.swapOption === 'string' ||
+      /swap|replace|substitute|alternative/.test(sourceText)
+    ) {
+      exerciseSwaps += 1
+    }
+
+    if (
+      typeof change.loadGuidance === 'string' ||
+      /load|weight|intensity|lighter|heavier|rpe/.test(sourceText)
+    ) {
+      loadAdjustments += 1
+    }
+
+    if (/fatigue|sore|recovery|sleep|stress|burnout|exhaust|pain|discomfort|flare/.test(sourceText)) {
+      fatigueFlags += 1
+    }
+
+    if (/adherence|consistency|schedule|travel|busy|missed|overwhelm|compliance/.test(sourceText)) {
+      adherenceFlags += 1
+    }
+
+    if (override.section === 'nutrition' && override.target === 'macro') {
+      const delta = asRecord(change.delta)
+      const calorieDelta = typeof delta.dailyCalories === 'number'
+        ? delta.dailyCalories
+        : typeof change.dailyCalories === 'number'
+          ? change.dailyCalories
+          : null
+
+      if (typeof calorieDelta === 'number') {
+        if (calorieDelta < 0) calorieReductions += 1
+        if (calorieDelta > 0) calorieIncreases += 1
+      }
+    }
+  }
+
+  for (const entry of executionLogs) {
+    const sourceText = `${entry.exercise_name} ${entry.notes ?? ''} ${entry.load ?? ''} ${entry.completed_reps ?? ''}`.toLowerCase()
+
+    fatigueFlags += countKeywordHits(sourceText, [
+      /fatigue/,
+      /exhaust/,
+      /gassed/,
+      /poor sleep/,
+      /stress/,
+      /sore/,
+      /pain/,
+      /discomfort/,
+    ])
+
+    adherenceFlags += countKeywordHits(sourceText, [
+      /missed/,
+      /shortened/,
+      /cut short/,
+      /rushed/,
+      /busy/,
+      /schedule/,
+      /travel/,
+      /skipped/,
+    ])
+
+    progressionSignals += countKeywordHits(sourceText, [
+      /progress/,
+      /pr\b/,
+      /added load/,
+      /up in weight/,
+      /strong/,
+      /easy/,
+      /hit top reps/,
+    ])
+  }
+
+  const bullets: string[] = []
+
+  if (volumeReductions > 0) bullets.push(`volume reduced ${volumeReductions}x across recent coaching adjustments`)
+  if (exerciseSwaps > 0) bullets.push(`exercise swaps made ${exerciseSwaps}x due to coach-led execution changes`)
+  if (loadAdjustments > 0) bullets.push(`load or intensity targets adjusted ${loadAdjustments}x`)
+  if (fatigueFlags > 0) bullets.push(`fatigue or recovery flags surfaced ${fatigueFlags}x`)
+  if (adherenceFlags > 0) bullets.push(`adherence or schedule issues surfaced ${adherenceFlags}x`)
+  if (calorieReductions > 0) bullets.push(`calories adjusted downward ${calorieReductions}x by coach`)
+  if (calorieIncreases > 0) bullets.push(`calories adjusted upward ${calorieIncreases}x by coach`)
+  if (progressionSignals > 0) bullets.push(`consistent progression signals noted ${progressionSignals}x`)
+
+  return {
+    summary: bullets.length > 0
+      ? bullets.map(item => `- ${item}`).join('\n')
+      : 'No meaningful coach override or execution-log patterns were detected.',
+    bullets,
+    hasInfluence: bullets.length > 0,
+    metrics: {
+      volumeReductions,
+      volumeIncreases,
+      exerciseSwaps,
+      loadAdjustments,
+      fatigueFlags,
+      adherenceFlags,
+      calorieReductions,
+      calorieIncreases,
+      progressionSignals,
+    },
+  }
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
