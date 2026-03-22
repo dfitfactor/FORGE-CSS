@@ -421,7 +421,7 @@ export default function AvailabilityPage() {
                                     {slotBookings.map((booking) => {
                                       const statusClass = booking.status === 'confirmed'
                                         ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
-                                        : 'border-amber-500/40 bg-amber-500/15 text-amber-200'
+                                        : 'border-white/20 bg-white/10 text-white/75'
                                       return (
                                         <div key={booking.id} className={`rounded-md border px-2 py-1 ${statusClass}`}>
                                           <div className="font-medium">{booking.client_name}</div>
@@ -515,3 +515,4 @@ export default function AvailabilityPage() {
     </div>
   )
 }
+
