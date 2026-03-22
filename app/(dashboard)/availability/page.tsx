@@ -18,6 +18,17 @@ type AvailabilityRule = {
   is_active: boolean
 }
 
+type CoachBooking = {
+  id: string
+  client_name: string
+  booking_date: string
+  booking_time: string
+  duration_minutes: number | null
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  service_name: string | null
+  package_name: string | null
+}
+
 type DayConfig = {
   enabled: boolean
   start_time: string
@@ -54,8 +65,30 @@ function formatCalendarTime(totalMinutes: number) {
   return `${displayHour}:${String(minutes).padStart(2, '0')} ${suffix}`
 }
 
+function startOfWeek(date: Date) {
+  const copy = new Date(date)
+  copy.setHours(0, 0, 0, 0)
+  copy.setDate(copy.getDate() - copy.getDay())
+  return copy
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date)
+  copy.setDate(copy.getDate() + days)
+  return copy
+}
+
+function formatDayLabel(date: Date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function isSameDate(dateString: string, date: Date) {
+  return `${dateString}T00:00:00`.slice(0, 10) === date.toISOString().slice(0, 10)
+}
+
 export default function AvailabilityPage() {
   const [rules, setRules] = useState<AvailabilityRule[]>([])
+  const [bookings, setBookings] = useState<CoachBooking[]>([])
   const [days, setDays] = useState<DayConfig[]>(createDefaultDays())
   const [bufferMinutes, setBufferMinutes] = useState(10)
   const [minimumNoticeHours, setMinimumNoticeHours] = useState(24)
@@ -65,16 +98,25 @@ export default function AvailabilityPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  async function loadRules() {
+  async function loadPageData() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/availability', { cache: 'no-store' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load availability')
+      const [availabilityRes, bookingsRes] = await Promise.all([
+        fetch('/api/availability', { cache: 'no-store' }),
+        fetch('/api/bookings', { cache: 'no-store' }),
+      ])
+      const [availabilityData, bookingsData] = await Promise.all([
+        availabilityRes.json().catch(() => ({})),
+        bookingsRes.json().catch(() => ({})),
+      ])
 
-      const nextRules = Array.isArray(data.rules) ? data.rules : []
+      if (!availabilityRes.ok) throw new Error(availabilityData.error ?? 'Failed to load availability')
+      if (!bookingsRes.ok) throw new Error(bookingsData.error ?? 'Failed to load bookings')
+
+      const nextRules = Array.isArray(availabilityData.rules) ? availabilityData.rules : []
       setRules(nextRules)
+      setBookings(Array.isArray(bookingsData.bookings) ? bookingsData.bookings : [])
 
       const nextDays = createDefaultDays()
       for (const rule of nextRules.filter((item: AvailabilityRule) => item.rule_type === 'weekly' && item.day_of_week !== null)) {
@@ -100,7 +142,7 @@ export default function AvailabilityPage() {
   }
 
   useEffect(() => {
-    void loadRules()
+    void loadPageData()
   }, [])
 
   async function replaceSettings(nextRecords: Array<Record<string, unknown>>) {
@@ -160,7 +202,7 @@ export default function AvailabilityPage() {
       ]
 
       await replaceSettings(settingsRecords)
-      await loadRules()
+      await loadPageData()
       setSuccess('Availability saved')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save availability')
@@ -183,7 +225,7 @@ export default function AvailabilityPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to add blackout date')
       setBlackoutDate('')
-      await loadRules()
+      await loadPageData()
       setSuccess('Blackout date added')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add blackout date')
@@ -200,7 +242,7 @@ export default function AvailabilityPage() {
       const res = await fetch(`/api/availability/${ruleId}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to remove rule')
-      await loadRules()
+      await loadPageData()
       setSuccess('Rule removed')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to remove rule')
@@ -217,12 +259,36 @@ export default function AvailabilityPage() {
     }
     return slots
   }, [])
+  const weekStart = useMemo(() => startOfWeek(new Date()), [])
+  const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
+  const visibleBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === 'pending' || booking.status === 'confirmed'),
+    [bookings]
+  )
 
   function isSlotAvailable(day: DayConfig, slotMinutes: number) {
     if (!day.enabled) return false
     const start = timeToMinutes(day.start_time)
     const end = timeToMinutes(day.end_time)
     return slotMinutes >= start && slotMinutes < end
+  }
+
+  function bookingsStartingAt(dayIndex: number, slotMinutes: number) {
+    const targetDate = weekDates[dayIndex]
+    return visibleBookings.filter((booking) => {
+      if (!isSameDate(booking.booking_date, targetDate)) return false
+      return timeToMinutes(booking.booking_time) === slotMinutes
+    })
+  }
+
+  function slotHasBooking(dayIndex: number, slotMinutes: number) {
+    const targetDate = weekDates[dayIndex]
+    return visibleBookings.some((booking) => {
+      if (!isSameDate(booking.booking_date, targetDate)) return false
+      const start = timeToMinutes(booking.booking_time)
+      const end = start + Number(booking.duration_minutes ?? 60)
+      return slotMinutes >= start && slotMinutes < end
+    })
   }
 
   return (
@@ -312,19 +378,27 @@ export default function AvailabilityPage() {
               </div>
 
               <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
-                <div className="mb-4">
-                  <h3 className="text-base font-semibold text-white">Calendar View</h3>
-                  <p className="mt-1 text-sm text-white/40">Preview your weekly availability as a time-grid while you edit the schedule above.</p>
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-white">Calendar View</h3>
+                    <p className="mt-1 text-sm text-white/40">Preview this week's availability with pending requests and confirmed bookings layered into each day.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-1 text-[#D4AF37]">Available</span>
+                    <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-amber-300">Pending / Requested</span>
+                    <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-emerald-300">Confirmed</span>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[820px] overflow-hidden rounded-2xl border border-white/8 bg-black/20">
+                  <div className="min-w-[920px] overflow-hidden rounded-2xl border border-white/8 bg-black/20">
                     <div className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-white/8 bg-white/5 text-xs font-mono uppercase tracking-widest text-white/35">
                       <div className="px-3 py-3">Time</div>
                       {DAYS.map((label, index) => (
                         <div key={label} className="border-l border-white/8 px-3 py-3 text-center">
-                          {label}
-                          <div className="mt-1 text-[10px] normal-case tracking-normal text-white/25">
-                            {days[index].enabled ? `${days[index].start_time}–${days[index].end_time}` : 'Off'}
+                          <div>{label}</div>
+                          <div className="mt-1 text-[10px] normal-case tracking-normal text-white/30">{formatDayLabel(weekDates[index])}</div>
+                          <div className="mt-1 text-[10px] normal-case tracking-normal text-white/20">
+                            {days[index].enabled ? `${days[index].start_time}-${days[index].end_time}` : 'Off'}
                           </div>
                         </div>
                       ))}
@@ -335,16 +409,29 @@ export default function AvailabilityPage() {
                         <div className="px-3 py-3 text-xs text-white/35">{formatCalendarTime(slotMinutes)}</div>
                         {days.map((day, dayIndex) => {
                           const active = isSlotAvailable(day, slotMinutes)
-                          const isSlotStart = day.enabled && slotMinutes === timeToMinutes(day.start_time)
+                          const slotBookings = bookingsStartingAt(dayIndex, slotMinutes)
+                          const booked = slotHasBooking(dayIndex, slotMinutes)
                           return (
                             <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-white/5 px-2 py-2">
                               <div
-                                className={`min-h-[38px] rounded-lg border text-xs transition ${active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-transparent bg-white/[0.02] text-white/10'}`}
+                                className={`min-h-[44px] rounded-lg border text-xs transition ${slotBookings.length > 0 ? 'border-white/15 bg-white/5 text-white' : booked ? 'border-white/10 bg-white/[0.04] text-white/50' : active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-transparent bg-white/[0.02] text-white/10'}`}
                               >
-                                {active ? (
-                                  <div className="flex h-full items-center justify-center px-2 text-center font-medium">
-                                    {isSlotStart ? `${day.slot_duration_minutes} min slots` : 'Available'}
+                                {slotBookings.length > 0 ? (
+                                  <div className="space-y-1 p-1.5">
+                                    {slotBookings.map((booking) => {
+                                      const statusClass = booking.status === 'confirmed'
+                                        ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+                                        : 'border-amber-500/40 bg-amber-500/15 text-amber-200'
+                                      return (
+                                        <div key={booking.id} className={`rounded-md border px-2 py-1 ${statusClass}`}>
+                                          <div className="font-medium">{booking.client_name}</div>
+                                          <div className="text-[10px] uppercase tracking-wide opacity-80">{booking.status === 'pending' ? 'Requested' : 'Confirmed'} · {booking.service_name ?? booking.package_name ?? 'Booking'}</div>
+                                        </div>
+                                      )
+                                    })}
                                   </div>
+                                ) : active ? (
+                                  <div className="flex h-full items-center justify-center px-2 text-center font-medium">Available</div>
                                 ) : null}
                               </div>
                             </div>
