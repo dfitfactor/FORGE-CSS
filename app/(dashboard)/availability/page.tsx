@@ -33,9 +33,25 @@ const NOTICE_OPTIONS = [
   { label: '48 hours', value: 48 },
   { label: '1 week', value: 168 },
 ]
+const CALENDAR_START_HOUR = 6
+const CALENDAR_END_HOUR = 21
+const CALENDAR_SLOT_MINUTES = 30
 
 function createDefaultDays() {
   return Array.from({ length: 7 }, () => ({ ...DEFAULT_DAY }))
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function formatCalendarTime(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const suffix = hours >= 12 ? 'PM' : 'AM'
+  const displayHour = hours % 12 === 0 ? 12 : hours % 12
+  return `${displayHour}:${String(minutes).padStart(2, '0')} ${suffix}`
 }
 
 export default function AvailabilityPage() {
@@ -194,6 +210,20 @@ export default function AvailabilityPage() {
   }
 
   const blackoutRules = useMemo(() => rules.filter((rule) => rule.rule_type === 'blackout' && rule.blackout_date), [rules])
+  const calendarSlots = useMemo(() => {
+    const slots: number[] = []
+    for (let minutes = CALENDAR_START_HOUR * 60; minutes <= CALENDAR_END_HOUR * 60; minutes += CALENDAR_SLOT_MINUTES) {
+      slots.push(minutes)
+    }
+    return slots
+  }, [])
+
+  function isSlotAvailable(day: DayConfig, slotMinutes: number) {
+    if (!day.enabled) return false
+    const start = timeToMinutes(day.start_time)
+    const end = timeToMinutes(day.end_time)
+    return slotMinutes >= start && slotMinutes < end
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
@@ -279,6 +309,51 @@ export default function AvailabilityPage() {
                     )}
                   </div>
                 ))}
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+                <div className="mb-4">
+                  <h3 className="text-base font-semibold text-white">Calendar View</h3>
+                  <p className="mt-1 text-sm text-white/40">Preview your weekly availability as a time-grid while you edit the schedule above.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[820px] overflow-hidden rounded-2xl border border-white/8 bg-black/20">
+                    <div className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-white/8 bg-white/5 text-xs font-mono uppercase tracking-widest text-white/35">
+                      <div className="px-3 py-3">Time</div>
+                      {DAYS.map((label, index) => (
+                        <div key={label} className="border-l border-white/8 px-3 py-3 text-center">
+                          {label}
+                          <div className="mt-1 text-[10px] normal-case tracking-normal text-white/25">
+                            {days[index].enabled ? `${days[index].start_time}–${days[index].end_time}` : 'Off'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {calendarSlots.map((slotMinutes) => (
+                      <div key={slotMinutes} className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-white/5 last:border-0">
+                        <div className="px-3 py-3 text-xs text-white/35">{formatCalendarTime(slotMinutes)}</div>
+                        {days.map((day, dayIndex) => {
+                          const active = isSlotAvailable(day, slotMinutes)
+                          const isSlotStart = day.enabled && slotMinutes === timeToMinutes(day.start_time)
+                          return (
+                            <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-white/5 px-2 py-2">
+                              <div
+                                className={`min-h-[38px] rounded-lg border text-xs transition ${active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-transparent bg-white/[0.02] text-white/10'}`}
+                              >
+                                {active ? (
+                                  <div className="flex h-full items-center justify-center px-2 text-center font-medium">
+                                    {isSlotStart ? `${day.slot_duration_minutes} min slots` : 'Available'}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </section>
 
