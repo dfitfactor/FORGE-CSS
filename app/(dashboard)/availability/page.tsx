@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Clock3, Loader2, Plus, Trash2 } from 'lucide-react'
@@ -87,8 +87,8 @@ export default function AvailabilityPage() {
     void loadRules()
   }, [])
 
-  async function replaceRules(ruleType: AvailabilityRule['rule_type'], nextRecords: Array<Record<string, unknown>>) {
-    const existing = rules.filter((rule) => rule.rule_type === ruleType)
+  async function replaceSettings(nextRecords: Array<Record<string, unknown>>) {
+    const existing = rules.filter((rule) => rule.rule_type === 'settings')
     await Promise.all(existing.map((rule) => fetch(`/api/availability/${rule.id}`, { method: 'DELETE' })))
     await Promise.all(
       nextRecords.map((record) =>
@@ -106,7 +106,7 @@ export default function AvailabilityPage() {
     setError('')
     setSuccess('')
     try {
-      const weeklyRecords = days
+      const weeklyRules = days
         .map((day, index) => ({ day, index }))
         .filter(({ day }) => day.enabled)
         .map(({ day, index }) => ({
@@ -117,6 +117,14 @@ export default function AvailabilityPage() {
           slot_duration_minutes: day.slot_duration_minutes,
           is_active: true,
         }))
+
+      const weeklyRes = await fetch('/api/availability', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rules: weeklyRules }),
+      })
+      const weeklyData = await weeklyRes.json().catch(() => ({}))
+      if (!weeklyRes.ok) throw new Error(weeklyData.error ?? 'Failed to save weekly schedule')
 
       const settingsRecords = [
         {
@@ -135,8 +143,7 @@ export default function AvailabilityPage() {
         },
       ]
 
-      await replaceRules('weekly', weeklyRecords)
-      await replaceRules('settings', settingsRecords)
+      await replaceSettings(settingsRecords)
       await loadRules()
       setSuccess('Availability saved')
     } catch (err: unknown) {

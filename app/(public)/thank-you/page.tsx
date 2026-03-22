@@ -18,7 +18,7 @@ export default function ThankYouPage({
         <div className="mt-8 rounded-2xl bg-[#f6f1e2] p-6 text-left">
           <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-black/45">What happens next</h2>
           <ol className="mt-4 space-y-3 text-sm text-black/65">
-            <li>1. Coach Dee will confirm your booking within 24 hours</li>
+            <li>1. We'll confirm your booking within 24 hours</li>
             <li>2. You will receive a confirmation email</li>
             <li>3. Complete any required forms before your appointment</li>
           </ol>
@@ -31,3 +31,4 @@ export default function ThankYouPage({
     </div>
   )
 }
+

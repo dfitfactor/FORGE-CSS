@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -102,6 +102,7 @@ export default function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]>('all')
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [copied, setCopied] = useState(false)
 
   async function loadBookings() {
@@ -123,9 +124,10 @@ export default function BookingsPage() {
     void loadBookings()
   }, [])
 
-  async function updateBooking(bookingId: string, status: Booking['status']) {
+  async function updateBookingStatus(bookingId: string, status: Booking['status']) {
     setUpdatingId(bookingId)
     setError('')
+    setSuccess('')
     try {
       const payload: Record<string, unknown> = { status }
       if (status === 'completed') payload.attended = true
@@ -138,7 +140,10 @@ export default function BookingsPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to update booking')
+
+      setBookings((current) => current.map((booking) => booking.id === bookingId ? { ...booking, status } : booking))
       await loadBookings()
+      setSuccess(`Booking ${status.replace('_', ' ')} successfully.`)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update booking')
     } finally {
@@ -150,6 +155,7 @@ export default function BookingsPage() {
     try {
       await navigator.clipboard.writeText('https://forge-css.vercel.app/book')
       setCopied(true)
+      setSuccess('Booking page link copied.')
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
       setError('Unable to copy booking page link')
@@ -194,6 +200,7 @@ export default function BookingsPage() {
         </div>
 
         {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
+        {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{success}</div> : null}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Today's Bookings" value={stats.today} />
@@ -290,11 +297,17 @@ export default function BookingsPage() {
                               availableActions(booking.status).map((action) => (
                                 <button
                                   key={action.value}
-                                  onClick={() => void updateBooking(booking.id, action.value)}
+                                  onClick={() => void updateBookingStatus(booking.id, action.value)}
                                   disabled={updatingId === booking.id}
                                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
                                 >
-                                  {action.value === 'completed' ? <CheckCircle2 size={14} /> : <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />}
+                                  {updatingId === booking.id ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : action.value === 'completed' ? (
+                                    <CheckCircle2 size={14} />
+                                  ) : (
+                                    <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />
+                                  )}
                                   {updatingId === booking.id ? 'Updating...' : action.label}
                                 </button>
                               ))

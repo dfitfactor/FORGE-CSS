@@ -189,7 +189,7 @@ export default function PublicBookingDetailPage() {
         <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
           <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request your booking' : 'Request this booking'}</h2>
           <p className="mt-2 text-sm text-black/55">
-            {isFree ? 'Choose your preferred date and time for Coach Dee to confirm.' : 'Checkout is coming in Phase 2. Submit your request and Coach Dee will follow up.'}
+            {isFree ? "Choose your preferred date and time and we'll confirm within 24 hours." : "Checkout is coming in Phase 2. Submit your request and we'll follow up."}
           </p>
 
           {error ? <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</div> : null}
@@ -230,3 +230,5 @@ export default function PublicBookingDetailPage() {
     </div>
   )
 }
+
+

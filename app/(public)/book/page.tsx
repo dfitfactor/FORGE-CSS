@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -76,9 +76,9 @@ export default function PublicBookingPage() {
       <div className="mx-auto max-w-6xl space-y-12">
         <section className="rounded-[2rem] bg-[#2B154A] px-8 py-12 text-white shadow-2xl">
           <span className="rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[#D4AF37]">
-            FORGË Booking
+            FORGÃ‹ Booking
           </span>
-          <h1 className="mt-5 text-4xl font-semibold">Book a Session with Coach Dee</h1>
+          <h1 className="mt-5 text-4xl font-semibold">Book a Session</h1>
           <p className="mt-3 max-w-2xl text-base text-white/70">Transform your health. Start your journey.</p>
         </section>
 
@@ -114,7 +114,7 @@ export default function PublicBookingPage() {
                               {formatDurationLabel(service.duration_minutes)}
                             </span>
                           </div>
-                          <p className="mt-3 text-sm text-black/55">{service.description || 'A focused FORGË session tailored to your current phase.'}</p>
+                          <p className="mt-3 text-sm text-black/55">{service.description || 'A focused FORGÃ‹ session tailored to your current phase.'}</p>
                           <div className="mt-4 text-lg font-semibold text-[#2B154A]">{formatPriceFromCents(service.price_cents)}</div>
                           <Link href={`/book/${service.slug}`} className="mt-5 inline-flex rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-semibold text-black transition hover:brightness-105">
                             Book Now
@@ -144,7 +144,7 @@ export default function PublicBookingPage() {
                       {stagePackages.map((pkg) => (
                         <article key={pkg.id} className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
                           <h4 className="text-lg font-semibold text-[#1b140d]">{pkg.name}</h4>
-                          <p className="mt-2 text-sm text-black/55">{pkg.description || 'A FORGË package built to support your stage progression.'}</p>
+                          <p className="mt-2 text-sm text-black/55">{pkg.description || 'A FORGÃ‹ package built to support your stage progression.'}</p>
                           <div className="mt-4 flex flex-wrap gap-2">
                             <span className="rounded-full bg-black/5 px-3 py-1 text-xs text-black/55">{pkg.session_count} sessions</span>
                             <span className="rounded-full bg-[#2B154A]/8 px-3 py-1 text-xs uppercase text-[#2B154A]">{pkg.billing_type}</span>
@@ -166,3 +166,4 @@ export default function PublicBookingPage() {
     </div>
   )
 }
+
