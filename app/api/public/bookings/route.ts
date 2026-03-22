@@ -2,6 +2,13 @@
 import { Resend } from 'resend'
 import { db } from '@/lib/db'
 import { publicBookingSchema } from '@/lib/booking'
+import { createCalendarEvent } from '@/lib/google-calendar'
+
+type BookingTarget = {
+  duration_minutes: number
+  name: string
+  price_cents: number
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null)
@@ -15,10 +22,11 @@ export async function POST(request: NextRequest) {
   try {
     let durationMinutes: number | null = null
     let bookingName = 'your session'
+    let priceCents = 0
 
     if (data.service_id) {
-      const service = await db.queryOne<{ duration_minutes: number; name: string }>(
-        `SELECT duration_minutes, name
+      const service = await db.queryOne<BookingTarget>(
+        `SELECT duration_minutes, name, price_cents
          FROM services
          WHERE id = $1 AND is_active = true`,
         [data.service_id]
@@ -28,11 +36,12 @@ export async function POST(request: NextRequest) {
       }
       durationMinutes = service.duration_minutes
       bookingName = service.name
+      priceCents = Number(service.price_cents ?? 0)
     }
 
     if (data.package_id) {
-      const pkg = await db.queryOne<{ duration_minutes: number; name: string }>(
-        `SELECT duration_minutes, name
+      const pkg = await db.queryOne<BookingTarget>(
+        `SELECT duration_minutes, name, price_cents
          FROM packages
          WHERE id = $1 AND is_active = true`,
         [data.package_id]
@@ -42,7 +51,10 @@ export async function POST(request: NextRequest) {
       }
       durationMinutes = pkg.duration_minutes
       bookingName = pkg.name
+      priceCents = Number(pkg.price_cents ?? 0)
     }
+
+    const initialStatus = priceCents === 0 ? 'confirmed' : 'pending'
 
     const booking = await db.queryOne<{ id: string }>(
       `INSERT INTO bookings (
@@ -52,7 +64,7 @@ export async function POST(request: NextRequest) {
       ) VALUES (
         $1, $2, $3, $4, $5,
         $6, $7, $8, $9,
-        'pending', 'unpaid'
+        $10, 'unpaid'
       )
       RETURNING id`,
       [
@@ -65,14 +77,38 @@ export async function POST(request: NextRequest) {
         data.booking_time,
         durationMinutes,
         data.notes ?? null,
+        initialStatus,
       ]
     )
+
+    if (priceCents === 0 && booking?.id) {
+      try {
+        const eventId = await createCalendarEvent({
+          summary: `${bookingName} — ${data.client_name}`,
+          description: `Client: ${data.client_name}\nEmail: ${data.client_email}\nPhone: ${data.client_phone ?? ''}\nNotes: ${data.notes ?? ''}`,
+          date: data.booking_date,
+          time: data.booking_time,
+          durationMinutes: Number(durationMinutes ?? 60),
+          attendeeEmail: data.client_email,
+          attendeeName: data.client_name,
+        })
+
+        if (eventId) {
+          await db.query(
+            `UPDATE bookings SET google_calendar_event_id = $1 WHERE id = $2`,
+            [eventId, booking.id]
+          )
+        }
+      } catch (calendarError) {
+        console.error('Failed to create Google Calendar event for public booking', calendarError)
+      }
+    }
 
     const html = `
       <h2>Thank you, ${data.client_name}!</h2>
       <p>We've received your booking request for <strong>${bookingName}</strong>.</p>
       <p>Requested appointment: <strong>${data.booking_date}</strong> at <strong>${data.booking_time}</strong>.</p>
-      <p>We'll confirm within 24 hours.</p>
+      <p>${priceCents === 0 ? "We've confirmed your booking and sent a calendar invite." : "We'll confirm within 24 hours."}</p>
       <p>DFitFactor</p>
     `
 
