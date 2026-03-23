@@ -1,7 +1,7 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, Eye, Plus, SquarePen, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, Copy, Eye, ExternalLink, Plus, SquarePen, X } from 'lucide-react'
 import {
   BILLING_TYPES,
   BOOKING_TYPES,
@@ -145,6 +145,15 @@ function serviceSectionLabel(sectionId: string | null | undefined) {
   return match?.title ?? 'Unassigned'
 }
 
+function getPublicBaseUrl() {
+  return process.env.NEXT_PUBLIC_APP_URL || 'https://forge-css.vercel.app'
+}
+
+function buildBookingLink(slug: string | null | undefined) {
+  if (!slug) return ''
+  return `${getPublicBaseUrl()}/book/${slug}`
+}
+
 export default function ServicesPage() {
   const [stageOrder, setStageOrder] = useState<string[]>(() =>
     PACKAGE_SECTIONS.flatMap((section) => section.stages)
@@ -205,6 +214,21 @@ export default function ServicesPage() {
   }
 
   useEffect(() => { void loadAll() }, [])
+  async function copyBookingLink(slug: string | null | undefined) {
+    const link = buildBookingLink(slug)
+    if (!link) {
+      setError('Missing booking slug for public link')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(link)
+      setError(`Copied booking link: ${link}`)
+      window.setTimeout(() => setError(''), 2500)
+    } catch {
+      setError('Failed to copy booking link')
+    }
+  }
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('forge-package-stage-order') : null
@@ -480,7 +504,7 @@ export default function ServicesPage() {
           ))}
         </div>
 
-        {loading ? <div className="rounded-2xl border border-white/8 bg-[#111111] p-10 text-center text-white/45">Loading…</div> : null}
+        {loading ? <div className="rounded-2xl border border-white/8 bg-[#111111] p-10 text-center text-white/45">Loadingâ€¦</div> : null}
 
         {!loading && tab === 'services' ? (
           <div className="space-y-4">
@@ -514,8 +538,11 @@ export default function ServicesPage() {
                     <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
-                          <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Booking Section</th><th className="px-4 py-3">Public</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-                          <tbody>{sectionServices.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{serviceSectionLabel(typeof service.section === 'string' ? service.section : (serviceSectionOverrides[String(service.id)] ?? (section.id === 'unassigned' ? null : section.id)))}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
+                          <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Booking Section</th><th className="px-4 py-3">Public Link</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                          <tbody>{sectionServices.map(service => {
+                            const bookingLink = buildBookingLink(service.slug)
+                            return <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{serviceSectionLabel(typeof service.section === 'string' ? service.section : (serviceSectionOverrides[String(service.id)] ?? (section.id === 'unassigned' ? null : section.id)))}</td><td className="px-4 py-3"><div className="max-w-[220px] space-y-2"><div className="truncate text-xs text-white/55">{service.is_public ? bookingLink : 'Private service'}</div>{service.is_public ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void copyBookingLink(service.slug)} className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:text-white"><Copy size={12} /> Copy</button><a href={bookingLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:text-white"><ExternalLink size={12} /> Preview</a></div> : null}</div></td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>
+                          })}</tbody>
                         </table>
                       </div>
                     </div>
@@ -647,7 +674,7 @@ export default function ServicesPage() {
                 return (
                   <div key={`${typed.label ?? 'field'}-${index}`} className="rounded-xl border border-white/8 bg-white/3 p-4">
                     <div className="font-medium text-white">{typed.label ?? `Field ${index + 1}`}</div>
-                    <div className="mt-1 text-xs uppercase text-white/35">{typed.type ?? 'text'}{typed.required ? ' · required' : ''}</div>
+                    <div className="mt-1 text-xs uppercase text-white/35">{typed.type ?? 'text'}{typed.required ? ' Â· required' : ''}</div>
                     {typed.options?.length ? <div className="mt-2 text-xs text-white/45">Options: {typed.options.join(', ')}</div> : null}
                   </div>
                 )
@@ -661,3 +688,6 @@ export default function ServicesPage() {
     </div>
   )
 }
+
+
+
