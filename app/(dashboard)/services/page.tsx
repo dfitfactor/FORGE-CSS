@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Eye, Plus, SquarePen, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, Eye, Plus, SquarePen, X } from 'lucide-react'
 import {
   BILLING_TYPES,
   BOOKING_TYPES,
@@ -115,6 +115,60 @@ export default function ServicesPage() {
       ...current,
       [stage]: !current[stage],
     }))
+  }
+
+  async function reorderPackage(stage: string, packageId: string, direction: 'up' | 'down') {
+    const stagePackages = [...(groupedPackages[stage] ?? [])].sort((a, b) => {
+      const aOrder = Number(a.sort_order ?? 0)
+      const bOrder = Number(b.sort_order ?? 0)
+      if (aOrder !== bOrder) return aOrder - bOrder
+      return String(a.name ?? '').localeCompare(String(b.name ?? ''))
+    })
+
+    const currentIndex = stagePackages.findIndex((item) => item.id === packageId)
+    if (currentIndex < 0) return
+
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (swapIndex < 0 || swapIndex >= stagePackages.length) return
+
+    setSaving(true)
+    setError('')
+    try {
+      const normalized = stagePackages.map((item, index) => ({
+        ...item,
+        next_sort_order: index,
+      })) as Array<Package & { next_sort_order: number }>
+      const currentPackage = normalized[currentIndex]
+      const swapPackage = normalized[swapIndex]
+
+      const currentOrder = currentPackage.next_sort_order
+      const swapOrder = swapPackage.next_sort_order
+
+      const [firstRes, secondRes] = await Promise.all([
+        fetch(`/api/packages/${currentPackage.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: swapOrder }),
+        }),
+        fetch(`/api/packages/${swapPackage.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: currentOrder }),
+        }),
+      ])
+
+      if (!firstRes.ok || !secondRes.ok) {
+        const firstData = await firstRes.json().catch(() => ({}))
+        const secondData = await secondRes.json().catch(() => ({}))
+        throw new Error(firstData.error ?? secondData.error ?? 'Failed to reorder package')
+      }
+
+      await loadAll()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reorder package')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function toggleActive(kind: 'services' | 'packages' | 'forms', id: string, is_active: boolean) {
@@ -250,7 +304,7 @@ export default function ServicesPage() {
                   <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedStages[stage] ? 'rotate-180' : ''}`} />
                 </button>
                 {expandedStages[stage] ? (
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map(pkg => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div>)}</div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
                 ) : null}
               </section>
             ))}
