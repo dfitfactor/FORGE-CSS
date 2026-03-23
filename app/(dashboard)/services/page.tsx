@@ -140,6 +140,11 @@ function parsePreviewFields(fields: unknown) {
   return []
 }
 
+function serviceSectionLabel(sectionId: string | null | undefined) {
+  const match = SERVICE_SECTIONS.find((section) => section.id === sectionId)
+  return match?.title ?? 'Unassigned'
+}
+
 export default function ServicesPage() {
   const [stageOrder, setStageOrder] = useState<string[]>(() =>
     PACKAGE_SECTIONS.flatMap((section) => section.stages)
@@ -509,8 +514,8 @@ export default function ServicesPage() {
                     <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
-                          <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Public</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-                          <tbody>{sectionServices.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{stageLabel(service.forge_stage)}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
+                          <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Booking Section</th><th className="px-4 py-3">Public</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                          <tbody>{sectionServices.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{serviceSectionLabel(typeof service.section === 'string' ? service.section : (serviceSectionOverrides[String(service.id)] ?? (section.id === 'unassigned' ? null : section.id)))}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
                         </table>
                       </div>
                     </div>
