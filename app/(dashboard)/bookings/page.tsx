@@ -19,6 +19,7 @@ type Booking = {
   notes: string | null
   service_name: string | null
   package_name: string | null
+  google_calendar_event_id?: string | null
 }
 
 const STATUS_OPTIONS = ['all', 'pending', 'confirmed', 'completed', 'cancelled', 'no_show'] as const
@@ -95,10 +96,124 @@ function StatCard({ label, value }: { label: string; value: number }) {
   )
 }
 
+function DetailDrawer({
+  booking,
+  open,
+  updating,
+  form,
+  onClose,
+  onChange,
+  onSave,
+  onCopy,
+}: {
+  booking: Booking | null
+  open: boolean
+  updating: boolean
+  form: { booking_date: string; booking_time: string; payment_status: Booking['payment_status']; notes: string }
+  onClose: () => void
+  onChange: (field: 'booking_date' | 'booking_time' | 'payment_status' | 'notes', value: string) => void
+  onSave: () => void
+  onCopy: (value: string, label: string) => void
+}) {
+  if (!open || !booking) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
+      <button className="flex-1" onClick={onClose} aria-label="Close booking details" />
+      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-[#111111] p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-white">Booking Details</h2>
+            <p className="mt-2 text-lg font-semibold text-white">{booking.client_name}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="text-xs uppercase tracking-widest text-white/35">Session</div>
+            <div className="mt-2 text-base font-medium text-white">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
+            <div className="mt-2 text-sm text-white/45">{formatDurationLabel(booking.duration_minutes)}</div>
+            {booking.google_calendar_event_id ? (
+              <div className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300">
+                Calendar linked
+              </div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-widest text-white/35">Contact</div>
+              <div className="mt-3 space-y-3 text-sm text-white/70">
+                <div>
+                  <div className="text-white">{booking.client_email}</div>
+                  <button onClick={() => onCopy(booking.client_email, 'Email')} className="mt-1 text-xs text-[#D4AF37] hover:text-white">Copy email</button>
+                </div>
+                <div>
+                  <div className="text-white">{booking.client_phone || 'No phone on file'}</div>
+                  {booking.client_phone ? <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 text-xs text-[#D4AF37] hover:text-white">Copy phone</button> : null}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-widest text-white/35">Status</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>{booking.status.replace('_', ' ')}</span>
+                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>{booking.payment_status}</span>
+              </div>
+              <div className="mt-3 text-sm text-white/45">
+                {booking.attended === null ? 'Attendance not set' : booking.attended ? 'Marked attended' : 'Marked not attended'}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="text-xs uppercase tracking-widest text-white/35">Reschedule & Notes</div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="forge-label">Booking Date</label>
+                <input type="date" value={form.booking_date} onChange={(event) => onChange('booking_date', event.target.value)} className="forge-input" />
+              </div>
+              <div>
+                <label className="forge-label">Booking Time</label>
+                <input type="time" value={form.booking_time} onChange={(event) => onChange('booking_time', event.target.value)} className="forge-input" />
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="forge-label">Payment Status</label>
+              <select value={form.payment_status} onChange={(event) => onChange('payment_status', event.target.value)} className="forge-input">
+                <option value="unpaid">Unpaid</option>
+                <option value="paid">Paid</option>
+                <option value="waived">Waived</option>
+              </select>
+            </div>
+            <div className="mt-4">
+              <label className="forge-label">Notes</label>
+              <textarea value={form.notes} onChange={(event) => onChange('notes', event.target.value)} className="forge-input min-h-[120px]" />
+            </div>
+            <button onClick={onSave} disabled={updating} className="forge-btn-gold mt-5 w-full disabled:opacity-50">
+              {updating ? 'Saving...' : 'Save Booking Updates'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState('')
+  const [detailBooking, setDetailBooking] = useState<Booking | null>(null)
+  const [detailForm, setDetailForm] = useState({
+    booking_date: '',
+    booking_time: '',
+    payment_status: 'unpaid' as Booking['payment_status'],
+    notes: '',
+  })
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]>('all')
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
@@ -123,6 +238,16 @@ export default function BookingsPage() {
   useEffect(() => {
     void loadBookings()
   }, [])
+
+  function openBookingDetails(booking: Booking) {
+    setDetailBooking(booking)
+    setDetailForm({
+      booking_date: booking.booking_date,
+      booking_time: booking.booking_time,
+      payment_status: booking.payment_status,
+      notes: booking.notes ?? '',
+    })
+  }
 
   async function updateBookingStatus(bookingId: string, status: Booking['status']) {
     setUpdatingId(bookingId)
@@ -159,6 +284,50 @@ export default function BookingsPage() {
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
       setError('Unable to copy booking page link')
+    }
+  }
+
+  async function copyValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setSuccess(`${label} copied.`)
+    } catch {
+      setError(`Unable to copy ${label.toLowerCase()}`)
+    }
+  }
+
+  async function saveBookingDetails() {
+    if (!detailBooking) return
+    setUpdatingId(detailBooking.id)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch(`/api/bookings/${detailBooking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_date: detailForm.booking_date,
+          booking_time: detailForm.booking_time,
+          payment_status: detailForm.payment_status,
+          notes: detailForm.notes.trim() || null,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update booking details')
+
+      await loadBookings()
+      setDetailBooking((current) => current ? {
+        ...current,
+        booking_date: detailForm.booking_date,
+        booking_time: detailForm.booking_time,
+        payment_status: detailForm.payment_status,
+        notes: detailForm.notes.trim() || null,
+      } : null)
+      setSuccess('Booking details updated.')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update booking details')
+    } finally {
+      setUpdatingId('')
     }
   }
 
@@ -287,35 +456,43 @@ export default function BookingsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <details className="group relative inline-block text-left">
-                          <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white">
-                            Actions
-                            <ChevronDown size={14} className="transition group-open:rotate-180" />
-                          </summary>
-                          <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-white/10 bg-[#0d0d0d] p-2 shadow-2xl">
-                            {availableActions(booking.status).length > 0 ? (
-                              availableActions(booking.status).map((action) => (
-                                <button
-                                  key={action.value}
-                                  onClick={() => void updateBookingStatus(booking.id, action.value)}
-                                  disabled={updatingId === booking.id}
-                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
-                                >
-                                  {updatingId === booking.id ? (
-                                    <Loader2 size={14} className="animate-spin" />
-                                  ) : action.value === 'completed' ? (
-                                    <CheckCircle2 size={14} />
-                                  ) : (
-                                    <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />
-                                  )}
-                                  {updatingId === booking.id ? 'Updating...' : action.label}
-                                </button>
-                              ))
-                            ) : (
-                              <div className="px-3 py-2 text-xs text-white/35">No actions available</div>
-                            )}
-                          </div>
-                        </details>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => openBookingDetails(booking)}
+                            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white"
+                          >
+                            View
+                          </button>
+                          <details className="group relative inline-block text-left">
+                            <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white">
+                              Actions
+                              <ChevronDown size={14} className="transition group-open:rotate-180" />
+                            </summary>
+                            <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-white/10 bg-[#0d0d0d] p-2 shadow-2xl">
+                              {availableActions(booking.status).length > 0 ? (
+                                availableActions(booking.status).map((action) => (
+                                  <button
+                                    key={action.value}
+                                    onClick={() => void updateBookingStatus(booking.id, action.value)}
+                                    disabled={updatingId === booking.id}
+                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
+                                  >
+                                    {updatingId === booking.id ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : action.value === 'completed' ? (
+                                      <CheckCircle2 size={14} />
+                                    ) : (
+                                      <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />
+                                    )}
+                                    {updatingId === booking.id ? 'Updating...' : action.label}
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-2 text-xs text-white/35">No actions available</div>
+                              )}
+                            </div>
+                          </details>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -325,6 +502,17 @@ export default function BookingsPage() {
           </div>
         )}
       </div>
+
+      <DetailDrawer
+        booking={detailBooking}
+        open={Boolean(detailBooking)}
+        updating={updatingId === detailBooking?.id}
+        form={detailForm}
+        onClose={() => setDetailBooking(null)}
+        onChange={(field, value) => setDetailForm((current) => ({ ...current, [field]: value }))}
+        onSave={() => void saveBookingDetails()}
+        onCopy={(value, label) => void copyValue(value, label)}
+      />
     </div>
   )
 }

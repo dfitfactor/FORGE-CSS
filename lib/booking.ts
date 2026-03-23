@@ -54,6 +54,8 @@ export const bookingPatchSchema = z.object({
   status: z.enum(BOOKING_STATUS_OPTIONS).optional(),
   attended: z.boolean().optional(),
   payment_status: z.enum(PAYMENT_STATUS_OPTIONS).optional(),
+  booking_date: z.string().trim().min(1).optional(),
+  booking_time: z.string().trim().min(1).optional(),
   notes: z.string().trim().max(5000).optional().nullable(),
 })
 
