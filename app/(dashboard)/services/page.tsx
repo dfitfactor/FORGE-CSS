@@ -461,7 +461,7 @@ export default function ServicesPage() {
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Services</h1>
+          <h1 className="text-2xl font-semibold text-[#D4AF37]">Services</h1>
           <p className="mt-1 text-sm text-white/40">Bookable services, packages, and form templates.</p>
         </div>
 
@@ -497,7 +497,7 @@ export default function ServicesPage() {
                   >
                     <div>
                       <div className="flex items-center gap-3">
-                        <h2 className="text-sm font-semibold text-white">{section.title}</h2>
+                        <h2 className="text-sm font-semibold text-[#D4AF37]">{section.title}</h2>
                         <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{sectionServices.length}</span>
                       </div>
                       <p className="mt-1 text-sm text-white/40">{section.description}</p>
@@ -533,7 +533,7 @@ export default function ServicesPage() {
               return (
                 <section key={section.id} className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#111111] px-5 py-4">
-                    <h2 className="text-base font-semibold text-white">{section.title}</h2>
+                    <h2 className="text-base font-semibold text-[#D4AF37]">{section.title}</h2>
                     <p className="mt-1 text-sm text-white/40">{section.description}</p>
                   </div>
                   {orderedStages.map((stage, sectionIndex) => (
