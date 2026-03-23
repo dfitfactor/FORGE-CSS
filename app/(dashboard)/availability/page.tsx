@@ -53,6 +53,13 @@ type ActiveSlot = {
   slotMinutes: number
 } | null
 
+type CalendarFilters = {
+  available: boolean
+  blocked: boolean
+  pending: boolean
+  confirmed: boolean
+}
+
 function BookingDetailDrawer({
   booking,
   open,
@@ -197,6 +204,12 @@ export default function AvailabilityPage() {
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>(null)
   const [editingBlockedRuleId, setEditingBlockedRuleId] = useState<string | null>(null)
   const [selectedBooking, setSelectedBooking] = useState<CoachBooking | null>(null)
+  const [calendarFilters, setCalendarFilters] = useState<CalendarFilters>({
+    available: true,
+    blocked: true,
+    pending: true,
+    confirmed: true,
+  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -459,6 +472,13 @@ export default function AvailabilityPage() {
     })
   }
 
+  function toggleCalendarFilter(filter: keyof CalendarFilters) {
+    setCalendarFilters((current) => ({
+      ...current,
+      [filter]: !current[filter],
+    }))
+  }
+
   async function handleCalendarCellClick(dayIndex: number, slotMinutes: number) {
     if (saving || slotHasBooking(dayIndex, slotMinutes)) return
 
@@ -594,10 +614,10 @@ export default function AvailabilityPage() {
                     <p className="mt-1 text-sm text-white/40">Preview this week's availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-1 text-[#D4AF37]">Available</span>
-                    <span className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-red-300">Blocked</span>
-                    <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-white/75">Pending / Requested</span>
-                    <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-emerald-300">Confirmed</span>
+                    <button type="button" onClick={() => toggleCalendarFilter('available')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.available ? 'border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#D4AF37]' : 'border-white/10 bg-white/5 text-white/35'}`}>Available</button>
+                    <button type="button" onClick={() => toggleCalendarFilter('blocked')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.blocked ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Blocked</button>
+                    <button type="button" onClick={() => toggleCalendarFilter('pending')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.pending ? 'border-white/20 bg-white/10 text-white/75' : 'border-white/10 bg-white/5 text-white/35'}`}>Pending / Requested</button>
+                    <button type="button" onClick={() => toggleCalendarFilter('confirmed')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.confirmed ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Confirmed</button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -620,12 +640,15 @@ export default function AvailabilityPage() {
                         <div className="px-3 py-3 text-xs text-white/35">{formatCalendarTime(slotMinutes)}</div>
                         {days.map((day, dayIndex) => {
                           const active = isSlotAvailable(day, dayIndex, slotMinutes)
-                          const slotBookings = bookingsStartingAt(dayIndex, slotMinutes)
+                          const slotBookings = bookingsStartingAt(dayIndex, slotMinutes).filter((booking) => (
+                            booking.status === 'confirmed' ? calendarFilters.confirmed : calendarFilters.pending
+                          ))
                           const booked = slotHasBooking(dayIndex, slotMinutes)
                           const blockedStartingRules = blockedRulesStartingAt(dayIndex, slotMinutes)
-                          const blocked = isSlotBlocked(dayIndex, slotMinutes)
+                          const blocked = calendarFilters.blocked && isSlotBlocked(dayIndex, slotMinutes)
                           const isSelected = activeSlot?.dayIndex === dayIndex && activeSlot?.slotMinutes === slotMinutes
-                          const isClickable = active || blockedStartingRules.length > 0
+                          const filteredBlockedStartingRules = calendarFilters.blocked ? blockedStartingRules : []
+                          const isClickable = (calendarFilters.available && active) || filteredBlockedStartingRules.length > 0
                           return (
                             <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-white/5 px-2 py-2">
                               <div
@@ -645,16 +668,16 @@ export default function AvailabilityPage() {
                                       )
                                     })}
                                   </div>
-                                ) : blockedStartingRules.length > 0 ? (
+                                ) : filteredBlockedStartingRules.length > 0 ? (
                                   <button type="button" disabled={saving} onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)} className="block w-full space-y-1 p-1.5 text-left">
-                                    {blockedStartingRules.map((rule) => (
+                                    {filteredBlockedStartingRules.map((rule) => (
                                       <div key={rule.id} className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200">
                                         <div className="font-medium">{rule.settings_key || 'Blocked'}</div>
                                         <div className="text-[10px] uppercase tracking-wide opacity-80">{rule.start_time} - {rule.end_time}</div>
                                       </div>
                                     ))}
                                   </button>
-                                ) : active ? (
+                                ) : calendarFilters.available && active ? (
                                   <button type="button" disabled={saving} onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)} className="flex h-full w-full flex-col items-center justify-center px-2 py-2 text-center hover:bg-[#D4AF37]/20">
                                     <div className="font-medium">Available</div>
                                     <div className="text-[10px] uppercase tracking-wide opacity-70">Click to block</div>
