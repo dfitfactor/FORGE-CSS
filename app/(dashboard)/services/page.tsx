@@ -19,12 +19,76 @@ type Service = Record<string, any>
 type Package = Record<string, any>
 type FormTemplate = Record<string, any>
 type Tab = 'services' | 'packages' | 'forms'
+type ServiceSection = {
+  id: string
+  title: string
+  description: string
+  serviceNames: string[]
+}
 type PackageSection = {
   id: 'signature' | 'additional'
   title: string
   description: string
   stages: string[]
 }
+
+const SERVICE_SECTIONS: ServiceSection[] = [
+  {
+    id: 'assessments',
+    title: 'Assessments & Intake',
+    description: 'Baseline evaluations, insight sessions, and onboarding touchpoints.',
+    serviceNames: [
+      'The Starting Point Assessment',
+      'F.I.T. Index Insight Session',
+      'DFit PractitionerBridge Report',
+    ],
+  },
+  {
+    id: 'training',
+    title: 'Training & Coaching Sessions',
+    description: 'Bookable training delivery sessions, including private training, small-group/coached session types, makeups, concierge, youth, and training add-ons.',
+    serviceNames: [
+      '1:1 PT (30 mins)',
+      '1:1 PT Makeup',
+      'Flex Single Session',
+      'Student/Athlete',
+      'EmpowerVIP Concierge PT',
+      'SP Coaching (30mins)',
+      'SCSP Coaching (30mins)',
+      'Session Extension (15 min add-on)',
+    ],
+  },
+  {
+    id: 'progress',
+    title: 'Progress & Accountability',
+    description: 'Check-ins, habit support, and progress-based coaching touchpoints that are not primary training sessions.',
+    serviceNames: [
+      'DFit ProgressPulse Coaching Check-In',
+      'HabitForge Habit Coaching',
+      'SP Coaching Waitlist',
+    ],
+  },
+  {
+    id: 'nutrition',
+    title: 'Nutrition Services',
+    description: 'Nutrition-focused sessions for planning, coaching, and targeted support.',
+    serviceNames: [
+      'DFit FuelMap Mini',
+      'FuelMap Coaching Session',
+    ],
+  },
+  {
+    id: 'wellness',
+    title: 'Wellness & Strategy Sessions',
+    description: 'Lifestyle, supplement, and wellness support sessions designed to deepen client alignment and implementation.',
+    serviceNames: [
+      'DFit Lifestyle Reset Session',
+      'DFit Supplement Strategy Boost',
+      'EmpowerCheck Wellness Alignment (Add-On)',
+      'EmpowerCheck Wellness Alignment (Included)',
+    ],
+  },
+]
 
 const PACKAGE_SECTIONS: PackageSection[] = [
   {
@@ -78,6 +142,12 @@ function parsePreviewFields(fields: unknown) {
 export default function ServicesPage() {
   const [stageOrder, setStageOrder] = useState<string[]>(() =>
     PACKAGE_SECTIONS.flatMap((section) => section.stages)
+  )
+  const [expandedServiceSections, setExpandedServiceSections] = useState<Record<string, boolean>>(() =>
+    SERVICE_SECTIONS.reduce<Record<string, boolean>>((acc, section, index) => ({
+      ...acc,
+      [section.id]: index === 0,
+    }), { unassigned: true })
   )
   const [tab, setTab] = useState<Tab>('services')
   const [loading, setLoading] = useState(true)
@@ -152,11 +222,60 @@ export default function ServicesPage() {
     () => FORGE_STAGE_OPTIONS.reduce<Record<string, Package[]>>((acc, stage) => ({ ...acc, [stage]: packages.filter(item => item.forge_stage === stage) }), {}),
     [packages]
   )
+  const groupedServices = useMemo(() => {
+    const sectionByName = new Map<string, string>()
+    const orderByName = new Map<string, number>()
+
+    SERVICE_SECTIONS.forEach((section) => {
+      section.serviceNames.forEach((name, index) => {
+        sectionByName.set(name, section.id)
+        orderByName.set(name, index)
+      })
+    })
+
+    const initial = SERVICE_SECTIONS.reduce<Record<string, Service[]>>((acc, section) => {
+      acc[section.id] = []
+      return acc
+    }, { unassigned: [] as Service[] })
+
+    for (const service of services) {
+      const sectionId = sectionByName.get(String(service.name)) ?? 'unassigned'
+      initial[sectionId] = [...(initial[sectionId] ?? []), service]
+    }
+
+    for (const section of SERVICE_SECTIONS) {
+      initial[section.id] = [...(initial[section.id] ?? [])].sort((a, b) => {
+        const aOrder = orderByName.get(String(a.name)) ?? Number.MAX_SAFE_INTEGER
+        const bOrder = orderByName.get(String(b.name)) ?? Number.MAX_SAFE_INTEGER
+        if (aOrder !== bOrder) return aOrder - bOrder
+        const aSort = Number(a.sort_order ?? 0)
+        const bSort = Number(b.sort_order ?? 0)
+        if (aSort !== bSort) return aSort - bSort
+        return String(a.name ?? '').localeCompare(String(b.name ?? ''))
+      })
+    }
+
+    initial.unassigned = [...(initial.unassigned ?? [])].sort((a, b) => {
+      const aSort = Number(a.sort_order ?? 0)
+      const bSort = Number(b.sort_order ?? 0)
+      if (aSort !== bSort) return aSort - bSort
+      return String(a.name ?? '').localeCompare(String(b.name ?? ''))
+    })
+
+    return initial
+  }, [services])
 
   function toggleStage(stage: string) {
     setExpandedStages((current) => ({
       ...current,
       [stage]: !current[stage],
+    }))
+  }
+
+  function toggleServiceSection(sectionId: string) {
+    setExpandedServiceSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
     }))
   }
 
@@ -327,14 +446,40 @@ export default function ServicesPage() {
                 <Plus size={15} /> Add Service
               </button>
             </div>
-            <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Public</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-                  <tbody>{services.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{stageLabel(service.forge_stage)}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
-                </table>
-              </div>
-            </div>
+            {[...SERVICE_SECTIONS, { id: 'unassigned', title: 'Unassigned Services', description: 'New or uncategorized services that do not yet map to a booking section.', serviceNames: [] }].map((section) => {
+              const sectionServices = groupedServices[section.id] ?? []
+              if (section.id === 'unassigned' && sectionServices.length === 0) return null
+
+              return (
+                <section key={section.id} className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleServiceSection(section.id)}
+                    className="flex w-full items-center justify-between rounded-2xl border border-white/8 bg-[#111111] px-5 py-4 text-left transition hover:border-[#D4AF37]/30 hover:bg-[#141414]"
+                  >
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-sm font-semibold text-white">{section.title}</h2>
+                        <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{sectionServices.length}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-white/40">{section.description}</p>
+                    </div>
+                    <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedServiceSections[section.id] ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {expandedServiceSections[section.id] ? (
+                    <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Public</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                          <tbody>{sectionServices.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{stageLabel(service.forge_stage)}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              )
+            })}
           </div>
         ) : null}
 
