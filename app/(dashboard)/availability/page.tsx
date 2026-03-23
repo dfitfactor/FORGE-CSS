@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Clock3, Loader2, Plus, Trash2 } from 'lucide-react'
+import { Clock3, Copy, Loader2, Plus, Trash2, X } from 'lucide-react'
 
 type AvailabilityRule = {
   id: string
@@ -21,12 +21,17 @@ type AvailabilityRule = {
 type CoachBooking = {
   id: string
   client_name: string
+  client_email?: string | null
+  client_phone?: string | null
   booking_date: string
   booking_time: string
   duration_minutes: number | null
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  payment_status?: 'unpaid' | 'paid' | 'waived'
+  notes?: string | null
   service_name: string | null
   package_name: string | null
+  google_calendar_event_id?: string | null
 }
 
 type DayConfig = {
@@ -47,6 +52,77 @@ type ActiveSlot = {
   dayIndex: number
   slotMinutes: number
 } | null
+
+function BookingDetailDrawer({
+  booking,
+  open,
+  onClose,
+  onCopy,
+}: {
+  booking: CoachBooking | null
+  open: boolean
+  onClose: () => void
+  onCopy: (value: string, label: string) => void
+}) {
+  if (!open || !booking) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
+      <button className="flex-1" onClick={onClose} aria-label="Close booking details" />
+      <div className="h-full w-full max-w-lg overflow-y-auto border-l border-white/10 bg-[#111111] p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-white">Booking Details</h2>
+            <p className="mt-2 text-lg font-semibold text-white">{booking.client_name}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="text-xs uppercase tracking-widest text-white/35">Session</div>
+            <div className="mt-2 text-base font-medium text-white">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
+            <div className="mt-2 text-sm text-white/45">{booking.booking_date} at {booking.booking_time}</div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="text-xs uppercase tracking-widest text-white/35">Contact</div>
+            <div className="mt-3 space-y-3 text-sm text-white/70">
+              <div>
+                <div className="text-white">{booking.client_email || 'No email on file'}</div>
+                {booking.client_email ? (
+                  <button onClick={() => onCopy(booking.client_email ?? '', 'Email')} className="mt-1 inline-flex items-center gap-1 text-xs text-[#D4AF37] hover:text-white">
+                    <Copy size={12} /> Copy email
+                  </button>
+                ) : null}
+              </div>
+              <div>
+                <div className="text-white">{booking.client_phone || 'No phone on file'}</div>
+                {booking.client_phone ? (
+                  <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 inline-flex items-center gap-1 text-xs text-[#D4AF37] hover:text-white">
+                    <Copy size={12} /> Copy phone
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="text-xs uppercase tracking-widest text-white/35">Status</div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-white/70">{booking.status.replace('_', ' ')}</span>
+              {booking.payment_status ? <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-white/70">{booking.payment_status}</span> : null}
+              {booking.google_calendar_event_id ? <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">Calendar linked</span> : null}
+            </div>
+            {booking.notes ? <p className="mt-4 whitespace-pre-wrap text-sm text-white/55">{booking.notes}</p> : <p className="mt-4 text-sm text-white/35">No booking notes.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DEFAULT_DAY: DayConfig = { enabled: false, start_time: '09:00', end_time: '17:00', slot_duration_minutes: 60 }
@@ -119,6 +195,8 @@ export default function AvailabilityPage() {
   const [blackoutDate, setBlackoutDate] = useState('')
   const [blockedForm, setBlockedForm] = useState<BlockedFormState>(INITIAL_BLOCKED_FORM)
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>(null)
+  const [editingBlockedRuleId, setEditingBlockedRuleId] = useState<string | null>(null)
+  const [selectedBooking, setSelectedBooking] = useState<CoachBooking | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -270,8 +348,8 @@ export default function AvailabilityPage() {
     setError('')
     setSuccess('')
     try {
-      const res = await fetch('/api/availability', {
-        method: 'POST',
+      const res = await fetch(editingBlockedRuleId ? `/api/availability/${editingBlockedRuleId}` : '/api/availability', {
+        method: editingBlockedRuleId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rule_type: 'blocked',
@@ -283,13 +361,14 @@ export default function AvailabilityPage() {
         }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to add blocked time')
+      if (!res.ok) throw new Error(data.error ?? `Failed to ${editingBlockedRuleId ? 'update' : 'add'} blocked time`)
       setBlockedForm(INITIAL_BLOCKED_FORM)
       setActiveSlot(null)
+      setEditingBlockedRuleId(null)
       await loadPageData()
-      setSuccess('Blocked time added')
+      setSuccess(editingBlockedRuleId ? 'Blocked time updated' : 'Blocked time added')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to add blocked time')
+      setError(err instanceof Error ? err.message : `Failed to ${editingBlockedRuleId ? 'update' : 'add'} blocked time`)
     } finally {
       setSaving(false)
     }
@@ -304,6 +383,10 @@ export default function AvailabilityPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to remove rule')
       setActiveSlot(null)
+      if (editingBlockedRuleId === ruleId) {
+        setEditingBlockedRuleId(null)
+        setBlockedForm(INITIAL_BLOCKED_FORM)
+      }
       await loadPageData()
       setSuccess('Rule removed')
     } catch (err: unknown) {
@@ -381,7 +464,16 @@ export default function AvailabilityPage() {
 
     const startingBlockedRules = blockedRulesStartingAt(dayIndex, slotMinutes)
     if (startingBlockedRules.length > 0) {
-      await removeRule(startingBlockedRules[0].id)
+      const rule = startingBlockedRules[0]
+      setEditingBlockedRuleId(rule.id)
+      setActiveSlot({ dayIndex, slotMinutes })
+      setBlockedForm({
+        day_of_week: Number(rule.day_of_week),
+        start_time: rule.start_time ?? '12:00',
+        end_time: rule.end_time ?? '13:00',
+        label: rule.settings_key ?? 'Blocked',
+      })
+      setSuccess('Blocked slot loaded for editing')
       return
     }
 
@@ -396,7 +488,17 @@ export default function AvailabilityPage() {
 
     setActiveSlot({ dayIndex, slotMinutes })
     setBlockedForm(nextBlockedForm)
+    setEditingBlockedRuleId(null)
     await addBlockedTime(nextBlockedForm)
+  }
+
+  async function copyValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setSuccess(`${label} copied.`)
+    } catch {
+      setError(`Unable to copy ${label.toLowerCase()}`)
+    }
   }
 
   return (
@@ -526,11 +628,8 @@ export default function AvailabilityPage() {
                           const isClickable = active || blockedStartingRules.length > 0
                           return (
                             <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-white/5 px-2 py-2">
-                              <button
-                                type="button"
-                                disabled={!isClickable || booked || saving}
-                                onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)}
-                                className={`min-h-[44px] w-full rounded-lg border text-left text-xs transition ${isClickable && !booked ? 'cursor-pointer' : 'cursor-default'} ${isSelected ? 'ring-2 ring-[#D4AF37]/60 ring-offset-0' : ''} ${slotBookings.length > 0 ? 'border-white/15 bg-white/5 text-white' : blocked ? 'border-red-500/30 bg-red-500/10 text-red-300' : booked ? 'border-white/10 bg-white/[0.04] text-white/50' : active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37] hover:bg-[#D4AF37]/20' : 'border-transparent bg-white/[0.02] text-white/10'}`}
+                              <div
+                                className={`min-h-[44px] rounded-lg border text-left text-xs transition ${isSelected ? 'ring-2 ring-[#D4AF37]/60 ring-offset-0' : ''} ${slotBookings.length > 0 ? 'border-white/15 bg-white/5 text-white' : blocked ? 'border-red-500/30 bg-red-500/10 text-red-300' : booked ? 'border-white/10 bg-white/[0.04] text-white/50' : active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-transparent bg-white/[0.02] text-white/10'}`}
                               >
                                 {slotBookings.length > 0 ? (
                                   <div className="space-y-1 p-1.5">
@@ -539,29 +638,29 @@ export default function AvailabilityPage() {
                                         ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
                                         : 'border-white/20 bg-white/10 text-white/75'
                                       return (
-                                        <div key={booking.id} className={`rounded-md border px-2 py-1 ${statusClass}`}>
+                                        <button key={booking.id} type="button" onClick={() => setSelectedBooking(booking)} className={`block w-full rounded-md border px-2 py-1 text-left ${statusClass}`}>
                                           <div className="font-medium">{booking.client_name}</div>
                                           <div className="text-[10px] uppercase tracking-wide opacity-80">{booking.status === 'pending' ? 'Requested' : 'Confirmed'} · {booking.service_name ?? booking.package_name ?? 'Booking'}</div>
-                                        </div>
+                                        </button>
                                       )
                                     })}
                                   </div>
                                 ) : blockedStartingRules.length > 0 ? (
-                                  <div className="space-y-1 p-1.5">
+                                  <button type="button" disabled={saving} onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)} className="block w-full space-y-1 p-1.5 text-left">
                                     {blockedStartingRules.map((rule) => (
                                       <div key={rule.id} className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200">
                                         <div className="font-medium">{rule.settings_key || 'Blocked'}</div>
                                         <div className="text-[10px] uppercase tracking-wide opacity-80">{rule.start_time} - {rule.end_time}</div>
                                       </div>
                                     ))}
-                                  </div>
+                                  </button>
                                 ) : active ? (
-                                  <div className="flex h-full flex-col items-center justify-center px-2 py-2 text-center">
+                                  <button type="button" disabled={saving} onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)} className="flex h-full w-full flex-col items-center justify-center px-2 py-2 text-center hover:bg-[#D4AF37]/20">
                                     <div className="font-medium">Available</div>
                                     <div className="text-[10px] uppercase tracking-wide opacity-70">Click to block</div>
-                                  </div>
+                                  </button>
                                 ) : null}
-                              </button>
+                              </div>
                             </div>
                           )
                         })}
@@ -578,6 +677,11 @@ export default function AvailabilityPage() {
                   <h2 className="text-lg font-semibold text-white">Blocked Times</h2>
                   <p className="text-sm text-white/40">Add recurring blocked windows for lunch, meetings, admin time, or anything else that changes by day.</p>
                 </div>
+                {editingBlockedRuleId ? (
+                  <button onClick={() => { setEditingBlockedRuleId(null); setBlockedForm(INITIAL_BLOCKED_FORM); setActiveSlot(null) }} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white">
+                    Cancel Edit
+                  </button>
+                ) : null}
               </div>
 
               <div className="mt-4 grid gap-4 md:grid-cols-[160px_1fr_1fr_1.2fr_auto]">
@@ -603,7 +707,7 @@ export default function AvailabilityPage() {
                 </div>
                 <button onClick={() => void addBlockedTime()} disabled={saving} className="forge-btn-gold mt-6 inline-flex items-center gap-2 disabled:opacity-50">
                   <Plus size={15} />
-                  Add Block
+                  {editingBlockedRuleId ? 'Update Block' : 'Add Block'}
                 </button>
               </div>
 
@@ -697,6 +801,13 @@ export default function AvailabilityPage() {
           </>
         )}
       </div>
+
+      <BookingDetailDrawer
+        booking={selectedBooking}
+        open={Boolean(selectedBooking)}
+        onClose={() => setSelectedBooking(null)}
+        onCopy={(value, label) => void copyValue(value, label)}
+      />
     </div>
   )
 }
