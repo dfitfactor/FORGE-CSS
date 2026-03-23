@@ -1,9 +1,9 @@
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { redirect } from 'next/navigation'
-import { 
-  Users, TrendingUp, AlertTriangle, CheckCircle, 
-  Zap, ArrowUp, ArrowDown, Minus 
+import {
+  Users, TrendingUp, AlertTriangle, CheckCircle,
+  Minus
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -102,25 +102,25 @@ async function getDashboardStats(coachId: string) {
           c.status,
           c.primary_goal,
           c.current_stage,
-          CAST(bs.bar_score AS FLOAT) AS bar_score,
-          CAST(bs.dbi_score AS FLOAT) AS dbi_score,
-          CAST(bs.bli_score AS FLOAT) AS bli_score,
+          CAST(bs.bar AS FLOAT) AS bar_score,
+          CAST(bs.dbi AS FLOAT) AS dbi_score,
+          CAST(bs.bli AS FLOAT) AS bli_score,
           bs.snapshot_updated_at,
           COALESCE(bs.needs_attention, false) AS needs_attention
         FROM clients c
         LEFT JOIN LATERAL (
           SELECT
-            updated_at AS snapshot_updated_at,
-            bar_score,
-            dbi_score,
-            bli_score,
+            created_at::text AS snapshot_updated_at,
+            bar,
+            dbi,
+            bli,
             (
               snapshot_date >= CURRENT_DATE - INTERVAL '7 days'
-              AND (dbi_score > 50 OR bar_score < 50)
+              AND (dbi > 50 OR bar < 50)
             ) AS needs_attention
           FROM behavioral_snapshots
           WHERE client_id = c.id
-          ORDER BY snapshot_date DESC, updated_at DESC
+          ORDER BY snapshot_date DESC, created_at DESC
           LIMIT 1
         ) bs ON true
         WHERE c.coach_id = $1
@@ -137,31 +137,31 @@ async function getDashboardStats(coachId: string) {
         dbi: number
         snapshot_date: string
       }>(`
-        SELECT 
+        SELECT
           c.id as client_id,
           c.full_name as client_name,
-          CASE 
-            WHEN bs.dbi_score >= 70 THEN 'Critical DBI'
-            WHEN bs.bar_score < 35 THEN 'Low BAR'
-            WHEN bs.dbi_score >= 50 THEN 'Elevated DBI'
+          CASE
+            WHEN bs.dbi >= 70 THEN 'Critical DBI'
+            WHEN bs.bar < 35 THEN 'Low BAR'
+            WHEN bs.dbi >= 50 THEN 'Elevated DBI'
             ELSE 'Declining BAR'
           END as alert_type,
-          CASE 
-            WHEN bs.dbi_score >= 70 OR bs.bar_score < 35 THEN 'critical'
+          CASE
+            WHEN bs.dbi >= 70 OR bs.bar < 35 THEN 'critical'
             ELSE 'warning'
           END as severity,
-          bs.bar_score AS bar,
-          bs.dbi_score AS dbi,
-          bs.snapshot_date::text
+          CAST(bs.bar AS FLOAT) AS bar,
+          CAST(bs.dbi AS FLOAT) AS dbi,
+          bs.snapshot_date::text AS snapshot_date
         FROM clients c
         JOIN behavioral_snapshots bs ON bs.client_id = c.id
         WHERE c.coach_id = $1
           AND bs.snapshot_date = (
             SELECT MAX(snapshot_date) FROM behavioral_snapshots WHERE client_id = c.id
           )
-          AND (bs.dbi_score >= 50 OR bs.bar_score < 50)
+          AND (bs.dbi >= 50 OR bs.bar < 50)
           AND c.status = 'active'
-        ORDER BY bs.dbi_score DESC, bs.bar_score ASC
+        ORDER BY bs.dbi DESC, bs.bar ASC
         LIMIT 5
       `, [coachId]),
 
@@ -229,7 +229,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-8 space-y-8 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-forge-text-primary">
@@ -245,7 +244,6 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Clients"
@@ -275,7 +273,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Alerts Panel */}
         <div className="forge-card space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="forge-section-title flex items-center gap-2">
@@ -284,7 +281,7 @@ export default async function DashboardPage() {
             </h2>
             <span className="text-xs text-forge-text-muted">{alerts.length} active</span>
           </div>
-          
+
           {alerts.length === 0 ? (
             <div className="text-center py-6 text-forge-text-muted text-sm">
               <CheckCircle className="w-8 h-8 mx-auto mb-2 text-state-stable opacity-50" />
@@ -327,7 +324,6 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Recent Activity */}
         <div className="forge-card space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="forge-section-title flex items-center gap-2">
@@ -335,7 +331,7 @@ export default async function DashboardPage() {
               Recent Activity
             </h2>
           </div>
-          
+
           {recentActivity.length === 0 ? (
             <div className="text-center py-6 text-forge-text-muted text-sm">
               No recent activity to display
