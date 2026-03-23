@@ -15,6 +15,42 @@ const weeklyAvailabilityReplaceSchema = z.object({
   })),
 })
 
+type AvailabilityRuleInput = z.infer<typeof availabilityRuleSchema>
+
+let cachedAvailabilityColumns: Set<string> | null = null
+
+async function getAvailabilityColumns() {
+  if (cachedAvailabilityColumns) return cachedAvailabilityColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'availability_rules'`
+  )
+
+  cachedAvailabilityColumns = new Set(rows.map((row) => row.column_name))
+  return cachedAvailabilityColumns
+}
+
+function pickAvailabilityInsertColumns(columns: Set<string>, data: AvailabilityRuleInput) {
+  const valuesByColumn: Record<string, unknown> = {
+    rule_type: data.rule_type,
+    day_of_week: data.day_of_week ?? null,
+    start_time: data.start_time ?? null,
+    end_time: data.end_time ?? null,
+    slot_duration_minutes: data.slot_duration_minutes ?? null,
+    buffer_minutes: data.buffer_minutes ?? null,
+    minimum_notice_hours: data.minimum_notice_hours ?? null,
+    blackout_date: data.blackout_date ?? null,
+    settings_key: data.settings_key ?? null,
+    settings_value: data.settings_value ?? null,
+    is_active: data.is_active,
+  }
+
+  return Object.entries(valuesByColumn).filter(([column]) => columns.has(column))
+}
+
 export async function GET() {
   try {
     const rules = await db.query(
@@ -42,30 +78,17 @@ export async function POST(request: NextRequest) {
   const data = parsed.data
 
   try {
+    const columns = await getAvailabilityColumns()
+    const selectedColumns = pickAvailabilityInsertColumns(columns, data)
+    const columnNames = selectedColumns.map(([column]) => column)
+    const placeholders = selectedColumns.map((_, index) => `$${index + 1}`)
+    const values = selectedColumns.map(([, value]) => value)
+
     const rule = await db.queryOne(
-      `INSERT INTO availability_rules (
-        rule_type, day_of_week, start_time, end_time, slot_duration_minutes,
-        buffer_minutes, minimum_notice_hours, blackout_date,
-        settings_key, settings_value, is_active
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8,
-        $9, $10, $11
-      )
-      RETURNING *`,
-      [
-        data.rule_type,
-        data.day_of_week ?? null,
-        data.start_time ?? null,
-        data.end_time ?? null,
-        data.slot_duration_minutes ?? null,
-        data.buffer_minutes ?? null,
-        data.minimum_notice_hours ?? null,
-        data.blackout_date ?? null,
-        data.settings_key ?? null,
-        data.settings_value ?? null,
-        data.is_active,
-      ]
+      `INSERT INTO availability_rules (${columnNames.join(', ')})
+       VALUES (${placeholders.join(', ')})
+       RETURNING *`,
+      values
     )
 
     return NextResponse.json({ rule }, { status: 201 })
