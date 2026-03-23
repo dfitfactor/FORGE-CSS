@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, Plus, SquarePen, X } from 'lucide-react'
+import { ChevronDown, Eye, Plus, SquarePen, X } from 'lucide-react'
 import {
   BILLING_TYPES,
   BOOKING_TYPES,
@@ -69,6 +69,12 @@ export default function ServicesPage() {
   const [serviceForm, setServiceForm] = useState<any>({})
   const [packageForm, setPackageForm] = useState<any>({})
   const [templateForm, setTemplateForm] = useState<any>({})
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>(() =>
+    FORGE_STAGE_OPTIONS.reduce<Record<string, boolean>>((acc, stage, index) => ({
+      ...acc,
+      [stage]: index === 0,
+    }), {})
+  )
 
   async function loadAll() {
     setLoading(true)
@@ -103,6 +109,13 @@ export default function ServicesPage() {
     () => FORGE_STAGE_OPTIONS.reduce<Record<string, Package[]>>((acc, stage) => ({ ...acc, [stage]: packages.filter(item => item.forge_stage === stage) }), {}),
     [packages]
   )
+
+  function toggleStage(stage: string) {
+    setExpandedStages((current) => ({
+      ...current,
+      [stage]: !current[stage],
+    }))
+  }
 
   async function toggleActive(kind: 'services' | 'packages' | 'forms', id: string, is_active: boolean) {
     const url = kind === 'forms' ? `/api/forms/${id}` : `/api/${kind}/${id}`
@@ -225,8 +238,20 @@ export default function ServicesPage() {
             </div>
             {FORGE_STAGE_OPTIONS.map(stage => (
               <section key={stage} className="space-y-3">
-                <div className="flex items-center gap-3"><h2 className="text-sm font-semibold text-white">{stageLabel(stage)}</h2><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{groupedPackages[stage]?.length ?? 0}</span></div>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map(pkg => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div>)}</div>
+                <button
+                  type="button"
+                  onClick={() => toggleStage(stage)}
+                  className="flex w-full items-center justify-between rounded-2xl border border-white/8 bg-[#111111] px-5 py-4 text-left transition hover:border-[#D4AF37]/30 hover:bg-[#141414]"
+                >
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-sm font-semibold text-white">{stageLabel(stage)}</h2>
+                    <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{groupedPackages[stage]?.length ?? 0}</span>
+                  </div>
+                  <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedStages[stage] ? 'rotate-180' : ''}`} />
+                </button>
+                {expandedStages[stage] ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map(pkg => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div>)}</div>
+                ) : null}
               </section>
             ))}
           </div>
