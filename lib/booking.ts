@@ -17,7 +17,7 @@ export const FORGE_STAGE_OPTIONS = [
 export const BILLING_TYPES = ['monthly', 'pif', 'total'] as const
 export const BOOKING_STATUS_OPTIONS = ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'] as const
 export const PAYMENT_STATUS_OPTIONS = ['unpaid', 'paid', 'waived'] as const
-export const AVAILABILITY_RULE_TYPES = ['weekly', 'settings', 'blackout'] as const
+export const AVAILABILITY_RULE_TYPES = ['weekly', 'settings', 'blackout', 'blocked'] as const
 
 export const serviceSchema = z.object({
   name: z.string().trim().min(1).max(255),

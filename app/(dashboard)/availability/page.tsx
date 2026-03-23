@@ -5,7 +5,7 @@ import { Clock3, Loader2, Plus, Trash2 } from 'lucide-react'
 
 type AvailabilityRule = {
   id: string
-  rule_type: 'weekly' | 'settings' | 'blackout'
+  rule_type: 'weekly' | 'settings' | 'blackout' | 'blocked'
   day_of_week: number | null
   start_time: string | null
   end_time: string | null
@@ -36,8 +36,26 @@ type DayConfig = {
   slot_duration_minutes: number
 }
 
+type BlockedFormState = {
+  day_of_week: number
+  start_time: string
+  end_time: string
+  label: string
+}
+
+type ActiveSlot = {
+  dayIndex: number
+  slotMinutes: number
+} | null
+
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DEFAULT_DAY: DayConfig = { enabled: false, start_time: '09:00', end_time: '17:00', slot_duration_minutes: 60 }
+const INITIAL_BLOCKED_FORM: BlockedFormState = {
+  day_of_week: 1,
+  start_time: '12:00',
+  end_time: '13:00',
+  label: 'Lunch',
+}
 const NOTICE_OPTIONS = [
   { label: 'Same day', value: 0 },
   { label: '24 hours', value: 24 },
@@ -55,6 +73,12 @@ function createDefaultDays() {
 function timeToMinutes(value: string) {
   const [hours, minutes] = value.split(':').map(Number)
   return hours * 60 + minutes
+}
+
+function minutesToTimeString(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
 function formatCalendarTime(totalMinutes: number) {
@@ -93,6 +117,8 @@ export default function AvailabilityPage() {
   const [bufferMinutes, setBufferMinutes] = useState(10)
   const [minimumNoticeHours, setMinimumNoticeHours] = useState(24)
   const [blackoutDate, setBlackoutDate] = useState('')
+  const [blockedForm, setBlockedForm] = useState<BlockedFormState>(INITIAL_BLOCKED_FORM)
+  const [activeSlot, setActiveSlot] = useState<ActiveSlot>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -234,6 +260,41 @@ export default function AvailabilityPage() {
     }
   }
 
+  async function addBlockedTime(nextBlockedForm: BlockedFormState = blockedForm) {
+    if (timeToMinutes(nextBlockedForm.end_time) <= timeToMinutes(nextBlockedForm.start_time)) {
+      setError('Blocked time end must be after start time')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch('/api/availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule_type: 'blocked',
+          day_of_week: nextBlockedForm.day_of_week,
+          start_time: nextBlockedForm.start_time,
+          end_time: nextBlockedForm.end_time,
+          settings_key: nextBlockedForm.label || null,
+          is_active: true,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Failed to add blocked time')
+      setBlockedForm(INITIAL_BLOCKED_FORM)
+      setActiveSlot(null)
+      await loadPageData()
+      setSuccess('Blocked time added')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to add blocked time')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function removeRule(ruleId: string) {
     setSaving(true)
     setError('')
@@ -242,6 +303,7 @@ export default function AvailabilityPage() {
       const res = await fetch(`/api/availability/${ruleId}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to remove rule')
+      setActiveSlot(null)
       await loadPageData()
       setSuccess('Rule removed')
     } catch (err: unknown) {
@@ -252,6 +314,10 @@ export default function AvailabilityPage() {
   }
 
   const blackoutRules = useMemo(() => rules.filter((rule) => rule.rule_type === 'blackout' && rule.blackout_date), [rules])
+  const blockedRules = useMemo(
+    () => rules.filter((rule) => rule.rule_type === 'blocked' && rule.day_of_week !== null && rule.start_time && rule.end_time),
+    [rules]
+  )
   const calendarSlots = useMemo(() => {
     const slots: number[] = []
     for (let minutes = CALENDAR_START_HOUR * 60; minutes <= CALENDAR_END_HOUR * 60; minutes += CALENDAR_SLOT_MINUTES) {
@@ -265,12 +331,31 @@ export default function AvailabilityPage() {
     () => bookings.filter((booking) => booking.status === 'pending' || booking.status === 'confirmed'),
     [bookings]
   )
+  const blockedByDay = useMemo(() => {
+    const map = new Map<number, AvailabilityRule[]>()
+    for (const rule of blockedRules) {
+      const day = Number(rule.day_of_week)
+      map.set(day, [...(map.get(day) ?? []), rule])
+    }
+    return map
+  }, [blockedRules])
 
-  function isSlotAvailable(day: DayConfig, slotMinutes: number) {
+  function isSlotBlocked(dayIndex: number, slotMinutes: number) {
+    const dayBlockedRules = blockedByDay.get(dayIndex) ?? []
+    return dayBlockedRules.some((rule) => slotMinutes >= timeToMinutes(rule.start_time as string) && slotMinutes < timeToMinutes(rule.end_time as string))
+  }
+
+  function blockedRulesStartingAt(dayIndex: number, slotMinutes: number) {
+    const dayBlockedRules = blockedByDay.get(dayIndex) ?? []
+    return dayBlockedRules.filter((rule) => timeToMinutes(rule.start_time as string) === slotMinutes)
+  }
+
+  function isSlotAvailable(day: DayConfig, dayIndex: number, slotMinutes: number) {
     if (!day.enabled) return false
     const start = timeToMinutes(day.start_time)
     const end = timeToMinutes(day.end_time)
-    return slotMinutes >= start && slotMinutes < end
+    if (slotMinutes < start || slotMinutes >= end) return false
+    return !isSlotBlocked(dayIndex, slotMinutes)
   }
 
   function bookingsStartingAt(dayIndex: number, slotMinutes: number) {
@@ -291,12 +376,35 @@ export default function AvailabilityPage() {
     })
   }
 
+  async function handleCalendarCellClick(dayIndex: number, slotMinutes: number) {
+    if (saving || slotHasBooking(dayIndex, slotMinutes)) return
+
+    const startingBlockedRules = blockedRulesStartingAt(dayIndex, slotMinutes)
+    if (startingBlockedRules.length > 0) {
+      await removeRule(startingBlockedRules[0].id)
+      return
+    }
+
+    if (!isSlotAvailable(days[dayIndex], dayIndex, slotMinutes)) return
+
+    const nextBlockedForm = {
+      day_of_week: dayIndex,
+      start_time: minutesToTimeString(slotMinutes),
+      end_time: minutesToTimeString(slotMinutes + CALENDAR_SLOT_MINUTES),
+      label: 'Blocked',
+    }
+
+    setActiveSlot({ dayIndex, slotMinutes })
+    setBlockedForm(nextBlockedForm)
+    await addBlockedTime(nextBlockedForm)
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-white">Availability</h1>
-          <p className="mt-1 text-sm text-white/40">Set weekly schedule rules, booking settings, and blackout dates.</p>
+          <p className="mt-1 text-sm text-white/40">Set weekly schedule rules, booking settings, blocked times, and blackout dates.</p>
         </div>
 
         {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
@@ -381,11 +489,12 @@ export default function AvailabilityPage() {
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div>
                     <h3 className="text-base font-semibold text-white">Calendar View</h3>
-                    <p className="mt-1 text-sm text-white/40">Preview this week's availability with pending requests and confirmed bookings layered into each day.</p>
+                    <p className="mt-1 text-sm text-white/40">Preview this week's availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-3 py-1 text-[#D4AF37]">Available</span>
-                    <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-amber-300">Pending / Requested</span>
+                    <span className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-red-300">Blocked</span>
+                    <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-white/75">Pending / Requested</span>
                     <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-emerald-300">Confirmed</span>
                   </div>
                 </div>
@@ -408,13 +517,20 @@ export default function AvailabilityPage() {
                       <div key={slotMinutes} className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-white/5 last:border-0">
                         <div className="px-3 py-3 text-xs text-white/35">{formatCalendarTime(slotMinutes)}</div>
                         {days.map((day, dayIndex) => {
-                          const active = isSlotAvailable(day, slotMinutes)
+                          const active = isSlotAvailable(day, dayIndex, slotMinutes)
                           const slotBookings = bookingsStartingAt(dayIndex, slotMinutes)
                           const booked = slotHasBooking(dayIndex, slotMinutes)
+                          const blockedStartingRules = blockedRulesStartingAt(dayIndex, slotMinutes)
+                          const blocked = isSlotBlocked(dayIndex, slotMinutes)
+                          const isSelected = activeSlot?.dayIndex === dayIndex && activeSlot?.slotMinutes === slotMinutes
+                          const isClickable = active || blockedStartingRules.length > 0
                           return (
                             <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-white/5 px-2 py-2">
-                              <div
-                                className={`min-h-[44px] rounded-lg border text-xs transition ${slotBookings.length > 0 ? 'border-white/15 bg-white/5 text-white' : booked ? 'border-white/10 bg-white/[0.04] text-white/50' : active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-transparent bg-white/[0.02] text-white/10'}`}
+                              <button
+                                type="button"
+                                disabled={!isClickable || booked || saving}
+                                onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)}
+                                className={`min-h-[44px] w-full rounded-lg border text-left text-xs transition ${isClickable && !booked ? 'cursor-pointer' : 'cursor-default'} ${isSelected ? 'ring-2 ring-[#D4AF37]/60 ring-offset-0' : ''} ${slotBookings.length > 0 ? 'border-white/15 bg-white/5 text-white' : blocked ? 'border-red-500/30 bg-red-500/10 text-red-300' : booked ? 'border-white/10 bg-white/[0.04] text-white/50' : active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37] hover:bg-[#D4AF37]/20' : 'border-transparent bg-white/[0.02] text-white/10'}`}
                               >
                                 {slotBookings.length > 0 ? (
                                   <div className="space-y-1 p-1.5">
@@ -430,10 +546,22 @@ export default function AvailabilityPage() {
                                       )
                                     })}
                                   </div>
+                                ) : blockedStartingRules.length > 0 ? (
+                                  <div className="space-y-1 p-1.5">
+                                    {blockedStartingRules.map((rule) => (
+                                      <div key={rule.id} className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200">
+                                        <div className="font-medium">{rule.settings_key || 'Blocked'}</div>
+                                        <div className="text-[10px] uppercase tracking-wide opacity-80">{rule.start_time} - {rule.end_time}</div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 ) : active ? (
-                                  <div className="flex h-full items-center justify-center px-2 text-center font-medium">Available</div>
+                                  <div className="flex h-full flex-col items-center justify-center px-2 py-2 text-center">
+                                    <div className="font-medium">Available</div>
+                                    <div className="text-[10px] uppercase tracking-wide opacity-70">Click to block</div>
+                                  </div>
                                 ) : null}
-                              </div>
+                              </button>
                             </div>
                           )
                         })}
@@ -441,6 +569,63 @@ export default function AvailabilityPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Blocked Times</h2>
+                  <p className="text-sm text-white/40">Add recurring blocked windows for lunch, meetings, admin time, or anything else that changes by day.</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-[160px_1fr_1fr_1.2fr_auto]">
+                <div>
+                  <label className="forge-label">Day</label>
+                  <select value={blockedForm.day_of_week} onChange={(event) => setBlockedForm((current) => ({ ...current, day_of_week: Number(event.target.value) }))} className="forge-input">
+                    {DAYS.map((day, index) => (
+                      <option key={day} value={index}>{day}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="forge-label">Start Time</label>
+                  <input type="time" value={blockedForm.start_time} onChange={(event) => setBlockedForm((current) => ({ ...current, start_time: event.target.value }))} className="forge-input" />
+                </div>
+                <div>
+                  <label className="forge-label">End Time</label>
+                  <input type="time" value={blockedForm.end_time} onChange={(event) => setBlockedForm((current) => ({ ...current, end_time: event.target.value }))} className="forge-input" />
+                </div>
+                <div>
+                  <label className="forge-label">Label</label>
+                  <input value={blockedForm.label} onChange={(event) => setBlockedForm((current) => ({ ...current, label: event.target.value }))} className="forge-input" placeholder="Lunch, Team Meeting..." />
+                </div>
+                <button onClick={() => void addBlockedTime()} disabled={saving} className="forge-btn-gold mt-6 inline-flex items-center gap-2 disabled:opacity-50">
+                  <Plus size={15} />
+                  Add Block
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {blockedRules.length > 0 ? (
+                  blockedRules.map((rule) => (
+                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-black/20 px-4 py-3">
+                      <div className="flex items-center gap-3 text-white/70">
+                        <Clock3 className="h-4 w-4 text-red-300" />
+                        <span>{DAYS[Number(rule.day_of_week)]} · {rule.start_time} - {rule.end_time}</span>
+                        {rule.settings_key ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/55">{rule.settings_key}</span> : null}
+                      </div>
+                      <button onClick={() => void removeRule(rule.id)} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center text-sm text-white/35">
+                    No blocked times added yet.
+                  </div>
+                )}
               </div>
             </section>
 
@@ -515,4 +700,3 @@ export default function AvailabilityPage() {
     </div>
   )
 }
-
