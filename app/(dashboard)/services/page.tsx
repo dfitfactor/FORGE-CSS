@@ -8,6 +8,7 @@ import {
   FORGE_STAGE_OPTIONS,
   REQUIRED_FORM_TYPES,
   SERVICE_CATEGORIES,
+  SERVICE_SECTION_OPTIONS,
   SERVICE_TYPES,
   formatDurationLabel,
   formatPriceFromCents,
@@ -143,6 +144,7 @@ export default function ServicesPage() {
   const [stageOrder, setStageOrder] = useState<string[]>(() =>
     PACKAGE_SECTIONS.flatMap((section) => section.stages)
   )
+  const [serviceSectionOverrides, setServiceSectionOverrides] = useState<Record<string, string | null>>({})
   const [expandedServiceSections, setExpandedServiceSections] = useState<Record<string, boolean>>(() =>
     SERVICE_SECTIONS.reduce<Record<string, boolean>>((acc, section, index) => ({
       ...acc,
@@ -218,6 +220,22 @@ export default function ServicesPage() {
     window.localStorage.setItem('forge-package-stage-order', JSON.stringify(stageOrder))
   }, [stageOrder])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem('forge-service-section-overrides')
+    if (!stored) return
+    try {
+      setServiceSectionOverrides(JSON.parse(stored) as Record<string, string | null>)
+    } catch {
+      setServiceSectionOverrides({})
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('forge-service-section-overrides', JSON.stringify(serviceSectionOverrides))
+  }, [serviceSectionOverrides])
+
   const groupedPackages = useMemo(
     () => FORGE_STAGE_OPTIONS.reduce<Record<string, Package[]>>((acc, stage) => ({ ...acc, [stage]: packages.filter(item => item.forge_stage === stage) }), {}),
     [packages]
@@ -239,7 +257,12 @@ export default function ServicesPage() {
     }, { unassigned: [] as Service[] })
 
     for (const service of services) {
-      const sectionId = sectionByName.get(String(service.name)) ?? 'unassigned'
+      const explicitSection = typeof service.section === 'string'
+        ? service.section
+        : (serviceSectionOverrides[String(service.id)] ?? null)
+      const sectionId = (explicitSection && SERVICE_SECTION_OPTIONS.includes(explicitSection as typeof SERVICE_SECTION_OPTIONS[number]))
+        ? explicitSection
+        : (sectionByName.get(String(service.name)) ?? 'unassigned')
       initial[sectionId] = [...(initial[sectionId] ?? []), service]
     }
 
@@ -263,7 +286,7 @@ export default function ServicesPage() {
     })
 
     return initial
-  }, [services])
+  }, [serviceSectionOverrides, services])
 
   function toggleStage(stage: string) {
     setExpandedStages((current) => ({
@@ -371,7 +394,22 @@ export default function ServicesPage() {
             sort_order: Number(serviceForm.sort_order || 0),
           }),
         })
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to save service')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error ?? 'Failed to save service')
+        const savedService = data.service
+        const serviceId = String(savedService?.id ?? editor?.id ?? '')
+        const nextSection = serviceForm.section ?? null
+        if (serviceId) {
+          setServiceSectionOverrides((current) => {
+            const next = { ...current }
+            if (typeof savedService?.section === 'string' || savedService?.section === null) {
+              delete next[serviceId]
+            } else {
+              next[serviceId] = nextSection
+            }
+            return next
+          })
+        }
         setServiceEditor(null)
       }
 
@@ -442,7 +480,7 @@ export default function ServicesPage() {
         {!loading && tab === 'services' ? (
           <div className="space-y-4">
             <div className="flex justify-end">
-              <button onClick={() => { setServiceEditor({} as Service); setServiceForm({ name: '', slug: '', description: '', duration_minutes: 60, price_dollars: '0.00', category: 'assessment', service_type: 'single', booking_type: 'scheduled', required_forms: [], forge_stage: '', is_public: true, sort_order: 0 }) }} className="forge-btn-gold flex items-center gap-2">
+              <button onClick={() => { setServiceEditor({} as Service); setServiceForm({ name: '', slug: '', description: '', duration_minutes: 60, price_dollars: '0.00', category: 'assessment', section: 'assessments', service_type: 'single', booking_type: 'scheduled', required_forms: [], forge_stage: '', is_public: true, sort_order: 0 }) }} className="forge-btn-gold flex items-center gap-2">
                 <Plus size={15} /> Add Service
               </button>
             </div>
@@ -472,7 +510,7 @@ export default function ServicesPage() {
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                           <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Public</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-                          <tbody>{sectionServices.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{stageLabel(service.forge_stage)}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
+                          <tbody>{sectionServices.map(service => <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{stageLabel(service.forge_stage)}</td><td className="px-4 py-3">{service.is_public ? 'Yes' : 'No'}</td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>)}</tbody>
                         </table>
                       </div>
                     </div>
@@ -563,6 +601,7 @@ export default function ServicesPage() {
           <label className="forge-label">Description</label><textarea className="forge-input min-h-[100px]" value={serviceForm.description ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, description: e.target.value }))} />
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Duration</label><input className="forge-input" type="number" value={serviceForm.duration_minutes ?? 60} onChange={e => setServiceForm((c: any) => ({ ...c, duration_minutes: e.target.value }))} /></div><div><label className="forge-label">Price ($)</label><input className="forge-input" type="number" step="0.01" value={serviceForm.price_dollars ?? '0.00'} onChange={e => setServiceForm((c: any) => ({ ...c, price_dollars: e.target.value }))} /></div></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Category</label><select className="forge-input" value={serviceForm.category ?? 'assessment'} onChange={e => setServiceForm((c: any) => ({ ...c, category: e.target.value }))}>{SERVICE_CATEGORIES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div><div><label className="forge-label">Service Type</label><select className="forge-input" value={serviceForm.service_type ?? 'single'} onChange={e => setServiceForm((c: any) => ({ ...c, service_type: e.target.value }))}>{SERVICE_TYPES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
+          <div><label className="forge-label">Booking Section</label><select className="forge-input" value={serviceForm.section ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, section: e.target.value || null }))}><option value="">Unassigned</option>{SERVICE_SECTIONS.map(option => <option key={option.id} value={option.id}>{option.title}</option>)}</select></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Booking Type</label><select className="forge-input" value={serviceForm.booking_type ?? 'scheduled'} onChange={e => setServiceForm((c: any) => ({ ...c, booking_type: e.target.value }))}>{BOOKING_TYPES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div><div><label className="forge-label">Forge Stage</label><select className="forge-input" value={serviceForm.forge_stage ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, forge_stage: e.target.value }))}><option value="">None</option>{FORGE_STAGE_OPTIONS.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
           <div><label className="forge-label">Required Forms</label><div className="grid grid-cols-2 gap-2 rounded-xl border border-white/8 bg-white/3 p-4">{REQUIRED_FORM_TYPES.map(option => <label key={option} className="flex items-center gap-2 text-sm text-white/65"><input type="checkbox" checked={(serviceForm.required_forms ?? []).includes(option)} onChange={() => setServiceForm((c: any) => ({ ...c, required_forms: (c.required_forms ?? []).includes(option) ? c.required_forms.filter((item: string) => item !== option) : [...(c.required_forms ?? []), option] }))} />{stageLabel(option)}</label>)}</div></div>
           <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3"><span className="text-sm text-white/65">Is Public</span><Toggle checked={Boolean(serviceForm.is_public)} onChange={next => setServiceForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={serviceForm.sort_order ?? 0} onChange={e => setServiceForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>

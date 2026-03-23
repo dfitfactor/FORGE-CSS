@@ -1,6 +1,7 @@
 ﻿import { z } from 'zod'
 
 export const SERVICE_CATEGORIES = ['assessment', 'training', 'coaching', 'nutrition', 'wellness'] as const
+export const SERVICE_SECTION_OPTIONS = ['assessments', 'training', 'progress', 'nutrition', 'wellness'] as const
 export const SERVICE_TYPES = ['single', 'included', 'addon', 'makeup', 'waitlist'] as const
 export const BOOKING_TYPES = ['scheduled', 'async', 'package_only'] as const
 export const REQUIRED_FORM_TYPES = ['intake', 'parq', 'health-questionnaire', 'waiver'] as const
@@ -26,6 +27,7 @@ export const serviceSchema = z.object({
   duration_minutes: z.number().int().min(1).max(1440),
   price_cents: z.number().int().min(0),
   category: z.enum(SERVICE_CATEGORIES),
+  section: z.enum(SERVICE_SECTION_OPTIONS).optional().nullable(),
   service_type: z.enum(SERVICE_TYPES),
   booking_type: z.enum(BOOKING_TYPES),
   required_forms: z.array(z.enum(REQUIRED_FORM_TYPES)).default([]),

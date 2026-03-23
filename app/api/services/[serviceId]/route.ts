@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { serviceSchema } from '@/lib/booking'
@@ -7,6 +7,22 @@ import { z } from 'zod'
 const servicePatchSchema = serviceSchema.partial().extend({
   is_active: z.boolean().optional(),
 })
+
+let cachedServiceColumns: Set<string> | null = null
+
+async function getServiceColumns() {
+  if (cachedServiceColumns) return cachedServiceColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'services'`
+  )
+
+  cachedServiceColumns = new Set(rows.map((row) => row.column_name))
+  return cachedServiceColumns
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -22,21 +38,24 @@ export async function PATCH(
   }
 
   const data = parsed.data
-  const updates: string[] = []
-  const values: unknown[] = []
-
-  for (const [key, value] of Object.entries(data)) {
-    updates.push(`${key} = $${values.length + 1}`)
-    values.push(value ?? null)
-  }
-
-  if (updates.length === 0) {
-    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
-  }
-
-  values.push(params.serviceId)
 
   try {
+    const columns = await getServiceColumns()
+    const updates: string[] = []
+    const values: unknown[] = []
+
+    for (const [key, value] of Object.entries(data)) {
+      if (!columns.has(key)) continue
+      updates.push(`${key} = $${values.length + 1}`)
+      values.push(value ?? null)
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    values.push(params.serviceId)
+
     const service = await db.queryOne(
       `UPDATE services
        SET ${updates.join(', ')}
@@ -70,4 +89,3 @@ export async function DELETE(
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to delete service' }, { status: 500 })
   }
 }
-

@@ -1,7 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { serviceSchema } from '@/lib/booking'
+
+let cachedServiceColumns: Set<string> | null = null
+
+async function getServiceColumns() {
+  if (cachedServiceColumns) return cachedServiceColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'services'`
+  )
+
+  cachedServiceColumns = new Set(rows.map((row) => row.column_name))
+  return cachedServiceColumns
+}
 
 export async function GET() {
   try {
@@ -29,31 +45,44 @@ export async function POST(request: NextRequest) {
   const data = parsed.data
 
   try {
+    const columns = await getServiceColumns()
+    const supportsSection = columns.has('section')
+    const insertColumns = [
+      'name',
+      'slug',
+      'description',
+      'duration_minutes',
+      'price_cents',
+      'category',
+      ...(supportsSection ? ['section'] : []),
+      'service_type',
+      'booking_type',
+      'required_forms',
+      'forge_stage',
+      'is_public',
+      'sort_order',
+    ]
+    const values = [
+      data.name,
+      data.slug,
+      data.description ?? null,
+      data.duration_minutes,
+      data.price_cents,
+      data.category,
+      ...(supportsSection ? [data.section ?? null] : []),
+      data.service_type,
+      data.booking_type,
+      data.required_forms,
+      data.forge_stage ?? null,
+      data.is_public,
+      data.sort_order,
+    ]
+
     const service = await db.queryOne(
-      `INSERT INTO services (
-        name, slug, description, duration_minutes, price_cents,
-        category, service_type, booking_type, required_forms,
-        forge_stage, is_public, sort_order
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9,
-        $10, $11, $12
-      )
-      RETURNING *`,
-      [
-        data.name,
-        data.slug,
-        data.description ?? null,
-        data.duration_minutes,
-        data.price_cents,
-        data.category,
-        data.service_type,
-        data.booking_type,
-        data.required_forms,
-        data.forge_stage ?? null,
-        data.is_public,
-        data.sort_order,
-      ]
+      `INSERT INTO services (${insertColumns.join(', ')})
+       VALUES (${insertColumns.map((_, index) => `$${index + 1}`).join(', ')})
+       RETURNING *`,
+      values
     )
 
     return NextResponse.json({ service }, { status: 201 })
