@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
@@ -181,7 +181,7 @@ export default function PublicBookingDetailPage() {
 
   return (
     <div className="px-6 py-12">
-      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[420px_1fr]">
+      <div className="mx-auto max-w-4xl space-y-8">
         <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
           <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request this booking' : 'Request this booking'}</h2>
           <p className="mt-2 text-sm text-black/55">
@@ -253,7 +253,7 @@ export default function PublicBookingDetailPage() {
           </div>
 
           <h1 className="mt-5 text-3xl font-semibold text-[#1b140d]">{selectedTarget.name}</h1>
-          <p className="mt-3 text-base text-black/60">{selectedTarget.description || 'A FORG� booking option tailored to your current needs and stage.'}</p>
+          <p className="mt-3 text-base text-black/60">{selectedTarget.description || 'A FORGË booking option tailored to your current needs and stage.'}</p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-[#f6f1e2] p-4">
@@ -282,3 +282,4 @@ export default function PublicBookingDetailPage() {
     </div>
   )
 }
+
