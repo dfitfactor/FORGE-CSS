@@ -22,6 +22,13 @@ type Booking = {
   google_calendar_event_id?: string | null
 }
 
+type BookingHistoryEntry = {
+  id: string
+  action: string
+  payload: Record<string, unknown> | null
+  created_at: string
+}
+
 const STATUS_OPTIONS = ['all', 'pending', 'confirmed', 'completed', 'cancelled', 'no_show'] as const
 
 const STATUS_BADGES: Record<string, string> = {
@@ -100,6 +107,8 @@ function DetailDrawer({
   booking,
   open,
   updating,
+  history,
+  historyLoading,
   form,
   onClose,
   onChange,
@@ -109,6 +118,8 @@ function DetailDrawer({
   booking: Booking | null
   open: boolean
   updating: boolean
+  history: BookingHistoryEntry[]
+  historyLoading: boolean
   form: { booking_date: string; booking_time: string; payment_status: Booking['payment_status']; notes: string }
   onClose: () => void
   onChange: (field: 'booking_date' | 'booking_time' | 'payment_status' | 'notes', value: string) => void
@@ -197,6 +208,31 @@ function DetailDrawer({
               {updating ? 'Saving...' : 'Save Booking Updates'}
             </button>
           </div>
+
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="text-xs uppercase tracking-widest text-white/35">Recent Changes</div>
+            <div className="mt-4 space-y-3">
+              {historyLoading ? (
+                <div className="text-sm text-white/40">Loading history...</div>
+              ) : history.length > 0 ? (
+                history.map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-white">{entry.action.replace('.', ' ')}</div>
+                      <div className="text-xs text-white/35">{new Date(entry.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+                    </div>
+                    {entry.payload && Object.keys(entry.payload).length > 0 ? (
+                      <div className="mt-2 text-xs text-white/45">
+                        {Object.entries(entry.payload).map(([key, value]) => `${key}: ${String(value ?? '')}`).join(' · ')}
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-white/40">No booking changes logged yet.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -208,6 +244,8 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState('')
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null)
+  const [detailHistory, setDetailHistory] = useState<BookingHistoryEntry[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
   const [detailForm, setDetailForm] = useState({
     booking_date: '',
     booking_time: '',
@@ -239,7 +277,7 @@ export default function BookingsPage() {
     void loadBookings()
   }, [])
 
-  function openBookingDetails(booking: Booking) {
+  async function openBookingDetails(booking: Booking) {
     setDetailBooking(booking)
     setDetailForm({
       booking_date: booking.booking_date,
@@ -247,6 +285,26 @@ export default function BookingsPage() {
       payment_status: booking.payment_status,
       notes: booking.notes ?? '',
     })
+    setDetailLoading(true)
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}`, { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load booking details')
+      if (data.booking) {
+        setDetailBooking(data.booking)
+        setDetailForm({
+          booking_date: data.booking.booking_date,
+          booking_time: data.booking.booking_time,
+          payment_status: data.booking.payment_status,
+          notes: data.booking.notes ?? '',
+        })
+      }
+      setDetailHistory(Array.isArray(data.history) ? data.history : [])
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load booking details')
+    } finally {
+      setDetailLoading(false)
+    }
   }
 
   async function updateBookingStatus(bookingId: string, status: Booking['status']) {
@@ -316,6 +374,9 @@ export default function BookingsPage() {
       if (!res.ok) throw new Error(data.error ?? 'Failed to update booking details')
 
       await loadBookings()
+      if (detailBooking) {
+        void openBookingDetails({ ...detailBooking, booking_date: detailForm.booking_date, booking_time: detailForm.booking_time, payment_status: detailForm.payment_status, notes: detailForm.notes.trim() || null })
+      }
       setDetailBooking((current) => current ? {
         ...current,
         booking_date: detailForm.booking_date,
@@ -458,7 +519,7 @@ export default function BookingsPage() {
                       <td className="px-4 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button
-                            onClick={() => openBookingDetails(booking)}
+                            onClick={() => void openBookingDetails(booking)}
                             className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white"
                           >
                             View
@@ -507,8 +568,10 @@ export default function BookingsPage() {
         booking={detailBooking}
         open={Boolean(detailBooking)}
         updating={updatingId === detailBooking?.id}
+        history={detailHistory}
+        historyLoading={detailLoading}
         form={detailForm}
-        onClose={() => setDetailBooking(null)}
+        onClose={() => { setDetailBooking(null); setDetailHistory([]) }}
         onChange={(field, value) => setDetailForm((current) => ({ ...current, [field]: value }))}
         onSave={() => void saveBookingDetails()}
         onCopy={(value, label) => void copyValue(value, label)}

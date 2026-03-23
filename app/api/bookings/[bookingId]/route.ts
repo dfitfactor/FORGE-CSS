@@ -20,6 +20,64 @@ type BookingWithDetails = {
   pkg_duration: number | null
 }
 
+type AuditEntry = {
+  id: string
+  action: string
+  payload: Record<string, unknown> | null
+  created_at: string
+}
+
+async function getBookingWithDetails(bookingId: string) {
+  return db.queryOne<BookingWithDetails>(
+    `SELECT b.*, s.name as service_name, s.duration_minutes,
+            p.name as package_name, p.duration_minutes as pkg_duration
+     FROM bookings b
+     LEFT JOIN services s ON b.service_id = s.id
+     LEFT JOIN packages p ON b.package_id = p.id
+     WHERE b.id = $1`,
+    [bookingId]
+  )
+}
+
+async function getBookingHistory(bookingId: string) {
+  try {
+    return await db.query<AuditEntry>(
+      `SELECT id, action, payload, created_at
+       FROM audit_log
+       WHERE resource_type = 'booking'
+         AND resource_id = $1
+       ORDER BY created_at DESC
+       LIMIT 12`,
+      [bookingId]
+    )
+  } catch {
+    return []
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { bookingId: string } }
+) {
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  try {
+    const [booking, history] = await Promise.all([
+      getBookingWithDetails(params.bookingId),
+      getBookingHistory(params.bookingId),
+    ])
+
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ booking, history })
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to load booking details' }, { status: 500 })
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { bookingId: string } }
@@ -71,15 +129,7 @@ export async function PATCH(
 
     if (requiresCalendarSync) {
       try {
-        const syncedBooking = await db.queryOne<BookingWithDetails>(
-          `SELECT b.*, s.name as service_name, s.duration_minutes,
-                  p.name as package_name, p.duration_minutes as pkg_duration
-           FROM bookings b
-           LEFT JOIN services s ON b.service_id = s.id
-           LEFT JOIN packages p ON b.package_id = p.id
-           WHERE b.id = $1`,
-          [params.bookingId]
-        )
+        const syncedBooking = await getBookingWithDetails(params.bookingId)
 
         if (syncedBooking) {
           const calendarDetails = {
@@ -114,6 +164,21 @@ export async function PATCH(
       } catch (calendarError) {
         console.error('Failed to sync Google Calendar event for booking update', calendarError)
       }
+    }
+
+    try {
+      await db.query(
+        `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
+         VALUES ($1, $2, 'booking', $3, $4)`,
+        [
+          session.id,
+          'booking.updated',
+          params.bookingId,
+          JSON.stringify(data),
+        ]
+      )
+    } catch (auditError) {
+      console.error('Failed to write booking audit log', auditError)
     }
 
     return NextResponse.json({ booking })
