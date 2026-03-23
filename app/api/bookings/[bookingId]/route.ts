@@ -2,7 +2,7 @@
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { bookingPatchSchema } from '@/lib/booking'
-import { createCalendarEvent } from '@/lib/google-calendar'
+import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-calendar'
 
 type BookingWithDetails = {
   id: string
@@ -12,8 +12,10 @@ type BookingWithDetails = {
   booking_date: string
   booking_time: string
   notes: string | null
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
   service_name: string | null
   package_name: string | null
+  google_calendar_event_id: string | null
   duration_minutes: number | null
   pkg_duration: number | null
 }
@@ -59,9 +61,17 @@ export async function PATCH(
       values
     )
 
-    if (data.status === 'confirmed') {
+    const requiresCalendarSync = Boolean(
+      data.status === 'confirmed' ||
+      data.status === 'cancelled' ||
+      data.booking_date ||
+      data.booking_time ||
+      data.notes !== undefined
+    )
+
+    if (requiresCalendarSync) {
       try {
-        const confirmedBooking = await db.queryOne<BookingWithDetails>(
+        const syncedBooking = await db.queryOne<BookingWithDetails>(
           `SELECT b.*, s.name as service_name, s.duration_minutes,
                   p.name as package_name, p.duration_minutes as pkg_duration
            FROM bookings b
@@ -71,26 +81,38 @@ export async function PATCH(
           [params.bookingId]
         )
 
-        if (confirmedBooking) {
-          const eventId = await createCalendarEvent({
-            summary: `${confirmedBooking.service_name ?? confirmedBooking.package_name ?? 'Booking'} — ${confirmedBooking.client_name}`,
-            description: `Client: ${confirmedBooking.client_name}\nEmail: ${confirmedBooking.client_email}\nPhone: ${confirmedBooking.client_phone ?? ''}\nNotes: ${confirmedBooking.notes ?? ''}`,
-            date: confirmedBooking.booking_date,
-            time: confirmedBooking.booking_time,
-            durationMinutes: Number(confirmedBooking.duration_minutes ?? confirmedBooking.pkg_duration ?? 60),
-            attendeeEmail: confirmedBooking.client_email,
-            attendeeName: confirmedBooking.client_name,
-          })
+        if (syncedBooking) {
+          const calendarDetails = {
+            summary: `${syncedBooking.service_name ?? syncedBooking.package_name ?? 'Booking'} — ${syncedBooking.client_name}`,
+            description: `Client: ${syncedBooking.client_name}\nEmail: ${syncedBooking.client_email}\nPhone: ${syncedBooking.client_phone ?? ''}\nNotes: ${syncedBooking.notes ?? ''}`,
+            date: syncedBooking.booking_date,
+            time: syncedBooking.booking_time,
+            durationMinutes: Number(syncedBooking.duration_minutes ?? syncedBooking.pkg_duration ?? 60),
+            attendeeEmail: syncedBooking.client_email,
+            attendeeName: syncedBooking.client_name,
+          }
 
-          if (eventId) {
+          if (syncedBooking.status === 'cancelled' && syncedBooking.google_calendar_event_id) {
+            await deleteCalendarEvent(syncedBooking.google_calendar_event_id)
             await db.query(
-              `UPDATE bookings SET google_calendar_event_id = $1 WHERE id = $2`,
-              [eventId, params.bookingId]
+              `UPDATE bookings SET google_calendar_event_id = NULL WHERE id = $1`,
+              [params.bookingId]
             )
+          } else if (syncedBooking.status === 'confirmed' && syncedBooking.google_calendar_event_id) {
+            await updateCalendarEvent(syncedBooking.google_calendar_event_id, calendarDetails)
+          } else if (syncedBooking.status === 'confirmed') {
+            const eventId = await createCalendarEvent(calendarDetails)
+
+            if (eventId) {
+              await db.query(
+                `UPDATE bookings SET google_calendar_event_id = $1 WHERE id = $2`,
+                [eventId, params.bookingId]
+              )
+            }
           }
         }
       } catch (calendarError) {
-        console.error('Failed to create Google Calendar event for confirmed booking', calendarError)
+        console.error('Failed to sync Google Calendar event for booking update', calendarError)
       }
     }
 
