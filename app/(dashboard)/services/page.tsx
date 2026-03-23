@@ -55,6 +55,7 @@ function parsePreviewFields(fields: unknown) {
 }
 
 export default function ServicesPage() {
+  const [stageOrder, setStageOrder] = useState<string[]>(() => [...FORGE_STAGE_OPTIONS])
   const [tab, setTab] = useState<Tab>('services')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -105,6 +106,24 @@ export default function ServicesPage() {
 
   useEffect(() => { void loadAll() }, [])
 
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem('forge-package-stage-order') : null
+    if (!stored) return
+    try {
+      const parsed = JSON.parse(stored) as string[]
+      const valid = parsed.filter((stage) => FORGE_STAGE_OPTIONS.includes(stage as typeof FORGE_STAGE_OPTIONS[number]))
+      const missing = FORGE_STAGE_OPTIONS.filter((stage) => !valid.includes(stage))
+      setStageOrder([...valid, ...missing])
+    } catch {
+      setStageOrder([...FORGE_STAGE_OPTIONS])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('forge-package-stage-order', JSON.stringify(stageOrder))
+  }, [stageOrder])
+
   const groupedPackages = useMemo(
     () => FORGE_STAGE_OPTIONS.reduce<Record<string, Package[]>>((acc, stage) => ({ ...acc, [stage]: packages.filter(item => item.forge_stage === stage) }), {}),
     [packages]
@@ -115,6 +134,18 @@ export default function ServicesPage() {
       ...current,
       [stage]: !current[stage],
     }))
+  }
+
+  function reorderStage(stage: string, direction: 'up' | 'down') {
+    setStageOrder((current) => {
+      const currentIndex = current.indexOf(stage)
+      if (currentIndex < 0) return current
+      const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+      if (swapIndex < 0 || swapIndex >= current.length) return current
+      const next = [...current]
+      ;[next[currentIndex], next[swapIndex]] = [next[swapIndex], next[currentIndex]]
+      return next
+    })
   }
 
   async function reorderPackage(stage: string, packageId: string, direction: 'up' | 'down') {
@@ -290,19 +321,41 @@ export default function ServicesPage() {
                 <Plus size={15} /> Add Package
               </button>
             </div>
-            {FORGE_STAGE_OPTIONS.map(stage => (
+            {stageOrder.map((stage, stageIndex) => (
               <section key={stage} className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => toggleStage(stage)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-white/8 bg-[#111111] px-5 py-4 text-left transition hover:border-[#D4AF37]/30 hover:bg-[#141414]"
-                >
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-sm font-semibold text-white">{stageLabel(stage)}</h2>
-                    <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{groupedPackages[stage]?.length ?? 0}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleStage(stage)}
+                    className="flex flex-1 items-center justify-between rounded-2xl border border-white/8 bg-[#111111] px-5 py-4 text-left transition hover:border-[#D4AF37]/30 hover:bg-[#141414]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-sm font-semibold text-white">{stageLabel(stage)}</h2>
+                      <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{groupedPackages[stage]?.length ?? 0}</span>
+                    </div>
+                    <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedStages[stage] ? 'rotate-180' : ''}`} />
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={stageIndex === 0}
+                      onClick={() => reorderStage(stage, 'up')}
+                      className="rounded-xl border border-white/10 bg-[#111111] p-3 text-white/55 hover:bg-[#141414] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                      aria-label={`Move ${stageLabel(stage)} up`}
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={stageIndex === stageOrder.length - 1}
+                      onClick={() => reorderStage(stage, 'down')}
+                      className="rounded-xl border border-white/10 bg-[#111111] p-3 text-white/55 hover:bg-[#141414] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                      aria-label={`Move ${stageLabel(stage)} down`}
+                    >
+                      <ArrowDown size={14} />
+                    </button>
                   </div>
-                  <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedStages[stage] ? 'rotate-180' : ''}`} />
-                </button>
+                </div>
                 {expandedStages[stage] ? (
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
                 ) : null}
