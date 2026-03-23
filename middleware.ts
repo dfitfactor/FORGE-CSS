@@ -22,7 +22,8 @@ async function hasValidSession(request: NextRequest) {
 export async function middleware(request: NextRequest) {
   const { nextUrl } = request
   const isAuthenticated = await hasValidSession(request)
-  const isAuthPage = nextUrl.pathname === '/auth/login'
+  const authPages = ['/auth/login', '/auth/signup', '/login', '/create-account']
+  const isAuthPage = authPages.includes(nextUrl.pathname)
 
   if (isAuthPage && isAuthenticated) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -43,6 +44,13 @@ export const config = {
     '/clients/:path*',
     '/ai-insights/:path*',
     '/nutrition/:path*',
+    '/services/:path*',
+    '/bookings/:path*',
+    '/availability/:path*',
+    '/settings/:path*',
     '/auth/login',
+    '/auth/signup',
+    '/login',
+    '/create-account',
   ],
 }
