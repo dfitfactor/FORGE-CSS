@@ -1,7 +1,7 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { formatDurationLabel, formatPriceFromCents, stageLabel } from '@/lib/booking'
 
@@ -50,11 +50,12 @@ const INITIAL_FORM: BookingFormState = {
 export default function PublicBookingDetailPage() {
   const params = useParams<{ slug: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [services, setServices] = useState<Service[]>([])
   const [packages, setPackages] = useState<Package[]>([])
   const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [savingAction, setSavingAction] = useState<'inquiry' | 'checkout' | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -86,7 +87,7 @@ export default function PublicBookingDetailPage() {
   }, [packages, params.slug, services])
 
   async function submitBookingRequest() {
-    setSaving(true)
+    setSavingAction('inquiry')
     setError('')
     try {
       const payload: Record<string, unknown> = {
@@ -115,7 +116,42 @@ export default function PublicBookingDetailPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to submit booking request')
     } finally {
-      setSaving(false)
+      setSavingAction(null)
+    }
+  }
+
+  async function startCheckout() {
+    setSavingAction('checkout')
+    setError('')
+    try {
+      const payload: Record<string, unknown> = {
+        client_name: form.client_name,
+        client_email: form.client_email,
+        client_phone: form.client_phone,
+        booking_date: form.booking_date,
+        booking_time: form.booking_time,
+        notes: form.notes || null,
+        slug: params.slug,
+      }
+
+      if (selectedTarget?.kind === 'service') {
+        payload.service_id = selectedTarget.id
+      } else if (selectedTarget?.kind === 'package') {
+        payload.package_id = selectedTarget.id
+      }
+
+      const res = await fetch('/api/public/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Failed to start checkout')
+      if (!data.url) throw new Error('Stripe checkout URL was not returned')
+      window.location.href = data.url
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to start checkout')
+      setSavingAction(null)
     }
   }
 
@@ -141,6 +177,7 @@ export default function PublicBookingDetailPage() {
 
   const isFree = Number(selectedTarget.price_cents ?? 0) <= 0
   const requiredForms = selectedTarget.kind === 'service' && Array.isArray(selectedTarget.required_forms) ? selectedTarget.required_forms : []
+  const cancelled = searchParams.get('cancelled') === '1'
 
   return (
     <div className="px-6 py-12">
@@ -158,7 +195,7 @@ export default function PublicBookingDetailPage() {
           </div>
 
           <h1 className="mt-5 text-3xl font-semibold text-[#1b140d]">{selectedTarget.name}</h1>
-          <p className="mt-3 text-base text-black/60">{selectedTarget.description || 'A FORGË booking option tailored to your current needs and stage.'}</p>
+          <p className="mt-3 text-base text-black/60">{selectedTarget.description || 'A FORG� booking option tailored to your current needs and stage.'}</p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-[#f6f1e2] p-4">
@@ -178,20 +215,21 @@ export default function PublicBookingDetailPage() {
           ) : null}
 
           {!isFree ? (
-            <div className="mt-6">
-              <button type="button" disabled title="Payment coming in Phase 2" className="rounded-xl bg-black/10 px-4 py-2 text-sm font-semibold text-black/55">
-                Proceed to Checkout
-              </button>
+            <div className="mt-6 rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4 text-sm text-[#664c07]">
+              Choose whether you want to proceed straight to checkout or submit an inquiry for us to review first.
             </div>
           ) : null}
         </section>
 
         <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
-          <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request your booking' : 'Request this booking'}</h2>
+          <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request your booking' : 'Book or inquire'}</h2>
           <p className="mt-2 text-sm text-black/55">
-            {isFree ? "Choose your preferred date and time and we'll confirm within 24 hours." : "Checkout is coming in Phase 2. Submit your request and we'll follow up."}
+            {isFree
+              ? "Choose your preferred date and time and we'll confirm within 24 hours."
+              : 'Complete the form below, then either proceed to checkout now or submit an inquiry without payment.'}
           </p>
 
+          {cancelled ? <div className="mt-4 rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-sm text-black/60">Checkout was cancelled. Your booking request was not paid yet.</div> : null}
           {error ? <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</div> : null}
 
           <div className="mt-6 space-y-4">
@@ -221,14 +259,26 @@ export default function PublicBookingDetailPage() {
               <label className="mb-2 block text-sm font-medium text-[#1b140d]">Notes</label>
               <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="min-h-[120px] w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
-            <button onClick={() => void submitBookingRequest()} disabled={saving} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
-              {saving ? 'Submitting...' : isFree ? 'Submit Booking Request' : 'Submit Inquiry'}
-            </button>
+            {isFree ? (
+              <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
+                {savingAction === 'inquiry' ? 'Submitting...' : 'Submit Booking Request'}
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <button onClick={() => void startCheckout()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#2B154A] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                  {savingAction === 'checkout' ? 'Redirecting...' : 'Proceed to Checkout'}
+                </button>
+                <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
+                  {savingAction === 'inquiry' ? 'Submitting Inquiry...' : 'Submit Inquiry Without Payment'}
+                </button>
+                <p className="text-xs text-black/45">
+                  Proceed to checkout to pay now and confirm faster, or submit an inquiry if you want us to review your request first.
+                </p>
+              </div>
+            )}
           </div>
         </section>
       </div>
     </div>
   )
 }
-
-
