@@ -181,11 +181,69 @@ export default function PublicBookingDetailPage() {
 
   return (
     <div className="px-6 py-12">
-      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_420px]">
+      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[420px_1fr]">
+        <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
+          <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request this booking' : 'Request this booking'}</h2>
+          <p className="mt-2 text-sm text-black/55">
+            {isFree
+              ? "Choose your preferred date and time and we'll confirm within 24 hours."
+              : 'Complete the form below, then either proceed to checkout now or submit an inquiry without payment.'}
+          </p>
+
+          {cancelled ? <div className="mt-4 rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-sm text-black/60">Checkout was cancelled. Your booking request was not paid yet.</div> : null}
+          {error ? <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</div> : null}
+
+          <div className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Full Name*</label>
+              <input value={form.client_name} onChange={(event) => setForm((current) => ({ ...current, client_name: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Email*</label>
+              <input type="email" value={form.client_email} onChange={(event) => setForm((current) => ({ ...current, client_email: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Phone*</label>
+              <input value={form.client_phone} onChange={(event) => setForm((current) => ({ ...current, client_phone: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Date*</label>
+                <input type="date" value={form.booking_date} onChange={(event) => setForm((current) => ({ ...current, booking_date: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Time*</label>
+                <input type="time" value={form.booking_time} onChange={(event) => setForm((current) => ({ ...current, booking_time: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Notes</label>
+              <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="min-h-[120px] w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+            </div>
+            {isFree ? (
+              <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
+                {savingAction === 'inquiry' ? 'Submitting...' : 'Submit Booking Request'}
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <button onClick={() => void startCheckout()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#2B154A] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                  {savingAction === 'checkout' ? 'Redirecting...' : 'Proceed to Checkout'}
+                </button>
+                <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
+                  {savingAction === 'inquiry' ? 'Submitting Inquiry...' : 'Submit Inquiry Without Payment'}
+                </button>
+                <p className="text-xs text-black/45">
+                  Proceed to checkout to pay now and confirm faster, or submit an inquiry if you want us to review your request first.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
         <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-[#2B154A]/8 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[#2B154A]">
-              {selectedTarget.kind === 'service' ? 'Session' : 'Package'}
+              {selectedTarget.kind === 'service' ? 'Requested service' : 'Requested package'}
             </span>
             {selectedTarget.kind === 'package' ? (
               <span className="rounded-full bg-[#D4AF37]/15 px-3 py-1 text-xs uppercase tracking-[0.2em] text-[#8f6c07]">
@@ -219,64 +277,6 @@ export default function PublicBookingDetailPage() {
               Choose whether you want to proceed straight to checkout or submit an inquiry for us to review first.
             </div>
           ) : null}
-        </section>
-
-        <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
-          <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request your booking' : 'Book or inquire'}</h2>
-          <p className="mt-2 text-sm text-black/55">
-            {isFree
-              ? "Choose your preferred date and time and we'll confirm within 24 hours."
-              : 'Complete the form below, then either proceed to checkout now or submit an inquiry without payment.'}
-          </p>
-
-          {cancelled ? <div className="mt-4 rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-sm text-black/60">Checkout was cancelled. Your booking request was not paid yet.</div> : null}
-          {error ? <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</div> : null}
-
-          <div className="mt-6 space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Full Name*</label>
-              <input value={form.client_name} onChange={(event) => setForm((current) => ({ ...current, client_name: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Email*</label>
-              <input type="email" value={form.client_email} onChange={(event) => setForm((current) => ({ ...current, client_email: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Phone*</label>
-              <input value={form.client_phone} onChange={(event) => setForm((current) => ({ ...current, client_phone: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Date*</label>
-                <input type="date" value={form.booking_date} onChange={(event) => setForm((current) => ({ ...current, booking_date: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Time*</label>
-                <input type="time" value={form.booking_time} onChange={(event) => setForm((current) => ({ ...current, booking_time: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
-              </div>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Notes</label>
-              <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="min-h-[120px] w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
-            </div>
-            {isFree ? (
-              <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
-                {savingAction === 'inquiry' ? 'Submitting...' : 'Submit Booking Request'}
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <button onClick={() => void startCheckout()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#2B154A] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
-                  {savingAction === 'checkout' ? 'Redirecting...' : 'Proceed to Checkout'}
-                </button>
-                <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
-                  {savingAction === 'inquiry' ? 'Submitting Inquiry...' : 'Submit Inquiry Without Payment'}
-                </button>
-                <p className="text-xs text-black/45">
-                  Proceed to checkout to pay now and confirm faster, or submit an inquiry if you want us to review your request first.
-                </p>
-              </div>
-            )}
-          </div>
         </section>
       </div>
     </div>
