@@ -1,4 +1,4 @@
-import { getSession } from '@/lib/auth'
+﻿import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { redirect } from 'next/navigation'
 import {
@@ -89,8 +89,11 @@ function dedupeRecentActivityRows(rows: Array<{
   })
 }
 
-async function getDashboardStats(coachId: string) {
+async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'client') {
   try {
+    const accessFilter = role === 'admin' ? '' : 'AND c.coach_id = $1'
+    const params = role === 'admin' ? [] : [userId]
+
     const [clientRows, alerts, recentActivity] = await Promise.all([
       db.query<DashboardClientRow>(`
         SELECT
@@ -123,10 +126,10 @@ async function getDashboardStats(coachId: string) {
           ORDER BY snapshot_date DESC, created_at DESC
           LIMIT 1
         ) bs ON true
-        WHERE c.coach_id = $1
-          AND c.status != 'churned'
+        WHERE c.status != 'churned'
+          ${accessFilter}
         ORDER BY bs.snapshot_updated_at DESC NULLS LAST, c.full_name ASC
-      `, [coachId]),
+      `, params),
 
       db.query<{
         client_id: string
@@ -155,15 +158,15 @@ async function getDashboardStats(coachId: string) {
           bs.snapshot_date::text AS snapshot_date
         FROM clients c
         JOIN behavioral_snapshots bs ON bs.client_id = c.id
-        WHERE c.coach_id = $1
-          AND bs.snapshot_date = (
+        WHERE bs.snapshot_date = (
             SELECT MAX(snapshot_date) FROM behavioral_snapshots WHERE client_id = c.id
           )
           AND (bs.dbi >= 50 OR bs.bar < 50)
           AND c.status = 'active'
+          ${accessFilter}
         ORDER BY bs.dbi DESC, bs.bar ASC
         LIMIT 5
-      `, [coachId]),
+      `, params),
 
       (async () => {
         try {
@@ -176,10 +179,11 @@ async function getDashboardStats(coachId: string) {
             SELECT c.full_name as client_name, te.event_type, te.title, te.event_date::text
             FROM timeline_events te
             JOIN clients c ON c.id = te.client_id
-            WHERE c.coach_id = $1
+            WHERE 1=1
+              ${accessFilter}
             ORDER BY te.event_date DESC, te.created_at DESC
             LIMIT 10
-          `, [coachId])
+          `, params)
           return rows
         } catch {
           return []
@@ -223,7 +227,7 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/auth/login')
 
-  const { clientStats, alerts, recentActivity } = await getDashboardStats(session.id)
+  const { clientStats, alerts, recentActivity } = await getDashboardStats(session.id, session.role)
 
   const stats = clientStats ?? { total: 0, active: 0, paused: 0, needs_attention: 0 }
 
