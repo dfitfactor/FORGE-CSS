@@ -1,5 +1,5 @@
 import SignupForm from '@/components/auth/SignupForm'
 
-export default function CreateAccountAliasPage() {
+export default function SignupStandalonePage() {
   return <SignupForm />
 }

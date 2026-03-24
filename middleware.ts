@@ -22,7 +22,7 @@ async function hasValidSession(request: NextRequest) {
 export async function middleware(request: NextRequest) {
   const { nextUrl } = request
   const isAuthenticated = await hasValidSession(request)
-  const authPages = ['/auth/login', '/auth/signup', '/login', '/create-account']
+  const authPages = ['/auth/login', '/auth/signup', '/login', '/create-account', '/signup']
   const isAuthPage = authPages.includes(nextUrl.pathname)
 
   if (isAuthPage && isAuthenticated) {
@@ -52,5 +52,6 @@ export const config = {
     '/auth/signup',
     '/login',
     '/create-account',
+    '/signup',
   ],
 }

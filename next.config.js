@@ -14,7 +14,12 @@ const nextConfig = {
       },
       {
         source: '/create-account',
-        destination: '/auth/signup',
+        destination: '/signup',
+        permanent: false,
+      },
+      {
+        source: '/auth/signup',
+        destination: '/signup',
         permanent: false,
       },
     ]
