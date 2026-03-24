@@ -1,4 +1,4 @@
-'use client'
+ï»¿'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -21,7 +21,10 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      if (res.ok) { window.location.href = '/dashboard'; return }
+      if (res.ok) {
+        window.location.href = '/dashboard'
+        return
+      }
       const data = await res.json().catch(() => ({}))
       setError(data.error ?? 'Login failed (' + res.status + ')')
     } catch {
@@ -51,37 +54,65 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="forge-label">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                className="forge-input" placeholder="coach@dfitfactor.com" required autoFocus disabled={loading} />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="forge-input"
+                placeholder="coach@dfitfactor.com"
+                required
+                autoFocus
+                disabled={loading}
+              />
             </div>
             <div>
               <label className="forge-label">Password</label>
               <div className="relative">
-                <input type={showPassword ? 'text' : 'password'} value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="forge-input pr-11" placeholder="••••••••" required disabled={loading} />
-                <button type="button" onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-forge-text-muted">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="forge-input pr-11"
+                  placeholder="********"
+                  required
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-forge-text-muted"
+                >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-sm text-red-400">{error}</div>}
-            <button type="submit" disabled={loading}
-              className="forge-btn-gold w-full mt-2 flex items-center justify-center gap-2">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</> : 'Sign In to FORGE'}
+            {error ? (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-sm text-red-400">{error}</div>
+            ) : null}
+            <button
+              type="submit"
+              disabled={loading}
+              className="forge-btn-gold w-full mt-2 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Signing in...
+                </>
+              ) : (
+                'Sign In to FORGE'
+              )}
             </button>
           </form>
           <div className="mt-4 space-y-2 text-center text-sm">
             <p className="text-forge-text-muted">
               Need an account?{' '}
-              <Link href="/auth/signup" className="text-forge-gold hover:text-forge-text-primary">
+              <Link href="/signup" className="text-forge-gold hover:text-forge-text-primary">
                 Create account
               </Link>
             </p>
-            <p className="text-xs text-forge-text-muted">coach@dfitfactor.com / coach-2025</p>
           </div>
         </div>
+        <p className="mt-6 text-center text-xs text-forge-text-muted">2026 FORGE. All rights reserved.</p>
       </div>
     </div>
   )
