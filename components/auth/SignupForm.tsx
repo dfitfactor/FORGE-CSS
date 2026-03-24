@@ -63,7 +63,7 @@ export default function SignupForm() {
             </div>
             <div>
               <label className="forge-label">Email</label>
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="forge-input" placeholder="coach@dfitfactor.com" required disabled={loading} />
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="forge-input" placeholder="you@example.com" required disabled={loading} />
             </div>
             <div>
               <label className="forge-label">Password</label>
