@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -59,7 +59,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="forge-input"
-                placeholder="coach@dfitfactor.com"
+                placeholder="you@example.com"
                 required
                 autoFocus
                 disabled={loading}
