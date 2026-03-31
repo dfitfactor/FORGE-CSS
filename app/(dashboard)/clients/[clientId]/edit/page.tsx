@@ -8,6 +8,10 @@ import {
   User, Target, Activity, Dumbbell, FlaskConical, FileText, X
 } from 'lucide-react'
 
+function RequiredAsterisk() {
+  return <span className="ml-1 text-red-400">*</span>
+}
+
 type FormState = {
   fullName: string
   email: string
@@ -226,7 +230,7 @@ export default function EditClientPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="forge-label">Full Name</label>
+              <label className="forge-label">Full Name<RequiredAsterisk /></label>
               <input value={form.fullName} onChange={e => set('fullName', e.target.value)} className="forge-input" placeholder="Client full name" />
             </div>
             <div>

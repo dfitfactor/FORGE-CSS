@@ -12,6 +12,7 @@ type Client = {
   id: string; full_name: string; email: string
   date_of_birth: string | null
   age: number | null
+  gender: string | null
   status: string
   current_stage: string | null
   primary_goal: string | null
@@ -20,6 +21,53 @@ type Client = {
   bli_score: number | null
   snapshot_updated_at: string | null
   last_session: string | null
+}
+
+function getClientInfoScore(client: Client) {
+  let score = 0
+  if (client.email?.trim()) score += 1
+  if (client.date_of_birth) score += 1
+  if (client.age !== null && client.age !== undefined) score += 1
+  if (client.gender?.trim()) score += 1
+  if (client.primary_goal?.trim()) score += 1
+  if (client.current_stage?.trim()) score += 1
+  if (client.bar_score !== null && client.bar_score !== undefined) score += 1
+  if (client.dbi_score !== null && client.dbi_score !== undefined) score += 1
+  if (client.bli_score !== null && client.bli_score !== undefined) score += 1
+  if (client.snapshot_updated_at) score += 1
+  if (client.last_session) score += 1
+  return score
+}
+
+function dedupeSparseClientRows(rows: Client[]) {
+  const byName = new Map<string, Client>()
+
+  for (const client of rows) {
+    const normalizedName = client.full_name?.trim().toLowerCase()
+    if (!normalizedName) continue
+
+    const existing = byName.get(normalizedName)
+    if (!existing) {
+      byName.set(normalizedName, client)
+      continue
+    }
+
+    const existingScore = getClientInfoScore(existing)
+    const currentScore = getClientInfoScore(client)
+    const existingSparse = existingScore <= 1
+    const currentSparse = currentScore <= 1
+
+    // Only collapse clear placeholder duplicates; keep genuinely distinct filled records.
+    if (existingSparse && currentScore > existingScore) {
+      byName.set(normalizedName, client)
+    } else if (!existingSparse && currentSparse) {
+      continue
+    } else if (currentScore > existingScore) {
+      byName.set(normalizedName, client)
+    }
+  }
+
+  return Array.from(byName.values())
 }
 
 const STAGES = ['all', 'foundations', 'optimization', 'resilience', 'growth', 'empowerment']
@@ -106,7 +154,11 @@ export default function ClientsPage() {
         if (!r.ok) throw new Error(data?.error ?? `Request failed (${r.status})`)
         return data
       })
-      .then(d => { setClients(Array.isArray(d) ? d : []); setLoading(false) })
+      .then(d => {
+        const nextClients = Array.isArray(d) ? d.filter((client): client is Client => Boolean(client?.id && client?.full_name?.trim())) : []
+        setClients(dedupeSparseClientRows(nextClients))
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [])
 
@@ -268,6 +320,9 @@ export default function ClientsPage() {
                     <th className="text-center px-4 py-3 hidden md:table-cell">
                       <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Age</span>
                     </th>
+                    <th className="text-left px-4 py-3 hidden lg:table-cell">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Gender</span>
+                    </th>
                     <th className="text-center px-4 py-3"><ThBtn col="bar" label="BAR" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="dbi" label="DBI" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="bli" label="BLI" /></th>
@@ -303,6 +358,11 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-4 py-3.5 text-center hidden md:table-cell">
                         <span className="text-xs text-white/55 font-mono">{c.age ?? 'â€”'}</span>
+                      </td>
+                      <td className="px-4 py-3.5 hidden lg:table-cell">
+                        <span className="text-xs text-white/35 capitalize">
+                          {c.gender ? c.gender.replace(/_/g, ' ') : 'â€”'}
+                        </span>
                       </td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.bar_score} /></td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.dbi_score} invert /></td>

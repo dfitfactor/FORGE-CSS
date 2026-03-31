@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, UserPlus, Loader2 } from 'lucide-react'
 
+function RequiredAsterisk() {
+  return <span className="ml-1 text-red-400">*</span>
+}
+
 export default function NewClientPage() {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -46,7 +50,12 @@ export default function NewClientPage() {
         return
       }
       const d = await res.json()
-      router.push('/clients/' + (d.client?.id ?? ''))
+      const clientId = d.clientId ?? d.client?.id
+      if (!clientId) {
+        setError('Client created, but redirect target was missing')
+        return
+      }
+      router.push('/clients/' + clientId)
     } catch {
       setError('Network error - please try again')
     } finally {
@@ -76,7 +85,7 @@ export default function NewClientPage() {
           <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Identity</h2>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="forge-label">Full Name *</label>
+              <label className="forge-label">Full Name<RequiredAsterisk /></label>
               <input value={form.fullName} onChange={e => set('fullName', e.target.value)}
                 className="forge-input" placeholder="Client full name" />
             </div>

@@ -8,7 +8,7 @@ import {
   computePPS,
   extractSignalsFromCheckIn,
 } from '@/lib/bie-engine'
-import { buildOverrideIntelligenceSummary } from '@/lib/protocol-overrides'
+import { buildOverrideIntelligenceSummary, normalizeLoad } from '@/lib/protocol-overrides'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
@@ -116,6 +116,8 @@ type GeneratedProtocolCompat = {
   }
 }
 
+type ExerciseLike = { exerciseName?: string; loadGuidance?: string }
+
 function getAnthropicModel() {
   return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
 }
@@ -160,6 +162,101 @@ function detectPhysiqueFocus(corpus: string) {
   return /(npc|bikini|figure|wellness|physique|show prep|stage lean|posing|glute|hamstring|delts|upper back)/i.test(corpus)
 }
 
+function ensureExerciseLoads(exercises: unknown[] | undefined) {
+  if (!Array.isArray(exercises)) return exercises
+
+  return exercises.map((exercise) => {
+    if (!exercise || typeof exercise !== 'object') return exercise
+    const typedExercise = exercise as ExerciseLike & Record<string, unknown>
+
+    return {
+      ...typedExercise,
+      loadGuidance: normalizeLoad(
+        typeof typedExercise.loadGuidance === 'string' ? typedExercise.loadGuidance : null,
+        typedExercise.exerciseName ?? ''
+      ),
+    }
+  })
+}
+
+function collectTextContent(blocks: Array<{ type: string; text?: string }>) {
+  return blocks
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text)
+    .join('\n')
+    .trim()
+}
+
+function extractJsonObject(raw: string) {
+  const withoutFences = raw
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim()
+
+  const firstBrace = withoutFences.indexOf('{')
+  const lastBrace = withoutFences.lastIndexOf('}')
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return withoutFences.slice(firstBrace, lastBrace + 1)
+  }
+
+  return withoutFences
+}
+
+function sanitizeJsonCandidate(raw: string) {
+  return raw
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u00A0/g, ' ')
+    .replace(/,\s*([}\]])/g, '$1')
+    .trim()
+}
+
+function tryParseJsonObject<T>(raw: string): T | null {
+  const candidates = [
+    raw.trim(),
+    extractJsonObject(raw),
+    sanitizeJsonCandidate(raw),
+    sanitizeJsonCandidate(extractJsonObject(raw)),
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+
+    try {
+      return JSON.parse(candidate) as T
+    } catch {
+      // Keep trying the next candidate.
+    }
+  }
+
+  return null
+}
+
+async function repairProtocolJson(raw: string) {
+  const repairPrompt = `Convert the following protocol response into a single valid JSON object.
+
+Rules:
+- Return ONLY raw JSON.
+- No markdown, no backticks, no explanation.
+- Preserve the original meaning.
+- Ensure property names are quoted.
+- Remove trailing commas.
+- Keep the structure compatible with a FORGE generated protocol.
+
+SOURCE:
+${raw.slice(0, 12000)}`
+
+  const repairResponse = await anthropic.messages.create({
+    model: getAnthropicModel(),
+    max_tokens: 2600,
+    system: 'You repair malformed JSON. Return only valid raw JSON.',
+    messages: [{ role: 'user', content: repairPrompt }],
+  })
+
+  return collectTextContent(repairResponse.content as Array<{ type: string; text?: string }>)
+}
+
 function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedProtocolCompat {
   if (!input.rationale) {
     input.rationale = [
@@ -182,6 +279,20 @@ function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedPr
       accessoryBlock: input.movementProtocol.accessoryBlock,
       finisherBlock: input.movementProtocol.finisherBlock,
     }
+  }
+
+  if (input.sessionStructure) {
+    input.sessionStructure.activationBlock = ensureExerciseLoads(input.sessionStructure.activationBlock)
+    input.sessionStructure.primaryBlock = ensureExerciseLoads(input.sessionStructure.primaryBlock)
+    input.sessionStructure.accessoryBlock = ensureExerciseLoads(input.sessionStructure.accessoryBlock)
+    input.sessionStructure.finisherBlock = ensureExerciseLoads(input.sessionStructure.finisherBlock)
+  }
+
+  if (input.movementProtocol) {
+    input.movementProtocol.activationBlock = ensureExerciseLoads(input.movementProtocol.activationBlock)
+    input.movementProtocol.primaryBlock = ensureExerciseLoads(input.movementProtocol.primaryBlock)
+    input.movementProtocol.accessoryBlock = ensureExerciseLoads(input.movementProtocol.accessoryBlock)
+    input.movementProtocol.finisherBlock = ensureExerciseLoads(input.movementProtocol.finisherBlock)
   }
 
   if (!input.nutritionStructure && input.nutritionProtocol) {
@@ -718,6 +829,9 @@ EXECUTION RULES:
 - Determine whether the result is TRUE progression, REGRESSION, or LATERAL change.
 - If regression, include this exact sentence: "This is a deliberate reset phase due to reduced behavioral capacity".
 - Define movement progression using Week 1-2 baseline, Week 3-4 progression trigger, Week 5+ advancement.
+- Every exercise must include a load value expressed as intent, not a final prescription.
+- Allowed load values only: "bodyweight", "light", "moderate", "moderate-heavy", "technique", "light dumbbells", "moderate dumbbells", "light band", "moderate band".
+- Do not use pound ranges, percentages, or vague phrasing. Load must never be blank.
 - Protein must align with goal weight and calories must be justified as deficit, maintenance, or recovery.
 - Include adherence fallback, decision rules, monitoring system, and phase progression criteria.
 - For physique athletes with unstable adherence, use a Restoration-to-Development bridge instead of generic Foundations while preserving bodybuilding specificity.
@@ -745,31 +859,22 @@ ${prompt}`
       messages: [{ role: 'user', content: gyvrudPrompt }],
     })
 
-    const content = response.content[0]
-    if (content.type !== 'text') throw new Error('Unexpected response type')
+    const raw = collectTextContent(response.content as Array<{ type: string; text?: string }>)
+    if (!raw) throw new Error('Unexpected response type')
 
-    let raw = content.text.trim()
-    // Strip common markdown fences more aggressively
-    let cleaned = raw
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim()
-
-    // Extract just the JSON object between the first { and last }
-    const firstBrace = cleaned.indexOf('{')
-    const lastBrace = cleaned.lastIndexOf('}')
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+    let parsedGenerated = tryParseJsonObject<GeneratedProtocolCompat>(raw)
+    if (!parsedGenerated) {
+      const repairedRaw = await repairProtocolJson(raw)
+      parsedGenerated = repairedRaw ? tryParseJsonObject<GeneratedProtocolCompat>(repairedRaw) : null
     }
 
-    let generated: any
-    try {
-      generated = normalizeGeneratedProtocol(JSON.parse(cleaned) as GeneratedProtocolCompat)
-    } catch {
+    if (!parsedGenerated) {
+      const cleaned = sanitizeJsonCandidate(extractJsonObject(raw))
       console.error('Parse error. Raw:', cleaned.slice(0, 300))
       return NextResponse.json({ error: 'AI response parsing failed', raw: cleaned.slice(0, 500) }, { status: 500 })
     }
+
+    const generated: any = normalizeGeneratedProtocol(parsedGenerated)
 
     generated.override_summary = coachAdjustmentSummary
     generated.influenced_by_overrides = overrideIntelligence.hasInfluence
@@ -813,9 +918,9 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         messages: [{ role: 'user', content: mealPlanPrompt }],
       })
 
-      const mpContent = mealPlanResponse.content[0]
-      if (mpContent.type === 'text') {
-        let mpRaw = mpContent.text.trim()
+      const mpRawText = collectTextContent(mealPlanResponse.content as Array<{ type: string; text?: string }>)
+      if (mpRawText) {
+        let mpRaw = mpRawText.trim()
         mpRaw = mpRaw
           .replace(/^```json\s*/i, '')
           .replace(/^```\s*/i, '')
@@ -874,3 +979,4 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+

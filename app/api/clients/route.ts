@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 
 const CreateClientSchema = z.object({
-  fullName: z.string().min(1).max(255),
+  fullName: z.string().trim().min(1).max(255),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -206,5 +206,5 @@ export async function POST(request: NextRequest) {
     [session.id, client.id]
   )
 
-  return NextResponse.json({ clientId: client.id }, { status: 201 })
+  return NextResponse.json({ clientId: client.id, client: { id: client.id } }, { status: 201 })
 }

@@ -397,6 +397,23 @@ export type ExerciseBlock = {
   swapOption?: string
 }
 
+export type CoachInsightMetrics = {
+  primary: string
+  secondary: string
+  tertiary: string
+}
+
+export type CoachInsight = {
+  title: string
+  confidence: number
+  metrics: CoachInsightMetrics
+  decision: string
+  constraint: string
+  actions: string[]
+  context: string
+  tags?: string[]
+}
+
 function ensureExerciseLoads(exercises: ExerciseBlock[] | undefined) {
   if (!Array.isArray(exercises)) return exercises
 
@@ -564,7 +581,9 @@ Generate a complete ${protocolType} protocol. Apply the correct generation state
 - If repeated fatigue flags appear, reduce intensity, frequency, or complexity.
 - If adherence issues appear, simplify the structure.
 - If consistent progression signals appear, advance load or complexity conservatively.
-- Every exercise must include a load value. Use "Bodyweight" for bodyweight movements, "Light band" or "Moderate band" for banded work, "Technique weight" for activation work, and "X-Y lb" for loaded movements. Load must never be null, empty, or omitted.
+- Every exercise must include a load value expressed as intent, not a final prescription.
+- Allowed load values only: "bodyweight", "light", "moderate", "moderate-heavy", "technique", "light dumbbells", "moderate dumbbells", "light band", "moderate band".
+- Do not use pound ranges, percentages, or vague phrasing. Load must never be blank.
 Output ONLY valid JSON matching this schema:
 {
   "name": "Protocol name",
@@ -682,13 +701,7 @@ export async function generateWeeklyInsight(
     journalHighlights: string[]
     currentVsPreviousBAR: { current: number; previous: number }
   }
-): Promise<{
-  title: string
-  summary: string
-  fullAnalysis: string
-  recommendations: string[]
-  confidenceScore: number
-}> {
+): Promise<CoachInsight> {
   const documentContext = await fetchAiDocumentContext(client.clientId, 350)
   const docSummary = documentContext.summary
   const pdfDocs = documentContext.pdfDocs
@@ -714,10 +727,17 @@ ${documentContext.hasNutritionLog ? 'A nutrition or food-journal document is pre
 Output ONLY JSON:
 {
   "title": "Brief insight title",
-  "summary": "2-3 sentence summary for coach dashboard",
-  "fullAnalysis": "Full analysis paragraph for coach review",
-  "recommendations": ["Action 1", "Action 2", "Action 3"],
-  "confidenceScore": <0.0-1.0>
+  "confidence": <0.0-1.0>,
+  "metrics": {
+    "primary": "Most important metric line",
+    "secondary": "Second metric line",
+    "tertiary": "Third metric line"
+  },
+  "decision": "Clear coach decision",
+  "constraint": "Primary limiting factor",
+  "actions": ["Action 1", "Action 2", "Action 3"],
+  "context": "Short explanation of why this decision fits. Maximum 2-3 lines.",
+  "tags": ["intake", "adherence"]
 }`
 
   const response = await anthropic.messages.create({
@@ -763,13 +783,7 @@ export async function generateCoachQueryInsight(
     adherenceNotes: string[]
     checkinSummary: string[]
   }
-): Promise<{
-  title: string
-  summary: string
-  fullAnalysis: string
-  recommendations: string[]
-  confidenceScore: number
-}> {
+): Promise<CoachInsight> {
   const documentContext = await fetchAiDocumentContext(client.clientId, 350)
   const docSummary = documentContext.summary
   const pdfDocs = documentContext.pdfDocs
@@ -800,14 +814,24 @@ ${docSummary}
 ${documentContext.hasNutritionLog ? 'A nutrition or food-journal document is present. Prioritize it when answering food-intake, meal-pattern, protein-target, calorie-sufficiency, and nutrition-adherence questions.' : ''}
 
 Return a focused coach-facing answer. Be specific about food-pattern gaps, under-target intake, journal themes, and what should be addressed next when the evidence supports it. If nutrition-log evidence is available, reference it before broader inference.
+- Always give a clear decision.
+- Keep actions concise and capped at 3.
+- Keep context short and only explain why.
 
 Output ONLY JSON:
 {
   "title": "Brief insight title",
-  "summary": "2-3 sentence summary for coach dashboard",
-  "fullAnalysis": "Full analysis paragraph for coach review",
-  "recommendations": ["Action 1", "Action 2", "Action 3"],
-  "confidenceScore": <0.0-1.0>
+  "confidence": <0.0-1.0>,
+  "metrics": {
+    "primary": "Most important metric line",
+    "secondary": "Second metric line",
+    "tertiary": "Third metric line"
+  },
+  "decision": "Clear coach decision",
+  "constraint": "Primary limiting factor",
+  "actions": ["Action 1", "Action 2", "Action 3"],
+  "context": "Short explanation of why this decision fits. Maximum 2-3 lines.",
+  "tags": ["intake", "adherence"]
 }`
 
   const response = await anthropic.messages.create({
@@ -857,3 +881,4 @@ function getStateLabel(state: GenerationState): string {
   }
   return labels[state]
 }
+

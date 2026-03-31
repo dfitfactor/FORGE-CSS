@@ -84,14 +84,39 @@ export type NutritionStructure = {
 }
 
 export function normalizeLoad(load: string | null | undefined, exerciseName: string) {
-  if (load && load.trim() !== '') return load
+  if (load && load.trim() !== '') return load.trim().toLowerCase()
 
   const normalizedExercise = exerciseName.toLowerCase()
-  if (normalizedExercise.includes('band')) return 'Light band'
-  if (normalizedExercise.includes('bridge')) return 'Bodyweight'
-  if (normalizedExercise.includes('activation')) return 'Technique weight'
+  if (normalizedExercise.includes('band')) return normalizedExercise.includes('mini') ? 'light band' : 'moderate band'
+  if (normalizedExercise.includes('activation')) return 'technique'
+  if (
+    normalizedExercise.includes('bridge') ||
+    normalizedExercise.includes('plank') ||
+    normalizedExercise.includes('dead bug') ||
+    normalizedExercise.includes('bird dog') ||
+    normalizedExercise.includes('push-up') ||
+    normalizedExercise.includes('pull-up') ||
+    normalizedExercise.includes('chin-up') ||
+    normalizedExercise.includes('dip') ||
+    normalizedExercise.includes('bodyweight')
+  ) return 'bodyweight'
+  if (
+    normalizedExercise.includes('raise') ||
+    normalizedExercise.includes('fly') ||
+    normalizedExercise.includes('curl') ||
+    normalizedExercise.includes('lateral') ||
+    normalizedExercise.includes('rear delt')
+  ) return 'light dumbbells'
+  if (
+    normalizedExercise.includes('row') ||
+    normalizedExercise.includes('press') ||
+    normalizedExercise.includes('split squat') ||
+    normalizedExercise.includes('lunge') ||
+    normalizedExercise.includes('rdl') ||
+    normalizedExercise.includes('hinge')
+  ) return 'moderate dumbbells'
 
-  return 'Bodyweight'
+  return 'bodyweight'
 }
 
 export type OverrideIntelligenceSummary = {

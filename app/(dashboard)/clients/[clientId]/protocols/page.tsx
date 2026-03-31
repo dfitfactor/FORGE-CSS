@@ -116,6 +116,10 @@ function formatDate(str: string) {
   return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function RequiredAsterisk() {
+  return <span className="ml-1 text-red-400">*</span>
+}
+
 export default function ProtocolsPage() {
   const params = useParams<{ clientId: string }>()
   const clientId = params?.clientId as string
@@ -1066,7 +1070,7 @@ export default function ProtocolsPage() {
               <button onClick={() => { setShowForm(false); resetForm() }} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2"><label className="forge-label">Protocol Name</label><input value={form.name} onChange={e => setF('name', e.target.value)} className="forge-input" placeholder="e.g. Phase 1 Movement Protocol" /></div>
+              <div className="col-span-2"><label className="forge-label">Protocol Name<RequiredAsterisk /></label><input value={form.name} onChange={e => setF('name', e.target.value)} className="forge-input" placeholder="e.g. Phase 1 Movement Protocol" /></div>
               <div><label className="forge-label">Type</label><select value={form.protocolType} onChange={e => setF('protocolType', e.target.value)} className="forge-input">{PROTOCOL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
               <div><label className="forge-label">Stage</label><select value={form.stage} onChange={e => setF('stage', e.target.value)} className="forge-input">{STAGES.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}</select></div>
               <div><label className="forge-label">Generation State</label><select value={form.generationState} onChange={e => setF('generationState', e.target.value)} className="forge-input"><option value="">None</option>{['A','B','C','D','E'].map(s => <option key={s} value={s}>State {s}</option>)}</select></div>

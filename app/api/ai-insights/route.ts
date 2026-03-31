@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { generateCoachQueryInsight, generateWeeklyInsight, type ClientContext } from '@/services/ai-service'
+import {
+  generateCoachQueryInsight,
+  generateWeeklyInsight,
+  type ClientContext,
+  type CoachInsight,
+} from '@/services/ai-service'
 import type { ForgeStage, GenerationState } from '@/lib/bie-engine'
 
 type InsightRow = {
@@ -18,6 +23,38 @@ type InsightRow = {
   created_at: string
 }
 
+type InsightMetrics = {
+  primary: string
+  secondary: string
+  tertiary: string
+}
+
+type ApiInsight = {
+  id: string
+  client_id: string
+  client_name: string
+  insight_date: string
+  insight_type: string
+  title: string
+  metrics: InsightMetrics
+  decision: string
+  constraint: string
+  actions: string[]
+  context: string
+  tags: string[]
+  confidence_score: number | null
+  created_at: string
+}
+
+type StoredInsightPayload = {
+  metrics?: Partial<InsightMetrics>
+  decision?: string
+  constraint?: string
+  actions?: string[]
+  context?: string
+  tags?: string[]
+}
+
 function toStage(value: string | null | undefined): ForgeStage {
   if (value === 'optimization' || value === 'resilience' || value === 'growth' || value === 'empowerment') {
     return value
@@ -30,6 +67,96 @@ function toState(value: string | null | undefined): GenerationState {
     return value
   }
   return 'B'
+}
+
+function truncateInsightContext(value: string) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 240)
+}
+
+function buildLegacyContext(row: InsightRow) {
+  const parts = [row.summary?.trim(), row.full_analysis?.trim()].filter(Boolean)
+  return truncateInsightContext(parts.join(' '))
+}
+
+function normalizeCoachInsight(insight: CoachInsight): CoachInsight {
+  const actions = insight.actions
+    .map(action => action.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+
+  return {
+    title: insight.title.trim(),
+    confidence: Number.isFinite(insight.confidence) ? Math.max(0, Math.min(1, insight.confidence)) : 0.5,
+    metrics: {
+      primary: insight.metrics?.primary?.trim() || 'Metric unavailable',
+      secondary: insight.metrics?.secondary?.trim() || 'No secondary metric provided',
+      tertiary: insight.metrics?.tertiary?.trim() || 'No tertiary metric provided',
+    },
+    decision: insight.decision?.trim() || 'Review before progression',
+    constraint: insight.constraint?.trim() || 'Primary constraint not clearly stated',
+    actions: actions.length > 0 ? actions : ['Review current constraints before changing the plan'],
+    context: truncateInsightContext(insight.context || ''),
+    tags: Array.isArray(insight.tags)
+      ? insight.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean).slice(0, 4)
+      : [],
+  }
+}
+
+function serializeCoachInsight(insight: CoachInsight) {
+  const normalized = normalizeCoachInsight(insight)
+  return {
+    summary: normalized.decision,
+    fullAnalysis: JSON.stringify({
+      metrics: normalized.metrics,
+      decision: normalized.decision,
+      constraint: normalized.constraint,
+      actions: normalized.actions,
+      context: normalized.context,
+      tags: normalized.tags,
+    }),
+    recommendations: normalized.actions,
+    confidenceScore: normalized.confidence,
+    normalized,
+  }
+}
+
+function parseStoredInsight(row: InsightRow): ApiInsight {
+  let parsedPayload: StoredInsightPayload | null = null
+
+  if (row.full_analysis) {
+    try {
+      parsedPayload = JSON.parse(row.full_analysis) as StoredInsightPayload
+    } catch {
+      parsedPayload = null
+    }
+  }
+
+  const metrics: InsightMetrics = {
+    primary: parsedPayload?.metrics?.primary?.trim() || row.summary?.trim() || 'Metric unavailable',
+    secondary: parsedPayload?.metrics?.secondary?.trim() || row.recommendations?.[0]?.trim() || 'No secondary metric provided',
+    tertiary: parsedPayload?.metrics?.tertiary?.trim() || 'No tertiary metric provided',
+  }
+
+  return {
+    id: row.id,
+    client_id: row.client_id,
+    client_name: row.client_name,
+    insight_date: row.insight_date,
+    insight_type: row.insight_type,
+    title: row.title,
+    metrics,
+    decision: parsedPayload?.decision?.trim() || row.summary?.trim() || 'Review insight',
+    constraint: parsedPayload?.constraint?.trim() || 'Constraint not specified',
+    actions: Array.isArray(parsedPayload?.actions) && parsedPayload.actions.length > 0
+      ? parsedPayload.actions.map(action => action.trim()).filter(Boolean).slice(0, 3)
+      : (row.recommendations ?? []).map(action => action.trim()).filter(Boolean).slice(0, 3),
+    context: parsedPayload?.context?.trim() || buildLegacyContext(row),
+    tags: Array.isArray(parsedPayload?.tags)
+      ? parsedPayload.tags.map(tag => tag.trim().toLowerCase()).filter(Boolean).slice(0, 4)
+      : [],
+    confidence_score: row.confidence_score,
+    created_at: row.created_at,
+  }
 }
 
 async function getAiInsightsColumnSet() {
@@ -314,7 +441,7 @@ export async function GET(request: NextRequest) {
     )
 
     return NextResponse.json({
-      insights,
+      insights: insights.map(parseStoredInsight),
       clients: clients.map(client => ({ id: client.id, full_name: client.full_name })),
       available: true,
     })
@@ -361,10 +488,11 @@ export async function POST(request: NextRequest) {
       }
 
       const focusedInputs = await getFocusedInsightInputs(client.id)
-      const insight = await generateCoachQueryInsight(context.client, {
+      const generatedInsight = await generateCoachQueryInsight(context.client, {
         query: coachQuery,
         ...focusedInputs,
       })
+      const serialized = serializeCoachInsight(generatedInsight)
 
       const hasTable = await ensureAiInsightsTable()
       let storedInsight: InsightRow | null = null
@@ -372,12 +500,12 @@ export async function POST(request: NextRequest) {
       if (hasTable) {
         const aiInsightColumns = await getAiInsightsColumnSet()
         const insertColumns = ['client_id', 'insight_date', 'insight_type', 'title', 'summary']
-        const insertValues: unknown[] = [client.id, new Date().toISOString().split('T')[0], 'coaching_suggestion', insight.title, insight.summary]
+        const insertValues: unknown[] = [client.id, new Date().toISOString().split('T')[0], 'coaching_suggestion', generatedInsight.title, serialized.summary]
 
         const optionalColumns: Array<[string, unknown]> = [
-          ['full_analysis', insight.fullAnalysis],
-          ['recommendations', insight.recommendations],
-          ['confidence_score', insight.confidenceScore],
+          ['full_analysis', serialized.fullAnalysis],
+          ['recommendations', serialized.recommendations],
+          ['confidence_score', serialized.confidenceScore],
           ['source_variables', ['journals', 'checkins', 'adherence', 'documents', 'coach_query']],
           ['model_used', process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'],
         ]
@@ -411,18 +539,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         insight: storedInsight
-          ? { ...storedInsight, client_name: client.full_name }
+          ? parseStoredInsight({ ...storedInsight, client_name: client.full_name })
           : {
               id: `temp-${Date.now()}`,
               client_id: client.id,
               client_name: client.full_name,
               insight_date: new Date().toISOString().split('T')[0],
               insight_type: 'coaching_suggestion',
-              title: insight.title,
-              summary: insight.summary,
-              full_analysis: insight.fullAnalysis,
-              recommendations: insight.recommendations,
-              confidence_score: insight.confidenceScore,
+              title: generatedInsight.title,
+              metrics: serialized.normalized.metrics,
+              decision: serialized.normalized.decision,
+              constraint: serialized.normalized.constraint,
+              actions: serialized.normalized.actions,
+              context: serialized.normalized.context,
+              tags: serialized.normalized.tags ?? [],
+              confidence_score: serialized.confidenceScore,
               created_at: new Date().toISOString(),
             },
       })
@@ -448,7 +579,8 @@ export async function POST(request: NextRequest) {
       const context = await buildClientContext(client.id)
       if (!context) continue
 
-      const insight = await generateWeeklyInsight(context.client, context.weeklyData)
+      const generatedInsight = await generateWeeklyInsight(context.client, context.weeklyData)
+      const serialized = serializeCoachInsight(generatedInsight)
       const sourceVariables = [
         'bar',
         'bli',
@@ -461,12 +593,12 @@ export async function POST(request: NextRequest) {
       ]
 
       const insertColumns = ['client_id', 'insight_date', 'insight_type', 'title', 'summary']
-      const insertValues: unknown[] = [client.id, new Date().toISOString().split('T')[0], 'weekly_summary', insight.title, insight.summary]
+      const insertValues: unknown[] = [client.id, new Date().toISOString().split('T')[0], 'weekly_summary', generatedInsight.title, serialized.summary]
 
       const optionalColumns: Array<[string, unknown]> = [
-        ['full_analysis', insight.fullAnalysis],
-        ['recommendations', insight.recommendations],
-        ['confidence_score', insight.confidenceScore],
+        ['full_analysis', serialized.fullAnalysis],
+        ['recommendations', serialized.recommendations],
+        ['confidence_score', serialized.confidenceScore],
         ['source_variables', sourceVariables],
         ['model_used', process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'],
       ]
@@ -501,9 +633,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, generatedCount: generatedInsights.length, insights: generatedInsights })
+    return NextResponse.json({
+      success: true,
+      generatedCount: generatedInsights.length,
+      insights: generatedInsights.map(parseStoredInsight),
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+

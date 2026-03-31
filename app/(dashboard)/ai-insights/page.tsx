@@ -1,8 +1,8 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { AlertCircle, Brain, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { AlertCircle, Brain, ChevronDown, ChevronUp, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 
 type Insight = {
   id: string
@@ -11,9 +11,16 @@ type Insight = {
   insight_date: string
   insight_type: string
   title: string
-  summary: string
-  full_analysis: string | null
-  recommendations: string[] | null
+  metrics: {
+    primary: string
+    secondary: string
+    tertiary: string
+  }
+  decision: string
+  constraint: string
+  actions: string[]
+  context: string
+  tags: string[]
   confidence_score: number | null
   created_at: string
 }
@@ -45,6 +52,14 @@ function formatDate(value: string) {
   })
 }
 
+function formatConfidence(value: number | null) {
+  return value !== null ? `${Math.round(value * 100)}%` : '—'
+}
+
+function metricLines(metrics: Insight['metrics']) {
+  return [metrics.primary, metrics.secondary, metrics.tertiary].filter(Boolean).slice(0, 3)
+}
+
 export default function AIInsightsPage() {
   const [insights, setInsights] = useState<Insight[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +71,7 @@ export default function AIInsightsPage() {
   const [clients, setClients] = useState<ClientOption[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
   const [insightQuery, setInsightQuery] = useState('')
+  const [expandedInsightIds, setExpandedInsightIds] = useState<Record<string, boolean>>({})
 
   async function loadInsights() {
     setLoading(true)
@@ -160,6 +176,13 @@ export default function AIInsightsPage() {
     } finally {
       setQuerying(false)
     }
+  }
+
+  function toggleInsightContext(insightId: string) {
+    setExpandedInsightIds(current => ({
+      ...current,
+      [insightId]: !current[insightId],
+    }))
   }
 
   const highConfidenceCount = insights.filter(
@@ -293,66 +316,116 @@ export default function AIInsightsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {insights.map(insight => (
-              <div key={insight.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-sm font-semibold text-white">{insight.title}</h2>
-                      <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 font-mono text-[10px] uppercase text-[#D4AF37]">
-                        {insight.insight_type.replace(/_/g, ' ')}
-                      </span>
+            {insights.map(insight => {
+              const isExpanded = Boolean(expandedInsightIds[insight.id])
+              return (
+                <div key={insight.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-sm font-semibold text-white">{insight.title}</h2>
+                        <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 font-mono text-[10px] uppercase text-[#D4AF37]">
+                          {insight.insight_type.replace(/_/g, ' ')}
+                        </span>
+                        {insight.tags.map(tag => (
+                          <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[10px] uppercase text-white/45">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-white/35">
+                        <Link href={`/clients/${insight.client_id}`} className="transition-colors hover:text-white">
+                          {insight.client_name}
+                        </Link>
+                        {' · '}
+                        {formatDate(insight.insight_date)}
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-white/35">
-                      <Link href={`/clients/${insight.client_id}`} className="transition-colors hover:text-white">
-                        {insight.client_name}
-                      </Link>
-                      {' · '}
-                      {formatDate(insight.insight_date)}
-                    </p>
-                  </div>
 
-                  <div className="text-right">
-                    <div className="text-xs text-white/30">Confidence</div>
-                    <div className="text-sm font-bold text-white">
-                      {insight.confidence_score !== null
-                        ? `${Math.round(insight.confidence_score * 100)}%`
-                        : '—'}
+                    <div className="text-right">
+                      <div className="text-xs text-white/30">Confidence</div>
+                      <div className="text-sm font-bold text-white">
+                        {formatConfidence(insight.confidence_score)}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <p className="mt-4 text-sm leading-relaxed text-white/65">{insight.summary}</p>
-
-                {insight.full_analysis && (
-                  <div className="mt-4 rounded-xl bg-white/3 p-4">
-                    <p className="mb-2 font-mono text-xs uppercase tracking-widest text-white/30">
-                      Analysis
+                  <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-4">
+                    <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-white/30">
+                      Metrics
                     </p>
-                    <p className="text-sm leading-relaxed text-white/60">{insight.full_analysis}</p>
+                    <div className="space-y-1">
+                      {metricLines(insight.metrics).map((line, index) => (
+                        <p key={`${insight.id}-metric-${index}`} className="text-sm text-white/60">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
                   </div>
-                )}
 
-                {insight.recommendations && insight.recommendations.length > 0 && (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/8 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-[#D4AF37]/70">
+                        Decision
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-white">
+                        {insight.decision}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-white/8 bg-white/3 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-white/30">
+                        Constraint
+                      </p>
+                      <p className="mt-2 text-sm text-white/65">
+                        {insight.constraint}
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="mt-4">
-                    <p className="mb-2 font-mono text-xs uppercase tracking-widest text-white/30">
-                      Recommendations
+                    <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-white/30">
+                      Actions
                     </p>
                     <div className="space-y-2">
-                      {insight.recommendations.map((recommendation, index) => (
-                        <div key={index} className="flex gap-2 text-sm text-white/60">
+                      {insight.actions.slice(0, 3).map((action, index) => (
+                        <div key={`${insight.id}-action-${index}`} className="flex gap-2 text-sm text-white/65">
                           <span className="flex-shrink-0 text-[#D4AF37]">•</span>
-                          <span>{recommendation}</span>
+                          <span>{action}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {insight.context && (
+                    <div className="mt-4 border-t border-white/8 pt-4">
+                      <button
+                        onClick={() => toggleInsightContext(insight.id)}
+                        className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white"
+                      >
+                        {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        {isExpanded ? 'Hide Context' : 'Show Context'}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="mt-3 rounded-xl bg-white/3 p-4">
+                          <p className="font-mono text-[11px] uppercase tracking-widest text-white/30">
+                            Context
+                          </p>
+                          <p className="mt-2 text-sm leading-relaxed text-white/60">
+                            {insight.context}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
     </div>
   )
 }
+
