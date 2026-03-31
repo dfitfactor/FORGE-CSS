@@ -203,7 +203,9 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     rawFlagsByDay.set(day, (rawFlagsByDay.get(day) ?? 0) + pts)
   }
   let flagPoints = 0
-  for (const v of rawFlagsByDay.values()) flagPoints += Math.min(25, v)
+  rawFlagsByDay.forEach((v) => {
+    flagPoints += Math.min(25, v)
+  })
 
   let dbi: number
   if (journalRows.length === 0 && missedSessions === 0) {
