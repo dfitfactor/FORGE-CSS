@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { tryRecalculateAndSaveBIESnapshot } from '@/lib/bie-calculator'
+import { calculateBIEScores, bieScoresForPersistence, upsertBIESnapshot } from '@/lib/bie-calculator'
 
 export const dynamic = 'force-dynamic'
 
@@ -191,9 +191,12 @@ export async function POST(
     console.log('[TEMP DEBUG][journals][POST] result', debug)
 
     try {
-      await tryRecalculateAndSaveBIESnapshot(params.clientId)
-    } catch (e) {
-      console.error('[BIE] Auto-recalculate after journal failed:', e)
+      const scores = await calculateBIEScores(params.clientId)
+      if (scores.data_quality !== 'insufficient') {
+        await upsertBIESnapshot(params.clientId, bieScoresForPersistence(scores))
+      }
+    } catch (calcErr: any) {
+      console.error('[BIE AUTO-CALC] Failed after journal insert:', calcErr?.message ?? calcErr)
     }
 
     return NextResponse.json({ success: true, id: result.id, entry, debug })

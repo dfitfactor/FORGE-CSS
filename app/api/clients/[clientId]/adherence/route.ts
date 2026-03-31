@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { tryRecalculateAndSaveBIESnapshot } from '@/lib/bie-calculator'
+import { calculateBIEScores, bieScoresForPersistence, upsertBIESnapshot } from '@/lib/bie-calculator'
 
 export async function GET(
   request: NextRequest,
@@ -83,9 +83,12 @@ export async function POST(
     )
 
     try {
-      await tryRecalculateAndSaveBIESnapshot(params.clientId)
-    } catch (e) {
-      console.error('[BIE] Auto-recalculate after adherence failed:', e)
+      const scores = await calculateBIEScores(params.clientId)
+      if (scores.data_quality !== 'insufficient') {
+        await upsertBIESnapshot(params.clientId, bieScoresForPersistence(scores))
+      }
+    } catch (calcErr: any) {
+      console.error('[BIE AUTO-CALC] Failed after adherence insert:', calcErr?.message ?? calcErr)
     }
 
     return NextResponse.json({ success: true, id: result?.id })
