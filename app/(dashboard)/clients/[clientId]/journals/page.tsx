@@ -1,12 +1,12 @@
 ﻿'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Plus, BookOpen, Loader2, CheckCircle,
   AlertCircle, X, Trash2, ChevronDown, ChevronUp, Pencil,
-  Zap, Heart, Brain, Droplets, Moon, Utensils, Flag
+  Zap, Heart, Brain, Droplets, Moon, Utensils, Flag, Upload, FileText
 } from 'lucide-react'
 
 type Entry = {
@@ -93,6 +93,12 @@ function sortJournalEntries(entries: Entry[]) {
   return [...entries].sort(compareJournalEntries)
 }
 
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export default function JournalsPage() {
   const params = useParams<{ clientId: string }>()
   const clientId = params?.clientId as string
@@ -104,11 +110,17 @@ export default function JournalsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filterType, setFilterType] = useState('all')
   const [respondingTo, setRespondingTo] = useState<string | null>(null)
   const [coachReply, setCoachReply] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadTitle, setUploadTitle] = useState('')
+  const [uploadNotes, setUploadNotes] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const emptyForm = {
     entryDate: new Date().toISOString().split('T')[0],
@@ -168,6 +180,94 @@ export default function JournalsPage() {
     setEditingId(null)
     setForm(emptyForm)
     setShowForm(true)
+  }
+
+  function handleQuestionnaireFileSelect(file: File) {
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File must be under 10MB')
+      return
+    }
+
+    setSelectedFile(file)
+    if (!uploadTitle) {
+      setUploadTitle(file.name.replace(/\.[^/.]+$/, ''))
+    }
+  }
+
+  async function handleQuestionnaireUpload() {
+    if (!selectedFile) {
+      setError('Please select a weekly check-in file')
+      return
+    }
+
+    setUploading(true)
+    setError('')
+
+    try {
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(selectedFile)
+      })
+
+      const res = await fetch(`/api/clients/${clientId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          fileType: selectedFile.type,
+          fileSize: selectedFile.size,
+          fileData,
+          documentType: 'questionnaire',
+          title: uploadTitle || selectedFile.name,
+          notes: uploadNotes || 'Weekly check-in questionnaire uploaded from the Journal page.',
+          includeInAi: true,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'Upload failed')
+        return
+      }
+
+      const journalStubTitle = uploadTitle || selectedFile.name.replace(/\.[^/.]+$/, '')
+      const journalStubBody = [
+        `Weekly check-in questionnaire uploaded: ${selectedFile.name}`,
+        uploadNotes ? `Notes: ${uploadNotes}` : '',
+        'This upload is included in AI insights and BIE scoring.',
+      ].filter(Boolean).join('\n')
+
+      const journalRes = await fetch(`/api/clients/${clientId}/journals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entryDate: new Date().toISOString().split('T')[0],
+          entryType: 'coach_note',
+          title: `Weekly Check-In Uploaded: ${journalStubTitle}`,
+          body: journalStubBody,
+          coachResponse: 'Questionnaire uploaded from the Journal page for AI review and score recalculation.',
+          isPrivate: false,
+        }),
+      })
+
+      const journalData = await journalRes.json().catch(() => ({}))
+      if (journalRes.ok && journalData.entry) {
+        setEntries((prev) => sortJournalEntries([...prev.filter((entry) => entry.id !== journalData.entry.id), journalData.entry as Entry]))
+      }
+
+      setSuccess('Weekly check-in uploaded and included in AI insights/BIE scoring')
+      setShowUpload(false)
+      setSelectedFile(null)
+      setUploadTitle('')
+      setUploadNotes('')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
   }
 
   function openEditForm(entry: Entry) {
@@ -251,13 +351,110 @@ export default function JournalsPage() {
               <p className="text-sm text-white/40">{clientName}</p>
             </div>
           </div>
-          <button onClick={openNewEntryForm} className="forge-btn-gold text-sm flex items-center gap-2">
-            <Plus size={15} /> New Entry
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowUpload(v => !v)}
+              className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-sm text-white/75 hover:text-white transition-colors flex items-center gap-2"
+            >
+              <Upload size={14} /> Upload Check-In
+            </button>
+            <button onClick={openNewEntryForm} className="forge-btn-gold text-sm flex items-center gap-2">
+              <Plus size={15} /> New Entry
+            </button>
+          </div>
         </div>
 
         {success && <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3"><CheckCircle size={16} className="text-emerald-400" /><span className="text-sm text-emerald-400">{success}</span></div>}
         {error && <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3"><AlertCircle size={16} className="text-red-400" /><span className="text-sm text-red-400 flex-1">{error}</span><button onClick={() => setError('')}><X size={14} className="text-red-400/60" /></button></div>}
+
+        {showUpload && (
+          <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Upload Weekly Check-In</h2>
+                <p className="text-xs text-white/35 mt-1">Adds the questionnaire as an AI-enabled document so it can inform insights and BIE scores even before manual journal entry.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUpload(false)
+                  setSelectedFile(null)
+                  setUploadTitle('')
+                  setUploadNotes('')
+                }}
+                className="text-white/30 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {!selectedFile ? (
+              <div
+                onClick={() => fileRef.current?.click()}
+                className="border-2 border-dashed border-white/10 hover:border-white/25 rounded-xl p-10 text-center cursor-pointer transition-all"
+              >
+                <Upload size={28} className="mx-auto mb-3 text-white/25" />
+                <p className="text-sm text-white/50">Drop in the client weekly questionnaire or click to browse</p>
+                <p className="text-xs text-white/25 mt-1">PDF, Word, Excel, text, or CSV up to 10MB</p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) handleQuestionnaireFileSelect(e.target.files[0])
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-white/4 border border-white/8 rounded-xl p-3">
+                <FileText size={20} className="text-[#D4AF37] flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white truncate">{selectedFile.name}</div>
+                  <div className="text-xs text-white/35">{formatSize(selectedFile.size)}</div>
+                </div>
+                <button onClick={() => setSelectedFile(null)} className="text-white/30 hover:text-white"><X size={14} /></button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="forge-label">Title</label>
+                <input
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  className="forge-input"
+                  placeholder="Weekly check-in questionnaire"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="forge-label">Notes (optional)</label>
+                <textarea
+                  rows={2}
+                  value={uploadNotes}
+                  onChange={(e) => setUploadNotes(e.target.value)}
+                  className="forge-input resize-none"
+                  placeholder="Optional context for AI review or BIE scoring"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#D4AF37]/15 bg-[#D4AF37]/6 p-3 flex items-start gap-3">
+              <Brain size={16} className="text-[#D4AF37] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-[#D4AF37] font-medium">Automatically included in AI context</p>
+                <p className="text-xs text-white/35 mt-0.5">This uploads as a `questionnaire` document with AI enabled, so protocol generation and BIE recalculation can use it immediately.</p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleQuestionnaireUpload}
+              disabled={uploading || !selectedFile}
+              className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50"
+            >
+              {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</> : <><Upload size={16} /> Upload Weekly Check-In</>}
+            </button>
+          </div>
+        )}
 
         {/* Filter tabs */}
         <div className="flex gap-2 flex-wrap">
