@@ -1,0 +1,2 @@
+ALTER TABLE behavioral_snapshots
+  ADD COLUMN IF NOT EXISTS gps INTEGER;

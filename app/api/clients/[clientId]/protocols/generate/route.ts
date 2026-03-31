@@ -8,6 +8,7 @@ import {
   computePPS,
   extractSignalsFromCheckIn,
 } from '@/lib/bie-engine'
+import { getGPSLabel } from '@/lib/bie-calculator'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '@/lib/protocol-overrides'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -414,15 +415,30 @@ export async function POST(
         ? protocolType
         : 'composite'
 
-    const snapshot = await db.queryOne<{
-      bar: number; bli: number; dbi: number; cdi: number; lsi: number; pps: number
-      generation_state: string
-    }>(
-      `SELECT bar_score AS bar, bli_score AS bli, dbi_score AS dbi, cdi, lsi, pps, generation_state
-       FROM behavioral_snapshots WHERE client_id = $1
-       ORDER BY snapshot_date DESC LIMIT 1`,
-      [params.clientId]
-    )
+    const snapshot = await (async () => {
+      try {
+        return await db.queryOne<{
+          bar: number; bli: number; dbi: number; cdi: number; lsi: number; pps: number; gps: number | null
+          generation_state: string
+        }>(
+          `SELECT bar_score AS bar, bli_score AS bli, dbi_score AS dbi, cdi, lsi, pps, gps, generation_state
+           FROM behavioral_snapshots WHERE client_id = $1
+           ORDER BY snapshot_date DESC LIMIT 1`,
+          [params.clientId]
+        )
+      } catch {
+        return db.queryOne<{
+          bar: number; bli: number; dbi: number; cdi: number; lsi: number; pps: number; gps: number | null
+          generation_state: string
+        }>(
+          `SELECT bar_score AS bar, bli_score AS bli, dbi_score AS dbi, cdi, lsi, pps,
+                  NULL::INTEGER AS gps, generation_state
+           FROM behavioral_snapshots WHERE client_id = $1
+           ORDER BY snapshot_date DESC LIMIT 1`,
+          [params.clientId]
+        )
+      }
+    })()
 
     const measurements = await db.queryOne<{
       weight_lbs: number | null; body_fat_pct: number | null
@@ -742,6 +758,7 @@ Generation State: ${generationState}
 
 BIE VARIABLES:
 BAR: ${resolvedBie.bar} | BLI: ${resolvedBie.bli} | DBI: ${resolvedBie.dbi} | CDI: ${resolvedBie.cdi} | LSI: ${resolvedBie.lsi} | PPS: ${resolvedBie.pps}
+GOAL PROBABILITY SCORE: ${snapshot?.gps ?? 'not calculated'}% — ${typeof snapshot?.gps === 'number' ? getGPSLabel(snapshot.gps) : 'insufficient data'}
 
 MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurements?.body_fat_pct ?? 'unknown'} | Lean mass ${measurements?.lean_mass_lbs ?? 'unknown'}lb | Waist ${measurements?.waist_in ?? 'unknown'}in
 

@@ -9,7 +9,9 @@ import {
 } from 'lucide-react'
 
 type Client = {
-  id: string; full_name: string; email: string
+  id: string
+  full_name: string
+  email: string
   date_of_birth: string | null
   age: number | null
   gender: string | null
@@ -19,6 +21,7 @@ type Client = {
   bar_score: number | null
   dbi_score: number | null
   bli_score: number | null
+  gps: number | null
   snapshot_updated_at: string | null
   last_session: string | null
 }
@@ -34,6 +37,7 @@ function getClientInfoScore(client: Client) {
   if (client.bar_score !== null && client.bar_score !== undefined) score += 1
   if (client.dbi_score !== null && client.dbi_score !== undefined) score += 1
   if (client.bli_score !== null && client.bli_score !== undefined) score += 1
+  if (client.gps !== null && client.gps !== undefined) score += 1
   if (client.snapshot_updated_at) score += 1
   if (client.last_session) score += 1
   return score
@@ -57,7 +61,6 @@ function dedupeSparseClientRows(rows: Client[]) {
     const existingSparse = existingScore <= 1
     const currentSparse = currentScore <= 1
 
-    // Only collapse clear placeholder duplicates; keep genuinely distinct filled records.
     if (existingSparse && currentScore > existingScore) {
       byName.set(normalizedName, client)
     } else if (!existingSparse && currentSparse) {
@@ -79,13 +82,21 @@ const STAGE_COLORS: Record<string, string> = {
   empowerment: 'text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/20',
 }
 
+function getGpsLabel(gps: number) {
+  if (gps >= 80) return 'On Track'
+  if (gps >= 65) return 'Good Progress'
+  if (gps >= 50) return 'Needs Attention'
+  if (gps >= 35) return 'At Risk'
+  return 'Intervention Needed'
+}
+
 function BIEBar({ value, invert = false }: { value: number | null; invert?: boolean }) {
   if (value === null || value === undefined) {
-    return <span className="text-white/20 text-xs font-mono">—</span>
+    return <span className="text-white/20 text-xs font-mono">-</span>
   }
   const v = Number(value)
   if (isNaN(v)) {
-    return <span className="text-white/20 text-xs font-mono">—</span>
+    return <span className="text-white/20 text-xs font-mono">-</span>
   }
   const isGood = invert ? v <= 40 : v >= 65
   const isMid = invert ? v <= 60 : v >= 45
@@ -93,14 +104,29 @@ function BIEBar({ value, invert = false }: { value: number | null; invert?: bool
   return <span className={`text-xs font-mono font-bold ${color}`}>{Math.round(v)}</span>
 }
 
+function GPSBadge({ value }: { value: number | null }) {
+  if (value === null || value === undefined) {
+    return <span className="text-white/20 text-xs font-mono">-</span>
+  }
+
+  const gps = Math.round(value)
+  let color = 'text-red-400'
+  if (gps >= 80) color = 'text-emerald-400'
+  else if (gps >= 65) color = 'text-[#D4AF37]'
+  else if (gps >= 50) color = 'text-amber-400'
+  else if (gps >= 35) color = 'text-orange-400'
+
+  return <span title={getGpsLabel(gps)} className={`text-xs font-mono font-bold ${color}`}>{gps}%</span>
+}
+
 function PriorityCard({ client }: { client: Client }) {
   const bar = Number(client.bar_score)
   const dbi = Number(client.dbi_score)
   const bli = Number(client.bli_score)
   const reasons = []
-  if (bar < 50) reasons.push(`BAR ${Math.round(bar)} — low adherence`)
-  if (dbi > 60) reasons.push(`DBI ${Math.round(dbi)} — high disruption`)
-  if (bli > 65) reasons.push(`BLI ${Math.round(bli)} — elevated load`)
+  if (bar < 50) reasons.push(`BAR ${Math.round(bar)} - low adherence`)
+  if (dbi > 60) reasons.push(`DBI ${Math.round(dbi)} - high disruption`)
+  if (bli > 65) reasons.push(`BLI ${Math.round(bli)} - elevated load`)
 
   return (
     <Link href={`/clients/${client.id}`}
@@ -116,10 +142,10 @@ function PriorityCard({ client }: { client: Client }) {
         </div>
       </div>
       <div className="space-y-1.5 mb-3">
-        {reasons.map((r, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs text-white/50">
+        {reasons.map((reason, index) => (
+          <div key={index} className="flex items-center gap-2 text-xs text-white/50">
             <span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" />
-            {r}
+            {reason}
           </div>
         ))}
       </div>
@@ -135,7 +161,7 @@ function PriorityCard({ client }: { client: Client }) {
   )
 }
 
-type SortKey = 'full_name' | 'current_stage' | 'bar' | 'dbi' | 'bli' | 'last_session'
+type SortKey = 'full_name' | 'current_stage' | 'bar' | 'dbi' | 'bli' | 'gps' | 'last_session'
 
 export default function ClientsPage() {
   const router = useRouter()
@@ -167,7 +193,6 @@ export default function ClientsPage() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  // Priority clients — low BAR, high DBI, or high BLI (null-safe)
   const priorityClients = clients
     .filter(c => {
       if (c.status !== 'active') return false
@@ -185,7 +210,6 @@ export default function ClientsPage() {
     })
     .slice(0, 3)
 
-  // Filtered + sorted list
   const filtered = clients
     .filter(c => {
       if (statusFilter === 'active' && c.status !== 'active') return false
@@ -200,12 +224,14 @@ export default function ClientsPage() {
       return true
     })
     .sort((a, b) => {
-      let av: string | number = 0, bv: string | number = 0
+      let av: string | number = 0
+      let bv: string | number = 0
       if (sortKey === 'full_name') { av = a.full_name; bv = b.full_name }
       else if (sortKey === 'current_stage') { av = a.current_stage ?? ''; bv = b.current_stage ?? '' }
       else if (sortKey === 'bar') { av = Number(a.bar_score ?? -1); bv = Number(b.bar_score ?? -1) }
       else if (sortKey === 'dbi') { av = Number(a.dbi_score ?? -1); bv = Number(b.dbi_score ?? -1) }
       else if (sortKey === 'bli') { av = Number(a.bli_score ?? -1); bv = Number(b.bli_score ?? -1) }
+      else if (sortKey === 'gps') { av = Number(a.gps ?? -1); bv = Number(b.gps ?? -1) }
       else if (sortKey === 'last_session') { av = a.last_session ?? ''; bv = b.last_session ?? '' }
       if (av < bv) return sortDir === 'asc' ? -1 : 1
       if (av > bv) return sortDir === 'asc' ? 1 : -1
@@ -231,20 +257,16 @@ export default function ClientsPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
-
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-white">Clients</h1>
             <p className="text-sm text-white/40 mt-0.5">{clients.filter(c => c.status === 'active').length} active · {clients.length} total</p>
           </div>
-          <Link href="/clients/new"
-            className="forge-btn-gold flex items-center gap-2 text-sm">
+          <Link href="/clients/new" className="forge-btn-gold flex items-center gap-2 text-sm">
             <Plus size={15} /> New Client
           </Link>
         </div>
 
-        {/* Priority cards */}
         {priorityClients.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -257,7 +279,6 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {/* Filters + search */}
         <div className="space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-48">
@@ -291,7 +312,6 @@ export default function ClientsPage() {
           </div>
         </div>
 
-        {/* Client table */}
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Zap size={20} className="text-white/15 animate-pulse" />
@@ -314,27 +334,20 @@ export default function ClientsPage() {
                   <tr className="border-b border-white/8 bg-white/2">
                     <th className="text-left px-5 py-3"><ThBtn col="full_name" label="Client" /></th>
                     <th className="text-left px-4 py-3"><ThBtn col="current_stage" label="Stage" /></th>
-                    <th className="text-left px-4 py-3 hidden md:table-cell">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">DOB</span>
-                    </th>
-                    <th className="text-center px-4 py-3 hidden md:table-cell">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Age</span>
-                    </th>
-                    <th className="text-left px-4 py-3 hidden lg:table-cell">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Gender</span>
-                    </th>
+                    <th className="text-left px-4 py-3 hidden md:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">DOB</span></th>
+                    <th className="text-center px-4 py-3 hidden md:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Age</span></th>
+                    <th className="text-left px-4 py-3 hidden lg:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Gender</span></th>
                     <th className="text-center px-4 py-3"><ThBtn col="bar" label="BAR" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="dbi" label="DBI" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="bli" label="BLI" /></th>
+                    <th className="text-center px-4 py-3"><ThBtn col="gps" label="GPS" /></th>
                     <th className="text-left px-4 py-3 hidden md:table-cell"><ThBtn col="last_session" label="Last Session" /></th>
-                    <th className="text-left px-4 py-3 hidden lg:table-cell">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Goal</span>
-                    </th>
+                    <th className="text-left px-4 py-3 hidden lg:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Goal</span></th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((c, i) => (
+                  {filtered.map((c) => (
                     <tr key={c.id}
                       onClick={() => router.push(`/clients/${c.id}`)}
                       className={`border-b border-white/5 last:border-0 cursor-pointer hover:bg-white/3 transition-colors
@@ -348,32 +361,29 @@ export default function ClientsPage() {
                       <td className="px-4 py-3.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono uppercase capitalize
                           ${STAGE_COLORS[c.current_stage ?? ''] ?? 'text-white/40 bg-white/5 border-white/10'}`}>
-                          {c.current_stage ?? '—'}
+                          {c.current_stage ?? '-'}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 hidden md:table-cell">
                         <span className="text-xs text-white/35 font-mono">
-                          {c.date_of_birth ? new Date(c.date_of_birth + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'â€”'}
+                          {c.date_of_birth ? new Date(`${c.date_of_birth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-center hidden md:table-cell">
-                        <span className="text-xs text-white/55 font-mono">{c.age ?? 'â€”'}</span>
-                      </td>
+                      <td className="px-4 py-3.5 text-center hidden md:table-cell"><span className="text-xs text-white/55 font-mono">{c.age ?? '-'}</span></td>
                       <td className="px-4 py-3.5 hidden lg:table-cell">
-                        <span className="text-xs text-white/35 capitalize">
-                          {c.gender ? c.gender.replace(/_/g, ' ') : 'â€”'}
-                        </span>
+                        <span className="text-xs text-white/35 capitalize">{c.gender ? c.gender.replace(/_/g, ' ') : '-'}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.bar_score} /></td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.dbi_score} invert /></td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.bli_score} invert /></td>
+                      <td className="px-4 py-3.5 text-center"><GPSBadge value={c.gps} /></td>
                       <td className="px-4 py-3.5 hidden md:table-cell">
                         <span className="text-xs text-white/35 font-mono">
-                          {c.last_session ? new Date(c.last_session).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                          {c.last_session ? new Date(c.last_session).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 hidden lg:table-cell">
-                        <span className="text-xs text-white/35 truncate max-w-[160px] block">{c.primary_goal ?? '—'}</span>
+                        <span className="text-xs text-white/35 truncate max-w-[160px] block">{c.primary_goal ?? '-'}</span>
                       </td>
                       <td className="px-4 py-3.5">
                         <ArrowRight size={13} className="text-white/15 group-hover:text-white" />

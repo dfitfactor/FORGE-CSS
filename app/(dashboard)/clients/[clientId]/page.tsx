@@ -40,13 +40,24 @@ async function getClientDetail(clientId: string, coachId: string) {
     try {
       return await db.queryOne<{
         bar: number; bli: number; dbi: number; cdi: number
-        lsi: number; c_lsi: number; pps: number
+        lsi: number; c_lsi: number; pps: number; gps: number | null
         generation_state: string; generation_state_label: string
-      }>(`SELECT bar_score as bar, bli_score as bli, dbi_score as dbi, cdi, lsi, c_lsi, pps, generation_state, generation_state_label
+      }>(`SELECT bar_score as bar, bli_score as bli, dbi_score as dbi, cdi, lsi, c_lsi, pps, gps, generation_state, generation_state_label
           FROM behavioral_snapshots WHERE client_id = $1
           ORDER BY snapshot_date DESC LIMIT 1`, [clientId])
     } catch {
-      return null
+      try {
+        return await db.queryOne<{
+          bar: number; bli: number; dbi: number; cdi: number
+          lsi: number; c_lsi: number; pps: number; gps: number | null
+          generation_state: string; generation_state_label: string
+        }>(`SELECT bar_score as bar, bli_score as bli, dbi_score as dbi, cdi, lsi, c_lsi, pps,
+                NULL::INTEGER as gps, generation_state, generation_state_label
+            FROM behavioral_snapshots WHERE client_id = $1
+            ORDER BY snapshot_date DESC LIMIT 1`, [clientId])
+      } catch {
+        return null
+      }
     }
   })()
 
@@ -180,6 +191,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
 
       <BIEScoreCard
         clientId={client.id}
+        primaryGoal={primaryGoal}
         initialScores={snap ? {
           bar: Number(snap.bar),
           dbi: Number(snap.dbi),
@@ -187,6 +199,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
           cdi: Number(snap.cdi),
           lsi: Number(snap.lsi),
           pps: Number(snap.pps),
+          gps: typeof snap.gps === 'number' ? Number(snap.gps) : null,
         } : null}
       />
 

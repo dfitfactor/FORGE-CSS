@@ -8,6 +8,7 @@ export type BIEScoresResult = {
   cdi: number
   lsi: number
   pps: number
+  gps: number | null
   generation_state: string
   data_quality: 'full' | 'partial' | 'insufficient'
 }
@@ -53,6 +54,19 @@ type DocumentRow = {
   file_type: string | null
   file_name: string | null
   file_data: string | null
+}
+
+type SnapshotTrendRow = {
+  bar_score: number | null
+  snapshot_date: string
+}
+
+type ClientMetaRow = {
+  current_stage: string | null
+  stage_entered_at: string | null
+  primary_goal: string | null
+  sessions_per_week: number | null
+  program_tier: string | null
 }
 
 type DocumentEvidence = {
@@ -338,9 +352,9 @@ function analyzeDocuments(documents: DocumentRow[]): DocumentEvidence {
     nutritionEvidenceCount > 0 || disruptionHits > 0 || stabilityHits > 0 || adherenceScore != null
       ? roundScore(
           (dbiSignal ?? 42) * 0.4 +
-          ((100 - (adherenceScore ?? 55)) * 0.25) +
-          ((cdiSignal ?? 40) * 0.2) +
-          ((100 - (lsiSignal ?? 58)) * 0.15)
+          (100 - (adherenceScore ?? 55)) * 0.25 +
+          (cdiSignal ?? 40) * 0.2 +
+          (100 - (lsiSignal ?? 58)) * 0.15
         )
       : null
 
@@ -365,6 +379,7 @@ function computeCheckinRegularityScore(checkinDates: string[]): number {
   if (checkinDates.length < 2) {
     return checkinDates.length === 1 ? 45 : 50
   }
+
   const sorted = [...checkinDates].map(parseDate).sort((a, b) => a.getTime() - b.getTime())
   const gaps: number[] = []
   for (let i = 1; i < sorted.length; i++) {
@@ -383,8 +398,84 @@ function computeGenerationState(bar: number, dbi: number): string {
   return 'E'
 }
 
+function calculateGPS(input: {
+  bar: number | null
+  bli: number
+  dbi: number
+  pps: number
+  lsi: number
+  barTrend: number[]
+  stageEnteredAt: string | null
+  primaryGoal: string | null
+  programTier: string | null
+}): number {
+  const { bli, dbi, pps, lsi, barTrend, stageEnteredAt, primaryGoal, programTier } = input
+
+  let score = 0
+
+  score += (pps / 100) * 40
+
+  if (barTrend.length >= 2) {
+    const trend = barTrend[0] - barTrend[barTrend.length - 1]
+    if (trend > 10) score += 20
+    else if (trend > 0) score += 15
+    else if (trend > -5) score += 10
+    else if (trend > -15) score += 5
+  } else {
+    score += 10
+  }
+
+  if (dbi > 70) score -= 15
+  else if (dbi > 50) score -= 10
+  else if (dbi > 30) score -= 5
+
+  score += (lsi / 100) * 10
+
+  const bliBonus = ((100 - bli) / 100) * 10
+  score += bliBonus
+
+  if (stageEnteredAt) {
+    const daysInStage = Math.floor(
+      (Date.now() - new Date(stageEnteredAt).getTime()) / (1000 * 60 * 60 * 24)
+    )
+    const momentumScore = Math.min(daysInStage / 90, 1) * 10
+    score += momentumScore
+  } else {
+    score += 5
+  }
+
+  if (programTier === 'forge_elite') score += 5
+  else if (programTier === 'forge_core') score += 3
+  else if (programTier === 'forge_lite') score += 1
+
+  if (primaryGoal) {
+    const hasNumber = /\d/.test(primaryGoal)
+    const isLong = primaryGoal.length > 20
+    if (hasNumber && isLong) score += 5
+    else if (hasNumber || isLong) score += 3
+    else score += 1
+  }
+
+  return Math.min(Math.max(Math.round(score), 0), 100)
+}
+
+export function getGPSLabel(gps: number): string {
+  if (gps >= 80) return 'On Track'
+  if (gps >= 65) return 'Good Progress'
+  if (gps >= 50) return 'Needs Attention'
+  if (gps >= 35) return 'At Risk'
+  return 'Intervention Needed'
+}
+
 export async function calculateBIEScores(clientId: string): Promise<BIEScoresResult> {
-  const [adherenceRows, checkinRows, journalRows, clientRow, documentRows] = await Promise.all([
+  const [
+    adherenceRows,
+    checkinRows,
+    journalRows,
+    documentRows,
+    barTrendRows,
+    clientMeta,
+  ] = await Promise.all([
     db.query<AdherenceRow>(
       `SELECT
          (record_type = 'session_completed'
@@ -420,10 +511,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
        ORDER BY entry_date DESC`,
       [clientId]
     ),
-    db.queryOne<{ sessions_per_week: number | null; current_stage: string | null }>(
-      `SELECT sessions_per_week, current_stage FROM clients WHERE id = $1`,
-      [clientId]
-    ),
     db.query<DocumentRow>(
       `SELECT document_type, title, notes, file_type, file_name,
               encode(file_data, 'base64') AS file_data
@@ -432,6 +519,20 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
          AND include_in_ai = true
        ORDER BY created_at DESC
        LIMIT 8`,
+      [clientId]
+    ),
+    db.query<SnapshotTrendRow>(
+      `SELECT bar_score, snapshot_date::text AS snapshot_date
+       FROM behavioral_snapshots
+       WHERE client_id = $1
+       ORDER BY snapshot_date DESC
+       LIMIT 3`,
+      [clientId]
+    ),
+    db.queryOne<ClientMetaRow>(
+      `SELECT current_stage, stage_entered_at::text AS stage_entered_at, primary_goal,
+              sessions_per_week, program_tier
+       FROM clients WHERE id = $1`,
       [clientId]
     ),
   ])
@@ -448,17 +549,15 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
   else if (checkinCount < 1 && journalCount < 3) data_quality = 'insufficient'
   else data_quality = 'partial'
 
-  // --- BAR ---
   const adherenceTotal = adherenceRows.length
   const adherenceCompleted = adherenceRows.filter((r) => r.completed).length
-  let sessionRate =
-    adherenceTotal > 0 ? (adherenceCompleted / adherenceTotal) * 100 : null
+  const sessionRate = adherenceTotal > 0 ? (adherenceCompleted / adherenceTotal) * 100 : null
 
   const wcVals = checkinRows
     .map((c) => c.workout_consistency)
     .filter((v): v is number => v != null && Number.isFinite(Number(v)))
     .map((v) => clamp(Number(v) * 10, 0, 100))
-  const wcAvg = wcVals.length > 0 ? avg(wcVals)! : null
+  const wcAvg = wcVals.length > 0 ? avg(wcVals) : null
 
   let bar: number | null = null
   if (adherenceTotal > 0 && wcAvg != null) {
@@ -471,7 +570,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     bar = roundScore(docEvidence.adherenceScore)
   }
 
-  // --- BLI ---
   const stressCheckin = checkinRows
     .map((c) => c.stress_rating)
     .filter((v): v is number => v != null && Number.isFinite(Number(v)))
@@ -498,7 +596,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     bli = 45
   }
 
-  // --- DBI ---
   const missedSessions = adherenceRows.filter((r) => {
     if (r.record_type === 'session_missed') return true
     if (r.record_type === 'session_partial') {
@@ -535,7 +632,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
         : calculatedDbi
   }
 
-  // --- CDI ---
   const mindsetVals = checkinRows
     .map((c) => c.mindset_rating)
     .filter((v): v is number => v != null && Number.isFinite(Number(v)))
@@ -552,7 +648,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     cdi = 35
   }
 
-  // --- LSI ---
   const sleepVals = checkinRows
     .map((c) => c.sleep_quality)
     .filter((v): v is number => v != null && Number.isFinite(Number(v)))
@@ -590,7 +685,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
         : calculatedLsi
   }
 
-  // --- PPS ---
   const barForPps = bar ?? 0
   const pps = Math.round(
     barForPps * 0.4 + (100 - bli) * 0.25 + (100 - dbi) * 0.2 + lsi * 0.15
@@ -600,8 +694,27 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
   const genBar = bar ?? 0
   const generation_state = computeGenerationState(genBar, dbi)
 
-  void clientRow?.sessions_per_week
-  void clientRow?.current_stage
+  const barTrend = barTrendRows
+    .map((row) => (typeof row.bar_score === 'number' ? row.bar_score : null))
+    .filter((value): value is number => value != null)
+
+  const gps =
+    data_quality === 'insufficient'
+      ? null
+      : calculateGPS({
+          bar,
+          bli,
+          dbi,
+          pps: ppsClamped,
+          lsi,
+          barTrend,
+          stageEnteredAt: clientMeta?.stage_entered_at ?? null,
+          primaryGoal: clientMeta?.primary_goal ?? null,
+          programTier: clientMeta?.program_tier ?? null,
+        })
+
+  void clientMeta?.sessions_per_week
+  void clientMeta?.current_stage
 
   return {
     bar,
@@ -610,12 +723,12 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     cdi,
     lsi,
     pps: ppsClamped,
+    gps,
     generation_state,
     data_quality,
   }
 }
 
-/** Numeric scores for persistence (BAR null → 0). */
 export function bieScoresForPersistence(r: BIEScoresResult) {
   return {
     bar: r.bar ?? 0,
@@ -624,6 +737,7 @@ export function bieScoresForPersistence(r: BIEScoresResult) {
     cdi: r.cdi,
     lsi: r.lsi,
     pps: r.pps,
+    gps: r.gps ?? 0,
     generation_state: r.generation_state,
   }
 }
@@ -640,18 +754,16 @@ export async function upsertBIESnapshot(
     scores.cdi,
     scores.lsi,
     scores.pps,
+    scores.gps,
     scores.generation_state,
   ]
 
-  // Support both schemas:
-  // - newer: bar_score/dbi_score/bli_score + updated_at
-  // - older/seeded: bar/dbi/bli + created_at
   try {
     await db.query(
       `INSERT INTO behavioral_snapshots
-        (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps,
+        (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps, gps,
          generation_state, snapshot_date, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, NOW())
        ON CONFLICT (client_id, snapshot_date)
        DO UPDATE SET
          bar_score = EXCLUDED.bar_score,
@@ -660,6 +772,7 @@ export async function upsertBIESnapshot(
          cdi = EXCLUDED.cdi,
          lsi = EXCLUDED.lsi,
          pps = EXCLUDED.pps,
+         gps = EXCLUDED.gps,
          generation_state = EXCLUDED.generation_state,
          updated_at = NOW()`,
       params
@@ -667,39 +780,60 @@ export async function upsertBIESnapshot(
     return
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    // Only fall back on missing-column / missing-updated_at schema mismatch.
     if (
       !msg.includes('bar_score') &&
       !msg.includes('dbi_score') &&
       !msg.includes('bli_score') &&
-      !msg.includes('updated_at')
+      !msg.includes('updated_at') &&
+      !msg.includes('gps')
     ) {
       throw err
     }
   }
 
-  await db.query(
-    `INSERT INTO behavioral_snapshots
-      (client_id, bar, dbi, bli, cdi, lsi, pps,
-       generation_state, snapshot_date, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
-     ON CONFLICT (client_id, snapshot_date)
-     DO UPDATE SET
-       bar = EXCLUDED.bar,
-       dbi = EXCLUDED.dbi,
-       bli = EXCLUDED.bli,
-       cdi = EXCLUDED.cdi,
-       lsi = EXCLUDED.lsi,
-       pps = EXCLUDED.pps,
-       generation_state = EXCLUDED.generation_state`,
-    params
-  )
+  try {
+    await db.query(
+      `INSERT INTO behavioral_snapshots
+        (client_id, bar, dbi, bli, cdi, lsi, pps, gps,
+         generation_state, snapshot_date, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, NOW())
+       ON CONFLICT (client_id, snapshot_date)
+       DO UPDATE SET
+         bar = EXCLUDED.bar,
+         dbi = EXCLUDED.dbi,
+         bli = EXCLUDED.bli,
+         cdi = EXCLUDED.cdi,
+         lsi = EXCLUDED.lsi,
+         pps = EXCLUDED.pps,
+         gps = EXCLUDED.gps,
+         generation_state = EXCLUDED.generation_state`,
+      params
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('gps')) {
+      throw err
+    }
+
+    await db.query(
+      `INSERT INTO behavioral_snapshots
+        (client_id, bar, dbi, bli, cdi, lsi, pps,
+         generation_state, snapshot_date, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
+       ON CONFLICT (client_id, snapshot_date)
+       DO UPDATE SET
+         bar = EXCLUDED.bar,
+         dbi = EXCLUDED.dbi,
+         bli = EXCLUDED.bli,
+         cdi = EXCLUDED.cdi,
+         lsi = EXCLUDED.lsi,
+         pps = EXCLUDED.pps,
+         generation_state = EXCLUDED.generation_state`,
+      [clientId, scores.bar, scores.dbi, scores.bli, scores.cdi, scores.lsi, scores.pps, scores.generation_state]
+    )
+  }
 }
 
-/**
- * Recalculates BIE and persists when data is sufficient.
- * Swallows errors — use after successful writes; log failures.
- */
 export async function tryRecalculateAndSaveBIESnapshot(clientId: string): Promise<void> {
   const result = await calculateBIEScores(clientId)
   if (result.data_quality === 'insufficient') return

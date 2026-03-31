@@ -5,6 +5,7 @@ import {
   calculateBIEScores,
   upsertBIESnapshot,
   bieScoresForPersistence,
+  getGPSLabel,
 } from '@/lib/bie-calculator'
 
 async function assertClientAccess(clientId: string, session: { id: string; role: string }) {
@@ -40,7 +41,7 @@ export async function POST(
       {
         error: 'Insufficient data to calculate scores',
         data_quality: 'insufficient',
-        minimum_required: 'At least 1 check-in or 3 journal entries',
+        minimum_required: 'At least 1 check-in, 3 journal entries, or AI-enabled document evidence',
       },
       { status: 422 }
     )
@@ -57,6 +58,7 @@ export async function POST(
   return NextResponse.json({
     success: true,
     scores,
+    gps_label: scores.gps != null ? getGPSLabel(scores.gps) : null,
     generation_state: scores.generation_state,
     data_quality: scores.data_quality,
   })
@@ -76,6 +78,7 @@ export async function GET(
 
   return NextResponse.json({
     scores,
+    gps_label: scores.gps != null ? getGPSLabel(scores.gps) : null,
     generation_state: scores.generation_state,
     data_quality: scores.data_quality,
   })

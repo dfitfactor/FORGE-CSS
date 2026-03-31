@@ -17,6 +17,30 @@ function toScore(v: unknown) {
   return Math.max(0, Math.min(100, n))
 }
 
+function calculateManualGps({
+  bli,
+  dbi,
+  pps,
+  lsi,
+}: {
+  bli: number | null
+  dbi: number | null
+  pps: number | null
+  lsi: number | null
+}) {
+  let score = 0
+  score += ((pps ?? 0) / 100) * 40
+
+  if ((dbi ?? 0) > 70) score -= 15
+  else if ((dbi ?? 0) > 50) score -= 10
+  else if ((dbi ?? 0) > 30) score -= 5
+
+  score += ((lsi ?? 50) / 100) * 10
+  score += ((100 - (bli ?? 45)) / 100) * 10
+
+  return Math.min(Math.max(Math.round(score), 0), 100)
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -46,6 +70,7 @@ export async function POST(
   const cdi = toScore(body?.cdi)
   const lsi = toScore(body?.lsi)
   const pps = toScore(body?.pps)
+  const gps = toScore(body?.gps) ?? calculateManualGps({ bli, dbi, pps, lsi })
 
   if (bar === null || dbi === null) {
     return NextResponse.json({ error: 'BAR and DBI are required' }, { status: 400 })
@@ -56,9 +81,9 @@ export async function POST(
   try {
     await db.query(
       `INSERT INTO behavioral_snapshots
-        (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps,
+        (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps, gps,
          generation_state, snapshot_date, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, NOW())
        ON CONFLICT (client_id, snapshot_date)
        DO UPDATE SET
          bar_score = EXCLUDED.bar_score,
@@ -67,15 +92,40 @@ export async function POST(
          cdi = EXCLUDED.cdi,
          lsi = EXCLUDED.lsi,
          pps = EXCLUDED.pps,
+         gps = EXCLUDED.gps,
          generation_state = EXCLUDED.generation_state,
          updated_at = NOW()`,
-      [params.clientId, bar, dbi, bli, cdi, lsi, pps, generation_state]
+      [params.clientId, bar, dbi, bli, cdi, lsi, pps, gps, generation_state]
     )
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    if (!msg.includes('gps')) {
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+
+    try {
+      await db.query(
+        `INSERT INTO behavioral_snapshots
+          (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps,
+           generation_state, snapshot_date, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
+         ON CONFLICT (client_id, snapshot_date)
+         DO UPDATE SET
+           bar_score = EXCLUDED.bar_score,
+           dbi_score = EXCLUDED.dbi_score,
+           bli_score = EXCLUDED.bli_score,
+           cdi = EXCLUDED.cdi,
+           lsi = EXCLUDED.lsi,
+           pps = EXCLUDED.pps,
+           generation_state = EXCLUDED.generation_state,
+           updated_at = NOW()`,
+        [params.clientId, bar, dbi, bli, cdi, lsi, pps, generation_state]
+      )
+    } catch (fallbackErr: unknown) {
+      const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+      return NextResponse.json({ error: fallbackMsg }, { status: 500 })
+    }
   }
 
-  return NextResponse.json({ success: true, generation_state })
+  return NextResponse.json({ success: true, generation_state, gps })
 }
-
