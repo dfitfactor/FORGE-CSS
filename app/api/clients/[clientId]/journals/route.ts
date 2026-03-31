@@ -1,6 +1,7 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { tryRecalculateAndSaveBIESnapshot } from '@/lib/bie-calculator'
 
 export const dynamic = 'force-dynamic'
 
@@ -188,6 +189,12 @@ export async function POST(
     }
     // TEMP DEBUG
     console.log('[TEMP DEBUG][journals][POST] result', debug)
+
+    try {
+      await tryRecalculateAndSaveBIESnapshot(params.clientId)
+    } catch (e) {
+      console.error('[BIE] Auto-recalculate after journal failed:', e)
+    }
 
     return NextResponse.json({ success: true, id: result.id, entry, debug })
   } catch (err: unknown) {

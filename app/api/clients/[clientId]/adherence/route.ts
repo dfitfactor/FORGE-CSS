@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { tryRecalculateAndSaveBIESnapshot } from '@/lib/bie-calculator'
 
 export async function GET(
   request: NextRequest,
@@ -80,6 +81,12 @@ export async function POST(
         coachNotes || null,
       ]
     )
+
+    try {
+      await tryRecalculateAndSaveBIESnapshot(params.clientId)
+    } catch (e) {
+      console.error('[BIE] Auto-recalculate after adherence failed:', e)
+    }
 
     return NextResponse.json({ success: true, id: result?.id })
   } catch (err: unknown) {

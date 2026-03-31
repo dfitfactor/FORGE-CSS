@@ -1,6 +1,7 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { tryRecalculateAndSaveBIESnapshot } from '@/lib/bie-calculator'
 
 type CheckinColumnType = {
   column_name: string
@@ -153,6 +154,11 @@ export async function POST(
         body.coachNotes || null,
       ]
     )
+    try {
+      await tryRecalculateAndSaveBIESnapshot(params.clientId)
+    } catch (e) {
+      console.error('[BIE] Auto-recalculate after check-in failed:', e)
+    }
     return NextResponse.json({ success: true, id: result?.id })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
