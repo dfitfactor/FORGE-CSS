@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx'
 import { db } from '@/lib/db'
 
 export type BIEScoresResult = {
@@ -45,6 +46,24 @@ type JournalRow = {
   entry_date: string
 }
 
+type DocumentRow = {
+  document_type: string | null
+  title: string | null
+  notes: string | null
+  file_type: string | null
+  file_name: string | null
+  file_data: string | null
+}
+
+type DocumentEvidence = {
+  adherenceScore: number | null
+  dbiSignal: number | null
+  lsiSignal: number | null
+  cdiSignal: number | null
+  bliSignal: number | null
+  signalCount: number
+}
+
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n))
 }
@@ -60,6 +79,286 @@ function avg(nums: number[]): number | null {
 
 function parseDate(d: string): Date {
   return new Date(`${d}T12:00:00`)
+}
+
+function normalizeBase64(input: string | null | undefined): string | null {
+  if (input == null) return null
+
+  let s = String(input).trim()
+  s = s.replace(/^data:.*?;base64,/i, '')
+  s = s.replace(/\s+/g, '')
+  s = s.replace(/-/g, '+').replace(/_/g, '/')
+
+  if (!s) return null
+
+  const padding = s.length % 4
+  if (padding !== 0) {
+    s = s.padEnd(s.length + (4 - padding), '=')
+  }
+
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
+  return s
+}
+
+function normalizeHeader(header: string) {
+  return header.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function parseSpreadsheetNumber(value: unknown) {
+  const cleaned = String(value ?? '').replace(/[^0-9.\-]/g, '').trim()
+  if (!cleaned) return null
+  const parsed = Number(cleaned)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function countKeywordHits(text: string, patterns: RegExp[]) {
+  const corpus = text.toLowerCase()
+  return patterns.reduce((count, pattern) => count + (pattern.test(corpus) ? 1 : 0), 0)
+}
+
+function readDocumentTextPreview(doc: DocumentRow, charLimit = 2500) {
+  const fileType = doc.file_type?.toLowerCase() ?? ''
+  const fileName = doc.file_name?.toLowerCase() ?? ''
+  const normalized = normalizeBase64(doc.file_data)
+  if (!normalized) return ''
+
+  try {
+    if (
+      fileType.includes('text') ||
+      fileType.includes('plain') ||
+      fileType.includes('csv') ||
+      fileName.endsWith('.txt') ||
+      fileName.endsWith('.md') ||
+      fileName.endsWith('.csv')
+    ) {
+      return Buffer.from(normalized, 'base64')
+        .toString('utf-8')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, charLimit)
+    }
+
+    const isSpreadsheet =
+      fileType.includes('spreadsheet') ||
+      fileType.includes('excel') ||
+      fileType.includes('sheet') ||
+      fileName.endsWith('.xls') ||
+      fileName.endsWith('.xlsx')
+
+    if (!isSpreadsheet) return ''
+
+    const workbook = XLSX.read(Buffer.from(normalized, 'base64'), { type: 'buffer' })
+    const previews = workbook.SheetNames.slice(0, 2).map((sheetName) => {
+      const worksheet = workbook.Sheets[sheetName]
+      const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(worksheet, {
+        header: 1,
+        blankrows: false,
+        raw: false,
+        defval: '',
+      })
+
+      if (!rows.length) return ''
+
+      const headerIndex = rows.findIndex((row) =>
+        row.some((cell) => String(cell).trim().length > 0)
+      )
+      if (headerIndex === -1) return ''
+
+      const headerRow = rows[headerIndex].map((cell) => String(cell).trim())
+      const bodyRows = rows
+        .slice(headerIndex + 1)
+        .filter((row) => row.some((cell) => String(cell).trim().length > 0))
+        .slice(0, 10)
+
+      const lineItems = bodyRows.map((row) =>
+        headerRow
+          .slice(0, 8)
+          .map((header, index) => {
+            const value = String(row[index] ?? '').trim()
+            return header && value ? `${header}: ${value}` : ''
+          })
+          .filter(Boolean)
+          .join(' | ')
+      )
+
+      return [`[Sheet: ${sheetName}]`, ...lineItems].filter(Boolean).join('\n')
+    })
+
+    return previews.filter(Boolean).join('\n').slice(0, charLimit)
+  } catch {
+    return ''
+  }
+}
+
+function analyzeDocuments(documents: DocumentRow[]): DocumentEvidence {
+  if (documents.length === 0) {
+    return {
+      adherenceScore: null,
+      dbiSignal: null,
+      lsiSignal: null,
+      cdiSignal: null,
+      bliSignal: null,
+      signalCount: 0,
+    }
+  }
+
+  let nutritionEvidenceCount = 0
+  let nutritionEntries = 0
+  let mealMentions = 0
+  let totalCalories = 0
+  let totalProtein = 0
+  const corpusParts: string[] = []
+
+  for (const doc of documents) {
+    const descriptor = [
+      doc.document_type ?? '',
+      doc.title ?? '',
+      doc.notes ?? '',
+      doc.file_name ?? '',
+    ].join(' ')
+    const preview = readDocumentTextPreview(doc)
+    const docCorpus = [descriptor, preview].filter(Boolean).join('\n')
+    corpusParts.push(docCorpus)
+
+    const isNutritionEvidence =
+      doc.document_type === 'nutrition_log' ||
+      /food journal|nutrition log|meal log|macro log|diet log|myfitnesspal|cronometer/i.test(docCorpus)
+
+    if (isNutritionEvidence) {
+      nutritionEvidenceCount += 1
+      mealMentions += countKeywordHits(docCorpus, [
+        /\bbreakfast\b/,
+        /\blunch\b/,
+        /\bdinner\b/,
+        /\bsnack\b/,
+        /\bmeal\b/,
+      ])
+    }
+
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    const fileName = doc.file_name?.toLowerCase() ?? ''
+    const isSpreadsheet =
+      fileType.includes('spreadsheet') ||
+      fileType.includes('excel') ||
+      fileType.includes('sheet') ||
+      fileName.endsWith('.xls') ||
+      fileName.endsWith('.xlsx')
+
+    if (!isSpreadsheet || !isNutritionEvidence) continue
+
+    try {
+      const normalized = normalizeBase64(doc.file_data)
+      if (!normalized) continue
+
+      const workbook = XLSX.read(Buffer.from(normalized, 'base64'), { type: 'buffer' })
+      for (const sheetName of workbook.SheetNames.slice(0, 3)) {
+        const worksheet = workbook.Sheets[sheetName]
+        const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(worksheet, {
+          header: 1,
+          blankrows: false,
+          raw: false,
+          defval: '',
+        })
+        if (!rows.length) continue
+
+        const headerIndex = rows.findIndex((row) =>
+          row.some((cell) => String(cell).trim().length > 0)
+        )
+        if (headerIndex === -1) continue
+
+        const headers = rows[headerIndex].map((cell) => normalizeHeader(String(cell)))
+        const entryRows = rows
+          .slice(headerIndex + 1)
+          .filter((row) => row.some((cell) => String(cell).trim().length > 0))
+          .slice(0, 40)
+
+        nutritionEntries += entryRows.length
+
+        const caloriesIndex = headers.findIndex((header) => header.includes('calories'))
+        const proteinIndex = headers.findIndex((header) => header.includes('protein'))
+
+        for (const row of entryRows) {
+          if (caloriesIndex >= 0) totalCalories += parseSpreadsheetNumber(row[caloriesIndex]) ?? 0
+          if (proteinIndex >= 0) totalProtein += parseSpreadsheetNumber(row[proteinIndex]) ?? 0
+        }
+      }
+    } catch {
+      // Ignore parser failures and fall back to metadata/text-only heuristics.
+    }
+  }
+
+  const corpus = corpusParts.join('\n').toLowerCase()
+  const disruptionHits = countKeywordHits(corpus, [
+    /\btravel\b/,
+    /\bsick|ill|illness\b/,
+    /\bstress|overwhelm|burnout\b/,
+    /\bbusy|chaos|disrupt(?:ed|ion)?\b/,
+    /\bpain|injury|flare\b/,
+    /\bpoor sleep|insomnia|exhausted|fatigue\b/,
+    /\bskip(?:ped)?|miss(?:ed|ing)\b/,
+    /\boff track\b/,
+  ])
+  const stabilityHits = countKeywordHits(corpus, [
+    /\bconsistent|routine|steady|stable\b/,
+    /\benergized|confident|focused|strong\b/,
+    /\bwell-rested|slept well|good sleep\b/,
+    /\bon track|momentum|dialed in\b/,
+    /\bprep(?:ped)?\b/,
+    /\bprotein\b/,
+    /\bhydration|water\b/,
+  ])
+
+  const adherenceInputs = [
+    nutritionEvidenceCount > 0 ? 52 : null,
+    nutritionEntries >= 20 ? 78 : nutritionEntries >= 10 ? 70 : nutritionEntries >= 3 ? 62 : null,
+    mealMentions >= 6 ? 68 : mealMentions >= 3 ? 60 : null,
+    totalProtein >= 120 ? 80 : totalProtein >= 80 ? 72 : totalProtein >= 40 ? 64 : null,
+    totalCalories >= 1200 ? 64 : totalCalories >= 800 ? 58 : null,
+  ].filter((value): value is number => value != null)
+
+  const adherenceBase = avg(adherenceInputs)
+  const adherenceScore =
+    adherenceBase == null
+      ? null
+      : roundScore(adherenceBase + stabilityHits * 4 - disruptionHits * 5)
+
+  const dbiSignal =
+    nutritionEvidenceCount > 0 || disruptionHits > 0 || stabilityHits > 0
+      ? roundScore(35 + disruptionHits * 10 - stabilityHits * 4)
+      : null
+  const lsiSignal =
+    nutritionEvidenceCount > 0 || disruptionHits > 0 || stabilityHits > 0
+      ? roundScore(52 + stabilityHits * 8 - disruptionHits * 8)
+      : null
+  const cdiSignal =
+    disruptionHits > 0 || stabilityHits > 0
+      ? roundScore(38 + disruptionHits * 8 - stabilityHits * 3)
+      : null
+  const bliSignal =
+    nutritionEvidenceCount > 0 || disruptionHits > 0 || stabilityHits > 0 || adherenceScore != null
+      ? roundScore(
+          (dbiSignal ?? 42) * 0.4 +
+          ((100 - (adherenceScore ?? 55)) * 0.25) +
+          ((cdiSignal ?? 40) * 0.2) +
+          ((100 - (lsiSignal ?? 58)) * 0.15)
+        )
+      : null
+
+  const signalCount =
+    Number(adherenceScore != null) +
+    Number(dbiSignal != null) +
+    Number(lsiSignal != null) +
+    Number(cdiSignal != null) +
+    Number(bliSignal != null)
+
+  return {
+    adherenceScore,
+    dbiSignal,
+    lsiSignal,
+    cdiSignal,
+    bliSignal,
+    signalCount,
+  }
 }
 
 function computeCheckinRegularityScore(checkinDates: string[]): number {
@@ -85,7 +384,7 @@ function computeGenerationState(bar: number, dbi: number): string {
 }
 
 export async function calculateBIEScores(clientId: string): Promise<BIEScoresResult> {
-  const [adherenceRows, checkinRows, journalRows, clientRow] = await Promise.all([
+  const [adherenceRows, checkinRows, journalRows, clientRow, documentRows] = await Promise.all([
     db.query<AdherenceRow>(
       `SELECT
          (record_type = 'session_completed'
@@ -125,13 +424,27 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
       `SELECT sessions_per_week, current_stage FROM clients WHERE id = $1`,
       [clientId]
     ),
+    db.query<DocumentRow>(
+      `SELECT document_type, title, notes, file_type, file_name,
+              encode(file_data, 'base64') AS file_data
+       FROM client_documents
+       WHERE client_id = $1
+         AND include_in_ai = true
+       ORDER BY created_at DESC
+       LIMIT 8`,
+      [clientId]
+    ),
   ])
 
   const checkinCount = checkinRows.length
   const journalCount = journalRows.length
+  const docEvidence = analyzeDocuments(documentRows)
 
   let data_quality: BIEScoresResult['data_quality']
   if (checkinCount >= 1 && journalCount >= 1) data_quality = 'full'
+  else if (checkinCount >= 1 && docEvidence.signalCount > 0) data_quality = 'full'
+  else if (journalCount >= 1 && docEvidence.signalCount > 0) data_quality = 'partial'
+  else if (docEvidence.signalCount > 0) data_quality = 'partial'
   else if (checkinCount < 1 && journalCount < 3) data_quality = 'insufficient'
   else data_quality = 'partial'
 
@@ -154,6 +467,8 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     bar = roundScore(sessionRate!)
   } else if (wcAvg != null) {
     bar = roundScore(wcAvg)
+  } else if (docEvidence.adherenceScore != null) {
+    bar = roundScore(docEvidence.adherenceScore)
   }
 
   // --- BLI ---
@@ -177,6 +492,8 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     bli = roundScore(ciStress)
   } else if (jStress != null) {
     bli = roundScore(jStress)
+  } else if (docEvidence.bliSignal != null) {
+    bli = roundScore(docEvidence.bliSignal)
   } else {
     bli = 45
   }
@@ -209,9 +526,13 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
 
   let dbi: number
   if (journalRows.length === 0 && missedSessions === 0) {
-    dbi = 20
+    dbi = docEvidence.dbiSignal != null ? roundScore(docEvidence.dbiSignal) : 20
   } else {
-    dbi = roundScore(Math.min(100, flagPoints + missedPoints))
+    const calculatedDbi = roundScore(Math.min(100, flagPoints + missedPoints))
+    dbi =
+      docEvidence.dbiSignal != null
+        ? roundScore(calculatedDbi * 0.85 + docEvidence.dbiSignal * 0.15)
+        : calculatedDbi
   }
 
   // --- CDI ---
@@ -225,6 +546,8 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     cdi = roundScore(avg(mindsetVals)!)
   } else if (ciStress != null) {
     cdi = roundScore(ciStress)
+  } else if (docEvidence.cdiSignal != null) {
+    cdi = roundScore(docEvidence.cdiSignal)
   } else {
     cdi = 35
   }
@@ -244,7 +567,7 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
 
   let lsi: number
   if (checkinCount === 0) {
-    lsi = 50
+    lsi = docEvidence.lsiSignal != null ? roundScore(docEvidence.lsiSignal) : 50
   } else if (checkinCount === 1) {
     const s = avg(sleepVals)
     const e = avg(energyVals)
@@ -260,7 +583,11 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     const e = avg(energyVals)
     const sScore = s ?? 50
     const eScore = e ?? 50
-    lsi = roundScore(regularity * 0.4 + sScore * 0.3 + eScore * 0.3)
+    const calculatedLsi = roundScore(regularity * 0.4 + sScore * 0.3 + eScore * 0.3)
+    lsi =
+      docEvidence.lsiSignal != null
+        ? roundScore(calculatedLsi * 0.85 + docEvidence.lsiSignal * 0.15)
+        : calculatedLsi
   }
 
   // --- PPS ---
@@ -305,31 +632,67 @@ export async function upsertBIESnapshot(
   clientId: string,
   scores: ReturnType<typeof bieScoresForPersistence>
 ) {
+  const params = [
+    clientId,
+    scores.bar,
+    scores.dbi,
+    scores.bli,
+    scores.cdi,
+    scores.lsi,
+    scores.pps,
+    scores.generation_state,
+  ]
+
+  // Support both schemas:
+  // - newer: bar_score/dbi_score/bli_score + updated_at
+  // - older/seeded: bar/dbi/bli + created_at
+  try {
+    await db.query(
+      `INSERT INTO behavioral_snapshots
+        (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps,
+         generation_state, snapshot_date, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
+       ON CONFLICT (client_id, snapshot_date)
+       DO UPDATE SET
+         bar_score = EXCLUDED.bar_score,
+         dbi_score = EXCLUDED.dbi_score,
+         bli_score = EXCLUDED.bli_score,
+         cdi = EXCLUDED.cdi,
+         lsi = EXCLUDED.lsi,
+         pps = EXCLUDED.pps,
+         generation_state = EXCLUDED.generation_state,
+         updated_at = NOW()`,
+      params
+    )
+    return
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    // Only fall back on missing-column / missing-updated_at schema mismatch.
+    if (
+      !msg.includes('bar_score') &&
+      !msg.includes('dbi_score') &&
+      !msg.includes('bli_score') &&
+      !msg.includes('updated_at')
+    ) {
+      throw err
+    }
+  }
+
   await db.query(
     `INSERT INTO behavioral_snapshots
-      (client_id, bar_score, dbi_score, bli_score, cdi, lsi, pps,
-       generation_state, snapshot_date, updated_at)
+      (client_id, bar, dbi, bli, cdi, lsi, pps,
+       generation_state, snapshot_date, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, NOW())
      ON CONFLICT (client_id, snapshot_date)
      DO UPDATE SET
-       bar_score = EXCLUDED.bar_score,
-       dbi_score = EXCLUDED.dbi_score,
-       bli_score = EXCLUDED.bli_score,
+       bar = EXCLUDED.bar,
+       dbi = EXCLUDED.dbi,
+       bli = EXCLUDED.bli,
        cdi = EXCLUDED.cdi,
        lsi = EXCLUDED.lsi,
        pps = EXCLUDED.pps,
-       generation_state = EXCLUDED.generation_state,
-       updated_at = NOW()`,
-    [
-      clientId,
-      scores.bar,
-      scores.dbi,
-      scores.bli,
-      scores.cdi,
-      scores.lsi,
-      scores.pps,
-      scores.generation_state,
-    ]
+       generation_state = EXCLUDED.generation_state`,
+    params
   )
 }
 
