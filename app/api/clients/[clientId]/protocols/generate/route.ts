@@ -10,6 +10,7 @@ import {
 } from '@/lib/bie-engine'
 import { getGPSLabel } from '@/lib/bie-calculator'
 import { selectExercisesForSession, type ExerciseBlock as SelectedExerciseBlock } from '@/lib/exercise-selector'
+import { formatFoodsForPrompt, selectFoodsForMealPlan } from '@/lib/usda-food-selector'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '@/lib/protocol-overrides'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -1034,6 +1035,18 @@ ${prompt}`
     generated.override_summary = coachAdjustmentSummary
     generated.influenced_by_overrides = overrideIntelligence.hasInfluence
 
+    const selectedFoods = await selectFoodsForMealPlan({
+      clientId: params.clientId,
+      primaryGoal: client.primary_goal,
+      dailyCalories: generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories ?? null,
+      proteinG: generated.nutritionStructure?.proteinG ?? generated.nutritionProtocol?.proteinG ?? null,
+      carbG: generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG ?? null,
+      fatG: generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG ?? null,
+      mealFrequency: generated.nutritionStructure?.mealFrequency ?? generated.nutritionProtocol?.mealFrequency ?? null,
+      physiqueFocus: isPhysiqueFocused,
+    })
+    const usdaFoodContext = formatFoodsForPrompt(selectedFoods)
+
     // CALL 2 — Meal plan only
     let mealPlan: any[] = []
     try {
@@ -1051,6 +1064,9 @@ ${coachDirectives ? 'Coach notes: ' + coachDirectives : ''}
 Physique athlete focus: ${isPhysiqueFocused ? 'yes' : 'no'}
 Protocol framing: ${protocolFrame}
 
+SELECTED FOODS FROM USDA FOODDATA CENTRAL:
+${usdaFoodContext}
+
 Return ONLY a JSON array (no markdown, no wrapper object):
 [
   {
@@ -1063,6 +1079,9 @@ Return ONLY a JSON array (no markdown, no wrapper object):
 
 Include: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (training days), Dinner, Evening Snack (if applicable).
 Use REAL foods and EXACT gram/oz portions based on the macro targets above.
+Use the USDA-selected foods listed above as the primary ingredient pool.
+Do not invent a completely different food list when USDA foods are available.
+Vary meal choices across the selected USDA foods so plans do not feel repetitive.
 For physique-athlete clients, preserve bodybuilding specificity with performance-supportive carbs, protective protein, and a coherent BSLDS translation that still feels easy to execute.
 The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
 
