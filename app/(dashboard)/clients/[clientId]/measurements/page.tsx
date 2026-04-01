@@ -42,7 +42,11 @@ type FormState = {
 }
 
 function today() {
-  return new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function fmt(val: number | null, unit = '') {
@@ -51,7 +55,7 @@ function fmt(val: number | null, unit = '') {
 }
 
 function formatDate(str: string) {
-  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(`${str}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function Trend({ current, previous, lowerIsBetter = false }: {
