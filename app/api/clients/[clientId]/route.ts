@@ -24,6 +24,31 @@ const UpdateClientSchema = z.object({
   notes: z.string().optional(),
 })
 
+type ClientColumnType = {
+  column_name: string
+  data_type: string
+  udt_name: string
+}
+
+function formatClientColumnValue(
+  columns: Map<string, ClientColumnType>,
+  columnName: string,
+  value: unknown
+) {
+  if (!Array.isArray(value)) return value
+
+  const cleaned = value
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+
+  const column = columns.get(columnName)
+  if (!column) return cleaned
+  if (column.data_type === 'ARRAY' || column.udt_name.startsWith('_')) return cleaned
+  if (column.udt_name === 'json' || column.udt_name === 'jsonb') return JSON.stringify(cleaned)
+
+  return cleaned.join(', ')
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
@@ -110,12 +135,13 @@ export async function PATCH(
 
     // Some staging environments may have a different `clients` schema.
     // Only update columns that exist to avoid hard 500s.
-    const existingColumns = await db.query<{ column_name: string }>(
-      `SELECT column_name
+    const existingColumns = await db.query<ClientColumnType>(
+      `SELECT column_name, data_type, udt_name
        FROM information_schema.columns
        WHERE table_name = 'clients'`
     )
     const colSet = new Set(existingColumns.map(c => c.column_name))
+    const columnMap = new Map(existingColumns.map((column) => [column.column_name, column]))
 
     const updates: string[] = []
     const values: unknown[] = []
@@ -138,7 +164,13 @@ export async function PATCH(
         // Skip missing columns on staging.
         if (!colSet.has(dbCol)) continue
         updates.push(`${dbCol} = $${idx}`)
-        values.push(parsed.data[key as keyof typeof parsed.data])
+        values.push(
+          formatClientColumnValue(
+            columnMap,
+            dbCol,
+            parsed.data[key as keyof typeof parsed.data]
+          )
+        )
         idx++
       }
     }
