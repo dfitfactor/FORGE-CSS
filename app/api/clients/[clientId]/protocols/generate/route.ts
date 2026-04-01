@@ -9,6 +9,7 @@ import {
   extractSignalsFromCheckIn,
 } from '@/lib/bie-engine'
 import { getGPSLabel } from '@/lib/bie-calculator'
+import { selectExercisesForSession, type ExerciseBlock as SelectedExerciseBlock } from '@/lib/exercise-selector'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '@/lib/protocol-overrides'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -179,6 +180,62 @@ function ensureExerciseLoads(exercises: unknown[] | undefined) {
     }
   })
 }
+
+function alignGeneratedSessionToSelectedExercises(
+  generated: GeneratedProtocolCompat,
+  exerciseBlocks: SelectedExerciseBlock
+) {
+  const sessionStructure = generated.sessionStructure
+  if (!sessionStructure) return generated
+
+  const alignBlock = (
+    currentBlock: unknown[] | undefined,
+    selectedExercises: SelectedExerciseBlock[keyof SelectedExerciseBlock],
+    defaults: { sets: number; reps: string; tempo: string }
+  ) => {
+    return selectedExercises.map((exercise, index) => {
+      const current =
+        Array.isArray(currentBlock) && currentBlock[index] && typeof currentBlock[index] === 'object'
+          ? (currentBlock[index] as Record<string, unknown>)
+          : {}
+
+      return {
+        ...current,
+        exerciseName: exercise.exercise_name,
+        sets:
+          typeof current.sets === 'number' && Number.isFinite(current.sets)
+            ? current.sets
+            : defaults.sets,
+        reps: typeof current.reps === 'string' && current.reps.trim() ? current.reps : defaults.reps,
+        tempo: typeof current.tempo === 'string' && current.tempo.trim() ? current.tempo : defaults.tempo,
+      }
+    })
+  }
+
+  sessionStructure.activationBlock = alignBlock(sessionStructure.activationBlock, exerciseBlocks.activation, {
+    sets: 2,
+    reps: '8-10',
+    tempo: 'controlled',
+  })
+  sessionStructure.primaryBlock = alignBlock(sessionStructure.primaryBlock, exerciseBlocks.primary, {
+    sets: 3,
+    reps: '8-12',
+    tempo: '3-1-1',
+  })
+  sessionStructure.accessoryBlock = alignBlock(sessionStructure.accessoryBlock, exerciseBlocks.accessory, {
+    sets: 2,
+    reps: '10-15',
+    tempo: '2-1-1',
+  })
+  sessionStructure.finisherBlock = alignBlock(sessionStructure.finisherBlock, exerciseBlocks.finisher, {
+    sets: 1,
+    reps: '30-60 seconds',
+    tempo: 'steady',
+  })
+
+  return generated
+}
+
 
 function collectTextContent(blocks: Array<{ type: string; text?: string }>) {
   return blocks
@@ -739,6 +796,79 @@ export async function POST(
     const sportSpecificPriorities = isPhysiqueFocused
       ? 'Glute and hamstring density, capped delts, upper-back shaping, waist illusion, performance-supportive carbs, and protective protein.'
       : 'No special physique-sport emphasis detected.'
+    const complexityCeiling = {
+      A: Math.min(resolvedBie.pps >= 70 ? 4 : 3, 5),
+      B: 3,
+      C: 2,
+      D: 2,
+      E: 1,
+    }[generationState] ?? 2
+    const volumeLevel = {
+      A: 'full',
+      B: 'moderate',
+      C: 'reduced',
+      D: 'minimum',
+      E: 'minimum',
+    }[generationState] as 'full' | 'moderate' | 'reduced' | 'minimum'
+    const movementPatterns = normalizedProtocolType === 'movement'
+      ? ['Squat', 'Hinge', 'Lunge', 'Push', 'Pull', 'Core']
+      : ['Core', 'Hinge', 'Squat']
+    const rawEquipment = Array.isArray(client.available_equipment)
+      ? client.available_equipment
+      : []
+    const equipmentMap: Record<string, string> = {
+      Barbell: 'barbell',
+      Dumbbells: 'dumbbell',
+      Kettlebell: 'kettlebell',
+      'Cable Machine': 'cable',
+      'Resistance Bands': 'band',
+      TRX: 'trx',
+      'Full Gym': 'bodyweight,dumbbell,barbell,cable,kettlebell,machine,trx,band',
+      'Bodyweight Only': 'bodyweight',
+    }
+    const normalizedEquipment = rawEquipment.length === 0
+      ? ['bodyweight', 'dumbbell', 'barbell', 'cable', 'kettlebell', 'band', 'machine', 'trx']
+      : Array.from(new Set(rawEquipment.flatMap((equipment) => (equipmentMap[equipment] || 'other').split(','))))
+    const injuryPatterns = Array.isArray(client.injuries) &&
+      client.injuries.some((injury: string) => injury.toLowerCase().includes('knee'))
+      ? ['Lunge', 'Squat']
+      : []
+    const exerciseBlocks = await selectExercisesForSession({
+      movementPatterns,
+      complexityCeiling,
+      volumeLevel,
+      availableEquipment: normalizedEquipment,
+      excludePatterns: injuryPatterns,
+      generationState,
+    })
+    const exerciseContext = `
+SELECTED EXERCISES FROM FORGË LIBRARY:
+
+ACTIVATION BLOCK (${exerciseBlocks.activation.length} exercises):
+${exerciseBlocks.activation.map((exercise) =>
+  `- ${exercise.exercise_name} (${exercise.movement_pattern}, ${exercise.equipment}, Tier ${exercise.complexity_tier})`
+).join('\n')}
+
+PRIMARY BLOCK (${exerciseBlocks.primary.length} exercises):
+${exerciseBlocks.primary.map((exercise) =>
+  `- ${exercise.exercise_name} (${exercise.movement_pattern}, ${exercise.equipment}, Tier ${exercise.complexity_tier})`
+).join('\n')}
+
+ACCESSORY BLOCK (${exerciseBlocks.accessory.length} exercises):
+${exerciseBlocks.accessory.map((exercise) =>
+  `- ${exercise.exercise_name} (${exercise.movement_pattern}, ${exercise.equipment}, Tier ${exercise.complexity_tier})`
+).join('\n')}
+
+${exerciseBlocks.finisher.length > 0 ? `FINISHER BLOCK (${exerciseBlocks.finisher.length} exercises):
+${exerciseBlocks.finisher.map((exercise) =>
+  `- ${exercise.exercise_name} (${exercise.movement_pattern}, ${exercise.equipment}, Tier ${exercise.complexity_tier})`
+).join('\n')}` : 'FINISHER: None (generation state does not permit finisher)'}
+
+INSTRUCTION: Use THESE EXACT exercises in the sessionStructure.
+Do not substitute or invent different exercises.
+Use the exercises exactly as named above.
+Assign each to its correct block: activation/primary/accessory/finisher.
+`
 
     const prompt = `Generate a ${normalizedProtocolType} protocol for this FORGE client.
 
@@ -776,10 +906,13 @@ ${coachAdjustmentSummary}
     ${docSummary}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
 
+${exerciseContext}
+
 Protocol name must include ${client.full_name.split(' ')[0] || 'the client'}'s first name or their specific goal — never a generic name.
 
 Simplify execution by reducing decision burden and recovery cost, not by stripping away physique-specific architecture.
 For physique athletes, macros and meal structure must translate coherently into the meal plan and BSLDS structure.
+Build the session using the exercises listed in SELECTED EXERCISES above.
 
 Respond with ONLY this JSON structure (no markdown, no backticks):
 {
@@ -791,9 +924,9 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
     "sessionType": "Session type name",
     "complexityCeiling": 2,
     "volumeLevel": "Moderate",
-    "activationBlock": [{"exerciseName": "name", "sets": 2, "reps": "10", "tempo": "controlled", "coachingCue": "cue"}],
-    "primaryBlock": [{"exerciseName": "name", "sets": 3, "reps": "10-12", "tempo": "3-1-1", "loadGuidance": "guidance", "coachingCue": "cue", "swapOption": "alternative"}],
-    "accessoryBlock": [{"exerciseName": "name", "sets": 3, "reps": "12", "tempo": "2-1-1", "coachingCue": "cue"}]
+    "activationBlock": [{"exerciseName": "selected exercise name", "sets": 2, "reps": "10", "tempo": "controlled", "coachingCue": "cue"}],
+    "primaryBlock": [{"exerciseName": "selected exercise name", "sets": 3, "reps": "10-12", "tempo": "3-1-1", "loadGuidance": "guidance", "coachingCue": "cue", "swapOption": "alternative"}],
+    "accessoryBlock": [{"exerciseName": "selected exercise name", "sets": 3, "reps": "12", "tempo": "2-1-1", "coachingCue": "cue"}]
   },
   "nutritionStructure": {
     "dailyCalories": 1650,
@@ -849,6 +982,8 @@ EXECUTION RULES:
 - Every exercise must include a load value expressed as intent, not a final prescription.
 - Allowed load values only: "bodyweight", "light", "moderate", "moderate-heavy", "technique", "light dumbbells", "moderate dumbbells", "light band", "moderate band".
 - Do not use pound ranges, percentages, or vague phrasing. Load must never be blank.
+- Use the exact selected FORGË library exercises provided in the source context for the sessionStructure.
+- Do not invent substitute exercise names when the selected exercises are available.
 - Protein must align with goal weight and calories must be justified as deficit, maintenance, or recovery.
 - Include adherence fallback, decision rules, monitoring system, and phase progression criteria.
 - For physique athletes with unstable adherence, use a Restoration-to-Development bridge instead of generic Foundations while preserving bodybuilding specificity.
@@ -891,7 +1026,10 @@ ${prompt}`
       return NextResponse.json({ error: 'AI response parsing failed', raw: cleaned.slice(0, 500) }, { status: 500 })
     }
 
-    const generated: any = normalizeGeneratedProtocol(parsedGenerated)
+    const generated: any = alignGeneratedSessionToSelectedExercises(
+      normalizeGeneratedProtocol(parsedGenerated),
+      exerciseBlocks
+    )
 
     generated.override_summary = coachAdjustmentSummary
     generated.influenced_by_overrides = overrideIntelligence.hasInfluence
