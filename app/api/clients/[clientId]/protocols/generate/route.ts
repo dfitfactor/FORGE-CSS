@@ -120,6 +120,7 @@ type GeneratedProtocolCompat = {
 }
 
 type ExerciseLike = { exerciseName?: string; loadGuidance?: string }
+type MealPlanRow = { time?: string; meal?: string; foods?: string; notes?: string }
 
 function getAnthropicModel() {
   return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
@@ -290,6 +291,52 @@ function tryParseJsonObject<T>(raw: string): T | null {
   }
 
   return null
+}
+
+function isDinnerCarbRestricted(mealTiming: string | undefined) {
+  const normalized = String(mealTiming ?? '').toLowerCase()
+  return normalized.includes('dinner carb-free') || normalized.includes('dinner carb free') || normalized.includes('dinner carb-reduced')
+}
+
+function dinnerViolatesCarbTimingRule(mealPlan: MealPlanRow[]) {
+  const dinnerRow = mealPlan.find((meal) => String(meal.meal ?? '').toLowerCase().includes('dinner'))
+  if (!dinnerRow?.foods) return false
+
+  const foods = dinnerRow.foods.toLowerCase()
+  const restrictedDinnerKeywords = [
+    'potato', 'potatoes', 'rice', 'pasta', 'bread', 'quinoa', 'oats',
+    'granola', 'cereal', 'beans', 'lentils', 'wrap', 'tortilla',
+    'bagel', 'fruit', 'banana', 'apple', 'sweet potato', 'mashed'
+  ]
+
+  return restrictedDinnerKeywords.some((keyword) => foods.includes(keyword))
+}
+
+async function repairMealPlanForCarbTiming(rawMealPlan: string, mealTiming: string) {
+  const repairPrompt = `Rewrite this meal plan JSON so it follows the meal timing rule exactly.
+
+Meal timing rule:
+${mealTiming}
+
+Requirements:
+- Return ONLY a valid raw JSON array.
+- Keep the same meal slots and general calories/macros intent.
+- Breakfast and lunch can carry the structured carbs.
+- Dinner must be protein + non-starchy vegetables only when the rule says dinner is carb-free.
+- Evening snack must stay protein-forward and low-carb.
+- Remove starchy dinner foods like potatoes, rice, pasta, wraps, bread, fruit, beans, or quinoa.
+
+SOURCE MEAL PLAN:
+${rawMealPlan}`
+
+  const response = await anthropic.messages.create({
+    model: getAnthropicModel(),
+    max_tokens: 1200,
+    system: 'You repair meal plan JSON. Return only a valid raw JSON array.',
+    messages: [{ role: 'user', content: repairPrompt }],
+  })
+
+  return collectTextContent(response.content as Array<{ type: string; text?: string }>)
 }
 
 async function repairProtocolJson(raw: string) {
@@ -1082,6 +1129,9 @@ Use REAL foods and EXACT gram/oz portions based on the macro targets above.
 Use the USDA-selected foods listed above as the primary ingredient pool.
 Do not invent a completely different food list when USDA foods are available.
 Vary meal choices across the selected USDA foods so plans do not feel repetitive.
+If meal timing says dinner is carb-free or carb-reduced, do not place starches or fruit at dinner.
+For carb-free dinner, dinner must be protein + non-starchy vegetables only.
+Breakfast and lunch should hold the majority of structured carbs when front-loading is requested.
 For physique-athlete clients, preserve bodybuilding specificity with performance-supportive carbs, protective protein, and a coherent BSLDS translation that still feels easy to execute.
 The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
 
@@ -1110,11 +1160,37 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         try {
           const parsed = JSON.parse(mpRaw)
           if (Array.isArray(parsed)) {
-            mealPlan = parsed
+            mealPlan = parsed as MealPlanRow[]
           }
         } catch {
           console.error('Meal plan parse failed, falling back to empty array')
           mealPlan = []
+        }
+      }
+
+      const mealTimingRule = generated.nutritionStructure?.mealTiming ?? generated.nutritionProtocol?.mealTiming
+      if (
+        Array.isArray(mealPlan) &&
+        mealPlan.length > 0 &&
+        isDinnerCarbRestricted(mealTimingRule) &&
+        dinnerViolatesCarbTimingRule(mealPlan)
+      ) {
+        const repairedMealPlanRaw = await repairMealPlanForCarbTiming(JSON.stringify(mealPlan), mealTimingRule ?? '')
+        if (repairedMealPlanRaw) {
+          const firstBracket = repairedMealPlanRaw.indexOf('[')
+          const lastBracket = repairedMealPlanRaw.lastIndexOf(']')
+          const candidate = firstBracket !== -1 && lastBracket !== -1
+            ? repairedMealPlanRaw.slice(firstBracket, lastBracket + 1)
+            : repairedMealPlanRaw
+
+          try {
+            const repairedParsed = JSON.parse(candidate)
+            if (Array.isArray(repairedParsed)) {
+              mealPlan = repairedParsed as MealPlanRow[]
+            }
+          } catch {
+            console.error('Meal plan carb-timing repair parse failed, keeping original meal plan')
+          }
         }
       }
     } catch (e) {
