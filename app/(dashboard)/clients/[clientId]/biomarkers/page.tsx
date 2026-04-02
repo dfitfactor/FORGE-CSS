@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Plus, FlaskConical, Loader2, CheckCircle, AlertCircle, X, Trash2, ChevronDown, ChevronUp
+  ArrowLeft, Plus, FlaskConical, Loader2, CheckCircle, AlertCircle, X, Trash2, ChevronDown, ChevronUp, Pencil
 } from 'lucide-react'
 
 type Panel = {
@@ -71,6 +71,7 @@ export default function BiomarkersPage() {
   const [success, setSuccess] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [expandedPanel, setExpandedPanel] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const emptyForm: FormData = {
     panelDate: new Date().toISOString().split('T')[0],
@@ -103,13 +104,53 @@ export default function BiomarkersPage() {
   function setF(key: string, value: string) { setForm(prev => ({ ...prev, [key]: value })) }
   function n(val: string) { return val ? Number(val) : undefined }
 
+  function openNewPanelForm() {
+    setEditingId(null)
+    setForm(emptyForm)
+    setShowForm(true)
+  }
+
+  function openEditForm(panel: Panel) {
+    setEditingId(panel.id)
+    setForm({
+      panelDate: panel.panel_date,
+      panelType: panel.panel_type,
+      labName: panel.lab_name ?? '',
+      orderedBy: panel.ordered_by ?? '',
+      fastingGlucose: panel.fasting_glucose?.toString() ?? '',
+      hba1c: panel.hba1c?.toString() ?? '',
+      insulin: panel.insulin?.toString() ?? '',
+      triglycerides: panel.triglycerides?.toString() ?? '',
+      hdl: panel.hdl?.toString() ?? '',
+      ldl: panel.ldl?.toString() ?? '',
+      totalCholesterol: panel.total_cholesterol?.toString() ?? '',
+      testosteroneTotal: panel.testosterone_total?.toString() ?? '',
+      testosteroneFree: panel.testosterone_free?.toString() ?? '',
+      estradiol: panel.estradiol?.toString() ?? '',
+      progesterone: panel.progesterone?.toString() ?? '',
+      cortisol: panel.cortisol?.toString() ?? '',
+      dheaS: panel.dhea_s?.toString() ?? '',
+      tsh: panel.tsh?.toString() ?? '',
+      t3Free: panel.t3_free?.toString() ?? '',
+      t4Free: panel.t4_free?.toString() ?? '',
+      crp: panel.crp?.toString() ?? '',
+      homocysteine: panel.homocysteine?.toString() ?? '',
+      vitaminD: panel.vitamin_d?.toString() ?? '',
+      b12: panel.b12?.toString() ?? '',
+      ferritin: panel.ferritin?.toString() ?? '',
+      coachInterpretation: panel.coach_interpretation ?? '',
+    })
+    setShowForm(true)
+  }
+
   async function handleSave() {
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/clients/' + clientId + '/biomarkers', {
-        method: 'POST',
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(editingId ? { id: editingId } : {}),
           panelDate: form.panelDate, panelType: form.panelType,
           labName: form.labName || undefined, orderedBy: form.orderedBy || undefined,
           fastingGlucose: n(form.fastingGlucose), hba1c: n(form.hba1c), insulin: n(form.insulin),
@@ -123,7 +164,11 @@ export default function BiomarkersPage() {
         }),
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Save failed'); return }
-      setSuccess('Panel saved'); setShowForm(false); setForm(emptyForm); loadPanels()
+      setSuccess(editingId ? 'Panel updated' : 'Panel saved')
+      setShowForm(false)
+      setEditingId(null)
+      setForm(emptyForm)
+      loadPanels()
       setTimeout(() => setSuccess(''), 3000)
     } catch { setError('Network error') } finally { setSaving(false) }
   }
@@ -158,7 +203,7 @@ export default function BiomarkersPage() {
               <p className="text-sm text-white/40">{clientName}</p>
             </div>
           </div>
-          <button onClick={() => setShowForm(true)} className="forge-btn-gold text-sm flex items-center gap-2">
+          <button onClick={openNewPanelForm} className="forge-btn-gold text-sm flex items-center gap-2">
             <Plus size={15} /> Log Panel
           </button>
         </div>
@@ -228,8 +273,8 @@ export default function BiomarkersPage() {
         {showForm && (
           <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Log Panel</h2>
-              <button onClick={() => setShowForm(false)} className="text-white/30 hover:text-white"><X size={16} /></button>
+              <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">{editingId ? 'Edit Panel' : 'Log Panel'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm) }} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div><label className="forge-label">Date</label><input type="date" value={form.panelDate} onChange={e => setF('panelDate', e.target.value)} className="forge-input" /></div>
@@ -244,7 +289,7 @@ export default function BiomarkersPage() {
             <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Nutrients</p><div className="grid grid-cols-3 gap-3"><Field label="Vitamin D" field="vitaminD" placeholder="45" unit="ng/mL" /><Field label="B12" field="b12" placeholder="500" unit="pg/mL" /><Field label="Ferritin" field="ferritin" placeholder="80" unit="ng/mL" /></div></div>
             <div><label className="forge-label">Coach Interpretation</label><textarea rows={3} value={form.coachInterpretation} onChange={e => setF('coachInterpretation', e.target.value)} className="forge-input resize-none" placeholder="Clinical observations and coaching notes..." /></div>
             <button onClick={handleSave} disabled={saving} className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50">
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><FlaskConical size={16} /> Save Panel</>}
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><FlaskConical size={16} /> {editingId ? 'Update Panel' : 'Save Panel'}</>}
             </button>
           </div>
         )}
@@ -255,7 +300,7 @@ export default function BiomarkersPage() {
           <div className="bg-[#111111] border border-dashed border-white/8 rounded-2xl p-12 text-center">
             <FlaskConical size={32} className="mx-auto mb-4 text-white/15" />
             <p className="text-sm text-white/40">No lab panels logged yet</p>
-            <button onClick={() => setShowForm(true)} className="mt-4 forge-btn-gold text-sm flex items-center gap-2 mx-auto"><Plus size={14} /> Log First Panel</button>
+            <button onClick={openNewPanelForm} className="mt-4 forge-btn-gold text-sm flex items-center gap-2 mx-auto"><Plus size={14} /> Log First Panel</button>
           </div>
         ) : (
           <div>
@@ -273,6 +318,7 @@ export default function BiomarkersPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button onClick={e => { e.stopPropagation(); openEditForm(panel) }} className="text-white/15 hover:text-[#D4AF37] transition-colors p-1"><Pencil size={13} /></button>
                       <button onClick={e => { e.stopPropagation(); handleDelete(panel.id) }} className="text-white/15 hover:text-red-400 transition-colors p-1"><Trash2 size={13} /></button>
                       {expandedPanel === panel.id ? <ChevronUp size={14} className="text-white/30" /> : <ChevronDown size={14} className="text-white/30" />}
                     </div>
