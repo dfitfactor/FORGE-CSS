@@ -120,6 +120,7 @@ export default function JournalsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploadNotes, setUploadNotes] = useState('')
+  const [isDragActive, setIsDragActive] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const emptyForm = {
@@ -191,6 +192,29 @@ export default function JournalsPage() {
     setSelectedFile(file)
     if (!uploadTitle) {
       setUploadTitle(file.name.replace(/\.[^/.]+$/, ''))
+    }
+  }
+
+  function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!isDragActive) setIsDragActive(true)
+  }
+
+  function handleDragLeave(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setIsDragActive(false)
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDragActive(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) {
+      handleQuestionnaireFileSelect(file)
     }
   }
 
@@ -390,10 +414,19 @@ export default function JournalsPage() {
             {!selectedFile ? (
               <div
                 onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-white/10 hover:border-white/25 rounded-xl p-10 text-center cursor-pointer transition-all"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
+                  isDragActive
+                    ? 'border-[#D4AF37] bg-[#D4AF37]/8'
+                    : 'border-white/10 hover:border-white/25'
+                }`}
               >
-                <Upload size={28} className="mx-auto mb-3 text-white/25" />
-                <p className="text-sm text-white/50">Drop in the client weekly questionnaire or click to browse</p>
+                <Upload size={28} className={`mx-auto mb-3 ${isDragActive ? 'text-[#D4AF37]' : 'text-white/25'}`} />
+                <p className={`text-sm ${isDragActive ? 'text-[#D4AF37]' : 'text-white/50'}`}>
+                  {isDragActive ? 'Release to upload the weekly questionnaire' : 'Drop in the client weekly questionnaire or click to browse'}
+                </p>
                 <p className="text-xs text-white/25 mt-1">PDF, Word, Excel, text, or CSV up to 10MB</p>
                 <input
                   ref={fileRef}
