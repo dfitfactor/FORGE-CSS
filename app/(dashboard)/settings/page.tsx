@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
-  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate
+  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut
 } from 'lucide-react'
 
 type AccountState = {
@@ -66,6 +67,7 @@ function formatDateTime(value: string) {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [form, setForm] = useState<AccountState>(INITIAL_STATE)
   const [templates, setTemplates] = useState<CoachTemplate[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,6 +79,7 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState('')
   const [templateError, setTemplateError] = useState('')
   const [templateSuccess, setTemplateSuccess] = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
   const [activeTemplateType, setActiveTemplateType] = useState<'movement' | 'nutrition' | 'habit_coaching'>('movement')
   const [showTemplateForm, setShowTemplateForm] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -149,6 +152,17 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleLogout() {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      window.location.href = '/auth/login'
+      router.refresh()
     }
   }
 
@@ -326,7 +340,12 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => void handleLogout()} disabled={loggingOut}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/65 hover:text-white hover:bg-white/5 disabled:opacity-50">
+                {loggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                {loggingOut ? 'Logging out...' : 'Logout'}
+              </button>
               <button type="submit" disabled={saving} className="forge-btn-gold inline-flex items-center gap-2 disabled:opacity-50">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {saving ? 'Saving...' : 'Save Settings'}

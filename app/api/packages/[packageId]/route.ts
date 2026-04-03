@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { packageSchema } from '@/lib/booking'
@@ -7,6 +7,19 @@ import { z } from 'zod'
 const packagePatchSchema = packageSchema.partial().extend({
   is_active: z.boolean().optional(),
 })
+
+async function supportsIncludedServicesTable() {
+  const table = await db.queryOne<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = 'package_included_services'
+     ) AS exists`
+  )
+
+  return Boolean(table?.exists)
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -22,28 +35,71 @@ export async function PATCH(
   }
 
   const data = parsed.data
+  const includedServices = data.included_services
+  const packageFields = Object.fromEntries(
+    Object.entries(data).filter(([key]) => key !== 'included_services')
+  )
+
   const updates: string[] = []
   const values: unknown[] = []
 
-  for (const [key, value] of Object.entries(data)) {
+  for (const [key, value] of Object.entries(packageFields)) {
     updates.push(`${key} = $${values.length + 1}`)
     values.push(value ?? null)
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && includedServices === undefined) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
-  values.push(params.packageId)
-
   try {
-    const pkg = await db.queryOne(
-      `UPDATE packages
-       SET ${updates.join(', ')}
-       WHERE id = $${values.length}
-       RETURNING *`,
-      values
-    )
+    const supportsIncludedServices = await supportsIncludedServicesTable()
+
+    const pkg = await db.transaction(async (client) => {
+      let updatedPackage = null
+
+      if (updates.length > 0) {
+        const updateValues = [...values, params.packageId]
+        const updateResult = await client.query(
+          `UPDATE packages
+           SET ${updates.join(', ')}
+           WHERE id = $${updateValues.length}
+           RETURNING *`,
+          updateValues
+        )
+        updatedPackage = updateResult.rows[0] ?? null
+      } else {
+        const packageResult = await client.query(
+          `SELECT * FROM packages WHERE id = $1`,
+          [params.packageId]
+        )
+        updatedPackage = packageResult.rows[0] ?? null
+      }
+
+      if (supportsIncludedServices && includedServices !== undefined) {
+        await client.query(
+          `DELETE FROM package_included_services WHERE package_id = $1`,
+          [params.packageId]
+        )
+
+        for (const includedService of includedServices) {
+          await client.query(
+            `INSERT INTO package_included_services (
+              package_id,
+              service_id,
+              monthly_session_allotment
+            ) VALUES ($1, $2, $3)`,
+            [
+              params.packageId,
+              includedService.service_id,
+              includedService.monthly_session_allotment,
+            ]
+          )
+        }
+      }
+
+      return updatedPackage
+    })
 
     return NextResponse.json({ package: pkg })
   } catch (err: unknown) {

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Calendar, Clock3, LayoutDashboard, LayoutGrid, Users, Sparkles, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -20,8 +20,10 @@ const bottomItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('forge-sidebar-collapsed') === 'true'
@@ -36,6 +38,17 @@ export function Sidebar() {
     localStorage.setItem('forge-sidebar-collapsed', String(next))
     if (next) document.documentElement.setAttribute('data-sidebar', 'collapsed')
     else document.documentElement.removeAttribute('data-sidebar')
+  }
+
+  async function handleLogout() {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      window.location.href = '/auth/login'
+      router.refresh()
+    }
   }
 
   const w = !mounted ? 256 : collapsed ? 60 : 256
@@ -113,11 +126,9 @@ export function Sidebar() {
         {collapsed ? (
           <div className="flex flex-col items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-forge-purple flex items-center justify-center text-xs font-bold text-forge-gold">C</div>
-            <form action="/api/auth/logout" method="POST">
-              <button type="submit" title="Sign out" className="p-1 text-forge-text-muted hover:text-state-recovery transition-colors">
+            <button type="button" onClick={() => void handleLogout()} disabled={loggingOut} title="Log out" className="p-1 text-forge-text-muted hover:text-state-recovery transition-colors disabled:opacity-50">
                 <LogOut className="w-4 h-4" />
-              </button>
-            </form>
+            </button>
           </div>
         ) : (
           <div className="forge-card p-3 flex items-center gap-3">
@@ -126,11 +137,11 @@ export function Sidebar() {
               <div className="text-sm font-medium text-forge-text-primary truncate">Coach</div>
               <div className="text-xs text-forge-text-muted truncate">DFitFactor</div>
             </div>
-            <form action="/api/auth/logout" method="POST">
-              <button type="submit" title="Sign out" className="p-1 text-forge-text-muted hover:text-state-recovery transition-colors">
-                <LogOut className="w-4 h-4" />
-              </button>
-            </form>
+            <button type="button" onClick={() => void handleLogout()} disabled={loggingOut}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-forge-text-muted hover:text-forge-text-primary hover:bg-forge-surface-3 transition-all disabled:opacity-50">
+              <LogOut className="w-4 h-4" />
+              <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>
+            </button>
           </div>
         )}
       </div>

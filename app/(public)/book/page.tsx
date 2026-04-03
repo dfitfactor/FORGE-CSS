@@ -15,6 +15,12 @@ type Service = {
   category: string
 }
 
+type IncludedService = {
+  service_id: string
+  service_name?: string
+  monthly_session_allotment: number
+}
+
 type Package = {
   id: string
   name: string
@@ -24,6 +30,7 @@ type Package = {
   price_cents: number
   billing_type: string
   forge_stage: string
+  included_services?: IncludedService[]
 }
 
 const SERVICE_CATEGORY_ORDER = ['assessment', 'training', 'coaching', 'nutrition', 'wellness']
@@ -149,6 +156,11 @@ export default function PublicBookingPage() {
                             <span className="rounded-full bg-black/5 px-3 py-1 text-xs text-black/55">{pkg.session_count} sessions</span>
                             <span className="rounded-full bg-[#2B154A]/8 px-3 py-1 text-xs uppercase text-[#2B154A]">{pkg.billing_type}</span>
                           </div>
+                          {Array.isArray(pkg.included_services) && pkg.included_services.length > 0 ? (
+                            <div className="mt-3 text-xs text-black/50">
+                              {pkg.included_services.map((item) => `${item.service_name ?? 'Attached service'} · ${item.monthly_session_allotment}/month`).join(', ')}
+                            </div>
+                          ) : null}
                           <div className="mt-4 text-lg font-semibold text-[#2B154A]">{formatPriceFromCents(pkg.price_cents)}</div>
                           <Link href={`/book/${pkg.slug}`} className="mt-5 inline-flex rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-semibold text-black transition hover:brightness-105">
                             Get Started

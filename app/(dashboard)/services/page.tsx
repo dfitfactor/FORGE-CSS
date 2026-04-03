@@ -149,11 +149,42 @@ function getPublicBaseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || 'https://forge-css.vercel.app'
 }
 
+type IncludedPackageService = {
+  service_id: string
+  monthly_session_allotment: number
+  service_name: string
+}
+
+function normalizeIncludedServices(value: unknown): IncludedPackageService[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const typed = item as Record<string, unknown>
+      const serviceId = typeof typed.service_id === 'string' ? typed.service_id : ''
+      if (!serviceId) return null
+      const monthlySessionAllotment = Number(typed.monthly_session_allotment ?? 0)
+      return {
+        service_id: serviceId,
+        monthly_session_allotment: monthlySessionAllotment > 0 ? monthlySessionAllotment : 1,
+        service_name: typeof typed.service_name === 'string' ? typed.service_name : '',
+      }
+    })
+    .filter((item): item is IncludedPackageService => Boolean(item))
+}
+
+function packageIncludedServicesSummary(value: unknown) {
+  const services = normalizeIncludedServices(value)
+  if (services.length === 0) return 'No linked bookable sessions'
+  return services
+    .map((service) => `${service.service_name || 'Attached service'} · ${service.monthly_session_allotment}/month`)
+    .join(', ')
+}
+
 function buildBookingLink(slug: string | null | undefined) {
   if (!slug) return ''
   return `${getPublicBaseUrl()}/book/${slug}`
 }
-
 export default function ServicesPage() {
   const [stageOrder, setStageOrder] = useState<string[]>(() =>
     PACKAGE_SECTIONS.flatMap((section) => section.stages)
@@ -556,7 +587,7 @@ export default function ServicesPage() {
         {!loading && tab === 'packages' ? (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <button onClick={() => { setPackageEditor({} as Package); setPackageForm({ name: '', slug: '', description: '', session_count: 4, duration_minutes: 60, price_dollars: '0.00', billing_type: 'monthly', billing_period_months: 1, forge_stage: 'foundations', is_public: true, sort_order: 0 }) }} className="forge-btn-gold flex items-center gap-2">
+              <button onClick={() => { setPackageEditor({} as Package); setPackageForm({ name: '', slug: '', description: '', session_count: 4, duration_minutes: 60, price_dollars: '0.00', billing_type: 'monthly', billing_period_months: 1, forge_stage: 'foundations', is_public: true, sort_order: 0, included_services: [] }) }} className="forge-btn-gold flex items-center gap-2">
                 <Plus size={15} /> Add Package
               </button>
             </div>
@@ -604,7 +635,7 @@ export default function ServicesPage() {
                         </div>
                       </div>
                       {expandedStages[stage] ? (
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p><p className="mt-2 max-w-xs text-xs text-white/30">{packageIncludedServicesSummary(pkg.included_services)}</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2), included_services: normalizeIncludedServices(pkg.included_services) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
                       ) : null}
                     </section>
                   ))}
@@ -650,6 +681,67 @@ export default function ServicesPage() {
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Price ($)</label><input className="forge-input" type="number" step="0.01" value={packageForm.price_dollars ?? '0.00'} onChange={e => setPackageForm((c: any) => ({ ...c, price_dollars: e.target.value }))} /></div><div><label className="forge-label">Billing Type</label><select className="forge-input" value={packageForm.billing_type ?? 'monthly'} onChange={e => setPackageForm((c: any) => ({ ...c, billing_type: e.target.value }))}>{BILLING_TYPES.map(option => <option key={option} value={option}>{option.toUpperCase()}</option>)}</select></div></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Billing Period</label><input className="forge-input" type="number" value={packageForm.billing_period_months ?? 1} onChange={e => setPackageForm((c: any) => ({ ...c, billing_period_months: e.target.value }))} /></div><div><label className="forge-label">Forge Stage</label><select className="forge-input" value={packageForm.forge_stage ?? 'foundations'} onChange={e => setPackageForm((c: any) => ({ ...c, forge_stage: e.target.value }))}>{FORGE_STAGE_OPTIONS.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
           <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3"><span className="text-sm text-white/65">Is Public</span><Toggle checked={Boolean(packageForm.is_public)} onChange={next => setPackageForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={packageForm.sort_order ?? 0} onChange={e => setPackageForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
+          <div>
+            <label className="forge-label">Included Bookable Sessions</label>
+            <div className="space-y-3 rounded-xl border border-white/8 bg-white/3 p-4">
+              <p className="text-xs text-white/35">Attach specific services to this package so booking can reflect the monthly session allotment.</p>
+              {services.length > 0 ? services.map((service) => {
+                const includedServices = normalizeIncludedServices(packageForm.included_services)
+                const selectedService = includedServices.find((item) => item.service_id === service.id)
+                return (
+                  <div key={service.id} className="rounded-xl border border-white/8 bg-black/20 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <label className="flex items-start gap-3 text-sm text-white/75">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedService)}
+                          onChange={(event) => setPackageForm((current: any) => {
+                            const nextIncludedServices = normalizeIncludedServices(current.included_services)
+                            if (event.target.checked) {
+                              return {
+                                ...current,
+                                included_services: [...nextIncludedServices, {
+                                  service_id: service.id,
+                                  monthly_session_allotment: 1,
+                                  service_name: service.name,
+                                }],
+                              }
+                            }
+                            return {
+                              ...current,
+                              included_services: nextIncludedServices.filter((item) => item.service_id !== service.id),
+                            }
+                          })}
+                        />
+                        <span>
+                          <span className="block font-medium text-white">{service.name}</span>
+                          <span className="mt-1 block text-xs text-white/35">{formatDurationLabel(service.duration_minutes)} · {stageLabel(service.category)}</span>
+                        </span>
+                      </label>
+                      {selectedService ? (
+                        <div className="w-28">
+                          <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/35">Per Month</label>
+                          <input
+                            className="forge-input h-10"
+                            type="number"
+                            min={1}
+                            value={selectedService.monthly_session_allotment}
+                            onChange={(event) => setPackageForm((current: any) => ({
+                              ...current,
+                              included_services: normalizeIncludedServices(current.included_services).map((item) => item.service_id === service.id ? {
+                                ...item,
+                                monthly_session_allotment: Math.max(1, Number(event.target.value || 1)),
+                              } : item),
+                            }))}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              }) : <div className="text-sm text-white/40">Create at least one bookable service first.</div>}
+            </div>
+          </div>
           <button onClick={() => void save('packages')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Package'}</button>
         </div>
       </SlideOver>
@@ -688,6 +780,19 @@ export default function ServicesPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

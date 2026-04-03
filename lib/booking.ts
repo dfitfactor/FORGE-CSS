@@ -20,6 +20,11 @@ export const BOOKING_STATUS_OPTIONS = ['pending', 'confirmed', 'cancelled', 'com
 export const PAYMENT_STATUS_OPTIONS = ['unpaid', 'paid', 'waived'] as const
 export const AVAILABILITY_RULE_TYPES = ['weekly', 'settings', 'blackout', 'blocked'] as const
 
+export const packageIncludedServiceSchema = z.object({
+  service_id: z.string().uuid(),
+  monthly_session_allotment: z.number().int().min(1).max(31),
+})
+
 export const serviceSchema = z.object({
   name: z.string().trim().min(1).max(255),
   slug: z.string().trim().min(1).max(255),
@@ -48,6 +53,7 @@ export const packageSchema = z.object({
   forge_stage: z.enum(FORGE_STAGE_OPTIONS),
   is_public: z.boolean().default(false),
   sort_order: z.number().int().min(0).default(0),
+  included_services: z.array(packageIncludedServiceSchema).default([]),
 })
 
 export const bookingPatchSchema = z.object({

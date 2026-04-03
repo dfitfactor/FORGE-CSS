@@ -15,6 +15,12 @@ type Service = {
   required_forms?: string[]
 }
 
+type IncludedService = {
+  service_id: string
+  service_name?: string
+  monthly_session_allotment: number
+}
+
 type Package = {
   id: string
   name: string
@@ -23,6 +29,7 @@ type Package = {
   duration_minutes: number
   price_cents: number
   forge_stage: string
+  included_services?: IncludedService[]
 }
 
 type BookingFormState = {
@@ -176,6 +183,7 @@ export default function PublicBookingDetailPage() {
   }
 
   const isFree = Number(selectedTarget.price_cents ?? 0) <= 0
+  const includedServices = selectedTarget.kind === 'package' && Array.isArray(selectedTarget.included_services) ? selectedTarget.included_services : []
   const requiredForms = selectedTarget.kind === 'service' && Array.isArray(selectedTarget.required_forms) ? selectedTarget.required_forms : []
   const cancelled = searchParams.get('cancelled') === '1'
 
@@ -266,6 +274,17 @@ export default function PublicBookingDetailPage() {
             </div>
           </div>
 
+          {includedServices.length > 0 ? (
+            <div className="mt-6 rounded-2xl border border-black/10 bg-[#faf8f2] p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-black/45">Included Sessions</div>
+              <div className="mt-3 space-y-2 text-sm text-black/60">
+                {includedServices.map((service) => (
+                  <div key={service.service_id}>{service.service_name ?? 'Attached service'} · {service.monthly_session_allotment} per month</div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {requiredForms.length > 0 ? (
             <div className="mt-6 rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4 text-sm text-[#664c07]">
               You will complete {requiredForms.length} form{requiredForms.length === 1 ? '' : 's'} before your appointment.
@@ -282,4 +301,7 @@ export default function PublicBookingDetailPage() {
     </div>
   )
 }
+
+
+
 
