@@ -258,7 +258,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
   const [loading, setLoading] = useState(true)
-  const [updatingId, setUpdatingId] = useState('')
+  const [updating, setUpdating] = useState<string | null>(null)
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null)
   const [detailHistory, setDetailHistory] = useState<BookingHistoryEntry[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
@@ -324,29 +324,35 @@ export default function BookingsPage() {
   }
 
   async function updateBookingStatus(bookingId: string, status: Booking['status']) {
-    setUpdatingId(bookingId)
+    setUpdating(bookingId)
     setError('')
     setSuccess('')
     try {
-      const payload: Record<string, unknown> = { status }
-      if (status === 'completed') payload.attended = true
-      if (status === 'no_show') payload.attended = false
-
       const res = await fetch(`/api/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ status }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to update booking')
-
-      setBookings((current) => current.map((booking) => booking.id === bookingId ? { ...booking, status } : booking))
-      await loadBookings()
-      setSuccess(`Booking ${status.replace('_', ' ')} successfully.`)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update booking')
+      if (res.ok) {
+        setBookings((prev) => prev.map((booking) => (
+          booking.id === bookingId ? { ...booking, status } : booking
+        )))
+        if (detailBooking?.id === bookingId) {
+          setDetailBooking((current) => current ? { ...current, status } : current)
+        }
+        if (data.message) {
+          window.alert(data.message)
+        }
+        setSuccess(`Booking ${status.replace('_', ' ')} successfully.`)
+        await loadBookings()
+      } else {
+        window.alert(data.error || 'Action failed')
+      }
+    } catch {
+      window.alert('Network error — please try again')
     } finally {
-      setUpdatingId('')
+      setUpdating(null)
     }
   }
 
@@ -372,7 +378,7 @@ export default function BookingsPage() {
 
   async function saveBookingDetails() {
     if (!detailBooking) return
-    setUpdatingId(detailBooking.id)
+    setUpdating(detailBooking.id)
     setError('')
     setSuccess('')
     try {
@@ -404,7 +410,7 @@ export default function BookingsPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update booking details')
     } finally {
-      setUpdatingId('')
+      setUpdating(null)
     }
   }
 
@@ -587,23 +593,26 @@ export default function BookingsPage() {
                             </summary>
                             <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-white/10 bg-[#0d0d0d] p-2 shadow-2xl">
                               {availableActions(booking.status).length > 0 ? (
-                                availableActions(booking.status).map((action) => (
-                                  <button
-                                    key={action.value}
-                                    onClick={() => void updateBookingStatus(booking.id, action.value)}
-                                    disabled={updatingId === booking.id}
-                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
-                                  >
-                                    {updatingId === booking.id ? (
-                                      <Loader2 size={14} className="animate-spin" />
-                                    ) : action.value === 'completed' ? (
-                                      <CheckCircle2 size={14} />
-                                    ) : (
-                                      <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />
-                                    )}
-                                    {updatingId === booking.id ? 'Updating...' : action.label}
-                                  </button>
-                                ))
+                                availableActions(booking.status).map((action) => {
+                                  const isUpdating = updating === booking.id
+                                  return (
+                                    <button
+                                      key={action.value}
+                                      onClick={() => void updateBookingStatus(booking.id, action.value)}
+                                      disabled={updating === booking.id}
+                                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
+                                    >
+                                      {isUpdating ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : action.value === 'completed' ? (
+                                        <CheckCircle2 size={14} />
+                                      ) : (
+                                        <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />
+                                      )}
+                                      {isUpdating ? 'Updating...' : action.label}
+                                    </button>
+                                  )
+                                })
                               ) : (
                                 <div className="px-3 py-2 text-xs text-white/35">No actions available</div>
                               )}
@@ -623,7 +632,7 @@ export default function BookingsPage() {
       <DetailDrawer
         booking={detailBooking}
         open={Boolean(detailBooking)}
-        updating={updatingId === detailBooking?.id}
+        updating={updating === detailBooking?.id}
         history={detailHistory}
         historyLoading={detailLoading}
         form={detailForm}

@@ -2,9 +2,9 @@
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { bookingPatchSchema } from '@/lib/booking'
-import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-calendar'
-import { consumeSession, handleCancellation, handleNoShow } from '@/lib/session-bank'
+import { createCalendarEvent, deleteCalendarEvent } from '@/lib/google-calendar'
 import { sendBookingConfirmation } from '@/lib/email'
+import { consumeSession, handleCancellation, handleNoShow } from '@/lib/session-bank'
 
 type BookingWithDetails = {
   id: string
@@ -21,11 +21,10 @@ type BookingWithDetails = {
   payment_status: 'unpaid' | 'paid' | 'waived'
   service_id: string | null
   package_id: string | null
-  service_name: string | null
-  package_name: string | null
   google_calendar_event_id: string | null
   duration_minutes: number | null
-  pkg_duration: number | null
+  item_name: string | null
+  duration: number | null
 }
 
 type AuditEntry = {
@@ -37,8 +36,9 @@ type AuditEntry = {
 
 async function getBookingWithDetails(bookingId: string) {
   return db.queryOne<BookingWithDetails>(
-    `SELECT b.*, s.name as service_name, s.duration_minutes,
-            p.name as package_name, p.duration_minutes as pkg_duration
+    `SELECT b.*,
+            COALESCE(s.name, p.name) as item_name,
+            COALESCE(s.duration_minutes, p.duration_minutes) as duration
      FROM bookings b
      LEFT JOIN services s ON b.service_id = s.id
      LEFT JOIN packages p ON b.package_id = p.id
@@ -100,31 +100,216 @@ export async function PATCH(
   }
 
   const data = parsed.data
-  const updates: string[] = []
-  const values: unknown[] = []
-
-  for (const [key, value] of Object.entries(data)) {
-    updates.push(`${key} = $${values.length + 1}`)
-    values.push(value ?? null)
-  }
-
-  if (data.status === 'cancelled') {
-    updates.push('cancelled_at = NOW()')
-  }
-
-  if (updates.length === 0) {
-    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
-  }
-
-  values.push(params.bookingId)
-
-  let sessionBankPayload: Record<string, unknown> = {}
 
   try {
     const originalBooking = await getBookingWithDetails(params.bookingId)
     if (!originalBooking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
     }
+
+    if (data.status === 'confirmed') {
+      const updatedBooking = await db.queryOne(
+        `UPDATE bookings
+         SET status = 'confirmed', updated_at = NOW()
+         WHERE id = $1
+         RETURNING id`,
+        [params.bookingId]
+      )
+
+      if (!updatedBooking) {
+        return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      }
+
+      const booking = await getBookingWithDetails(params.bookingId)
+      if (!booking) {
+        return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      }
+
+      if (booking.client_id) {
+        try {
+          const enrollment = await db.queryOne<{ id: string }>(
+            `SELECT id
+             FROM package_enrollments
+             WHERE client_id = $1 AND status = 'active'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [booking.client_id]
+          )
+
+          if (enrollment && !booking.entitlement_id) {
+            const itemName = (booking.item_name ?? '').toLowerCase()
+            const entitlementType = itemName.includes('makeup') ? 'makeup' : 'standard'
+            const entitlementId = await consumeSession(enrollment.id, booking.client_id, params.bookingId, entitlementType)
+            await db.query(
+              `UPDATE bookings
+               SET entitlement_id = $2, enrollment_id = COALESCE(enrollment_id, $3), updated_at = NOW()
+               WHERE id = $1`,
+              [params.bookingId, entitlementId, enrollment.id]
+            )
+          }
+        } catch (sessionBankError) {
+          console.error('Failed to consume session entitlement for confirmed booking', sessionBankError)
+        }
+      }
+
+      try {
+        const eventId = await createCalendarEvent({
+          summary: `${booking.item_name ?? 'Booking'} — ${booking.client_name}`,
+          description: `Client: ${booking.client_name}\nEmail: ${booking.client_email}\nPhone: ${booking.client_phone ?? ''}`,
+          date: booking.booking_date,
+          time: booking.booking_time,
+          durationMinutes: Number(booking.duration ?? booking.duration_minutes ?? 60),
+          attendeeEmail: booking.client_email,
+          attendeeName: booking.client_name,
+        })
+
+        if (eventId) {
+          await db.query(
+            `UPDATE bookings
+             SET google_calendar_event_id = $2, updated_at = NOW()
+             WHERE id = $1`,
+            [params.bookingId, eventId]
+          )
+        }
+      } catch (calendarError) {
+        console.error('Failed to create Google Calendar event for confirmed booking', calendarError)
+      }
+
+      try {
+        await sendBookingConfirmation({
+          clientName: booking.client_name,
+          clientEmail: booking.client_email,
+          serviceName: booking.item_name ?? 'Booking',
+          bookingDate: booking.booking_date,
+          bookingTime: booking.booking_time,
+          durationMinutes: Number(booking.duration ?? booking.duration_minutes ?? 60),
+          isPaid: booking.payment_status === 'paid',
+        })
+      } catch (emailError) {
+        console.error('Failed to send booking confirmation email for confirmed booking', emailError)
+      }
+
+      try {
+        await db.query(
+          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
+           VALUES ($1, $2, 'booking', $3, $4)`,
+          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'confirmed', previousStatus: originalBooking.status })]
+        )
+      } catch (auditError) {
+        console.error('Failed to write booking audit log', auditError)
+      }
+
+      return NextResponse.json({ success: true, action: 'confirmed' })
+    }
+
+    if (data.status === 'cancelled') {
+      const booking = await getBookingWithDetails(params.bookingId)
+      if (!booking) {
+        return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      }
+
+      await db.query(
+        `UPDATE bookings
+         SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [params.bookingId]
+      )
+
+      if (booking.google_calendar_event_id) {
+        try {
+          await deleteCalendarEvent(booking.google_calendar_event_id)
+          await db.query(
+            `UPDATE bookings
+             SET google_calendar_event_id = NULL, updated_at = NOW()
+             WHERE id = $1`,
+            [params.bookingId]
+          )
+        } catch (calendarError) {
+          console.error('Failed to delete Google Calendar event for cancelled booking', calendarError)
+        }
+      }
+
+      const sessionDateTime = new Date(`${booking.booking_date}T${booking.booking_time}:00`)
+      const result = await handleCancellation(params.bookingId, sessionDateTime, new Date())
+
+      try {
+        await db.query(
+          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
+           VALUES ($1, $2, 'booking', $3, $4)`,
+          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'cancelled', action: result.action, previousStatus: originalBooking.status })]
+        )
+      } catch (auditError) {
+        console.error('Failed to write booking audit log', auditError)
+      }
+
+      return NextResponse.json({
+        success: true,
+        action: result.action,
+        message: result.action === 'forfeited'
+          ? 'Session forfeited — cancelled within 24 hours'
+          : 'Session returned to bank',
+      })
+    }
+
+    if (data.status === 'no_show') {
+      await db.query(
+        `UPDATE bookings
+         SET status = 'no_show', attended = false, updated_at = NOW()
+         WHERE id = $1`,
+        [params.bookingId]
+      )
+
+      await handleNoShow(params.bookingId)
+
+      try {
+        await db.query(
+          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
+           VALUES ($1, $2, 'booking', $3, $4)`,
+          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'no_show', previousStatus: originalBooking.status })]
+        )
+      } catch (auditError) {
+        console.error('Failed to write booking audit log', auditError)
+      }
+
+      return NextResponse.json({ success: true, action: 'no_show' })
+    }
+
+    if (data.status === 'completed') {
+      await db.query(
+        `UPDATE bookings
+         SET status = 'completed', attended = true, updated_at = NOW()
+         WHERE id = $1`,
+        [params.bookingId]
+      )
+
+      try {
+        await db.query(
+          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
+           VALUES ($1, $2, 'booking', $3, $4)`,
+          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'completed', previousStatus: originalBooking.status })]
+        )
+      } catch (auditError) {
+        console.error('Failed to write booking audit log', auditError)
+      }
+
+      return NextResponse.json({ success: true, action: 'completed' })
+    }
+
+    const updates: string[] = []
+    const values: unknown[] = []
+
+    for (const [key, value] of Object.entries(data)) {
+      updates.push(`${key} = $${values.length + 1}`)
+      values.push(value ?? null)
+    }
+
+    updates.push('updated_at = NOW()')
+
+    if (updates.length === 1) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    values.push(params.bookingId)
 
     const booking = await db.queryOne(
       `UPDATE bookings
@@ -134,141 +319,17 @@ export async function PATCH(
       values
     )
 
-    if (data.status === 'confirmed') {
-      try {
-        const bookingDetails = await getBookingWithDetails(params.bookingId)
-        if (bookingDetails?.client_id) {
-          const enrollment = await db.queryOne<{ id: string }>(
-            `SELECT *
-             FROM package_enrollments
-             WHERE client_id = $1 AND status = 'active'
-             ORDER BY created_at DESC
-             LIMIT 1`,
-            [bookingDetails.client_id]
-          )
-
-          if (enrollment && !bookingDetails.entitlement_id) {
-            const movementName = (bookingDetails.service_name ?? '').toLowerCase()
-            const entitlementType = movementName.includes('makeup') ? 'makeup' : 'standard'
-            const entitlementId = await consumeSession(enrollment.id, bookingDetails.client_id, params.bookingId, entitlementType)
-            await db.query(
-              `UPDATE bookings
-               SET entitlement_id = $2, enrollment_id = COALESCE(enrollment_id, $3)
-               WHERE id = $1`,
-              [params.bookingId, entitlementId, enrollment.id]
-            )
-            sessionBankPayload = { entitlementId }
-          }
-        }
-      } catch (sessionBankError) {
-        console.error('Failed to consume session entitlement for confirmed booking', sessionBankError)
-      }
-    }
-
-    if (data.status === 'cancelled') {
-      try {
-        const bookingDetails = await getBookingWithDetails(params.bookingId)
-        if (bookingDetails) {
-          const sessionDateTime = new Date(`${bookingDetails.booking_date}T${bookingDetails.booking_time}:00`)
-          const result = await handleCancellation(params.bookingId, sessionDateTime, new Date())
-          sessionBankPayload = {
-            action: result.action,
-            message: result.action === 'forfeited'
-              ? 'Session forfeited - cancelled within 24 hours of appointment'
-              : 'Session returned to your bank',
-          }
-        }
-      } catch (sessionBankError) {
-        console.error('Failed to handle booking cancellation entitlement logic', sessionBankError)
-      }
-    }
-
-    if (data.status === 'no_show') {
-      try {
-        await handleNoShow(params.bookingId)
-        sessionBankPayload = { success: true }
-      } catch (sessionBankError) {
-        console.error('Failed to handle booking no-show entitlement logic', sessionBankError)
-      }
-    }
-
-    const requiresCalendarSync = Boolean(
-      data.status === 'confirmed' ||
-      data.status === 'cancelled' ||
-      data.booking_date ||
-      data.booking_time ||
-      data.notes !== undefined
-    )
-
-    if (requiresCalendarSync) {
-      try {
-        const syncedBooking = await getBookingWithDetails(params.bookingId)
-
-        if (syncedBooking) {
-          const serviceName = syncedBooking.service_name ?? syncedBooking.package_name ?? 'Booking'
-          const durationMinutes = Number(syncedBooking.duration_minutes ?? syncedBooking.pkg_duration ?? 60)
-          const calendarDetails = {
-            summary: `${serviceName} — ${syncedBooking.client_name}`,
-            description: `Client: ${syncedBooking.client_name}\nEmail: ${syncedBooking.client_email}\nPhone: ${syncedBooking.client_phone ?? ''}`,
-            date: syncedBooking.booking_date,
-            time: syncedBooking.booking_time,
-            durationMinutes,
-            attendeeEmail: syncedBooking.client_email,
-            attendeeName: syncedBooking.client_name,
-          }
-
-          if (syncedBooking.status === 'cancelled' && syncedBooking.google_calendar_event_id) {
-            await deleteCalendarEvent(syncedBooking.google_calendar_event_id)
-            await db.query(
-              `UPDATE bookings SET google_calendar_event_id = NULL WHERE id = $1`,
-              [params.bookingId]
-            )
-          } else if (syncedBooking.status === 'confirmed' && syncedBooking.google_calendar_event_id) {
-            await updateCalendarEvent(syncedBooking.google_calendar_event_id, calendarDetails)
-          } else if (syncedBooking.status === 'confirmed') {
-            const eventId = await createCalendarEvent(calendarDetails)
-
-            if (eventId) {
-              await db.query(
-                `UPDATE bookings SET google_calendar_event_id = $1 WHERE id = $2`,
-                [eventId, params.bookingId]
-              )
-            }
-          }
-
-          if (data.status === 'confirmed' && syncedBooking.status === 'confirmed') {
-            await sendBookingConfirmation({
-              clientName: syncedBooking.client_name,
-              clientEmail: syncedBooking.client_email,
-              serviceName,
-              bookingDate: syncedBooking.booking_date,
-              bookingTime: syncedBooking.booking_time,
-              durationMinutes,
-              isPaid: syncedBooking.payment_status === 'paid',
-            })
-          }
-        }
-      } catch (calendarError) {
-        console.error('Failed to sync Google Calendar event or send confirmation email for booking update', calendarError)
-      }
-    }
-
     try {
       await db.query(
         `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
          VALUES ($1, $2, 'booking', $3, $4)`,
-        [
-          session.id,
-          'booking.updated',
-          params.bookingId,
-          JSON.stringify({ ...data, ...sessionBankPayload, previousStatus: originalBooking.status }),
-        ]
+        [session.id, 'booking.updated', params.bookingId, JSON.stringify({ ...data, previousStatus: originalBooking.status })]
       )
     } catch (auditError) {
       console.error('Failed to write booking audit log', auditError)
     }
 
-    return NextResponse.json({ booking, ...sessionBankPayload })
+    return NextResponse.json({ success: true, booking })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to update booking' }, { status: 500 })
   }
