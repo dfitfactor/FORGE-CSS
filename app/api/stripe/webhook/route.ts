@@ -1,12 +1,27 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { db } from '@/lib/db'
-import { createCalendarEvent } from '@/lib/google-calendar'
 import { sendBookingConfirmation } from '@/lib/email'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20' as any,
 })
+
+let cachedBookingColumns: Set<string> | null = null
+
+async function getBookingColumns() {
+  if (cachedBookingColumns) return cachedBookingColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'bookings'`
+  )
+
+  cachedBookingColumns = new Set(rows.map((row) => row.column_name))
+  return cachedBookingColumns
+}
 
 async function resolveCoachId() {
   const coachDee = await db.queryOne<{ id: string }>(
@@ -42,9 +57,12 @@ export async function POST(request: NextRequest) {
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
-    const meta = session.metadata!
+    const meta = session.metadata ?? {}
 
     try {
+      const columns = await getBookingColumns()
+      const bookingId = meta.bookingId || null
+
       let durationMinutes = 60
       let itemName = ''
 
@@ -75,60 +93,61 @@ export async function POST(request: NextRequest) {
       }
 
       let clientId: string | null = null
-      const existingClient = await db.queryOne<{ id: string }>(
-        `SELECT id FROM clients WHERE lower(email) = $1`,
-        [meta.clientEmail.toLowerCase()]
-      )
+      if (meta.clientEmail) {
+        const existingClient = await db.queryOne<{ id: string }>(
+          `SELECT id FROM clients WHERE lower(email) = $1`,
+          [meta.clientEmail.toLowerCase()]
+        )
 
-      if (existingClient) {
-        clientId = existingClient.id
-      } else {
-        const coachId = await resolveCoachId()
-        const newClient = coachId
-          ? await db.queryOne<{ id: string }>(
-              `INSERT INTO clients (coach_id, full_name, email, phone, status, intake_date, current_stage)
-               VALUES ($1, $2, $3, $4, 'active', CURRENT_DATE, 'foundations')
-               RETURNING id`,
-              [coachId, meta.clientName, meta.clientEmail.toLowerCase(), meta.clientPhone || null]
-            )
-          : await db.queryOne<{ id: string }>(
-              `INSERT INTO clients (full_name, email, phone, status)
-               VALUES ($1, $2, $3, 'active')
-               RETURNING id`,
-              [meta.clientName, meta.clientEmail.toLowerCase(), meta.clientPhone || null]
-            )
-        clientId = newClient?.id || null
+        if (existingClient) {
+          clientId = existingClient.id
+        } else {
+          const coachId = await resolveCoachId()
+          const newClient = coachId
+            ? await db.queryOne<{ id: string }>(
+                `INSERT INTO clients (coach_id, full_name, email, phone, status, intake_date, current_stage)
+                 VALUES ($1, $2, $3, $4, 'active', CURRENT_DATE, 'foundations')
+                 RETURNING id`,
+                [coachId, meta.clientName, meta.clientEmail.toLowerCase(), meta.clientPhone || null]
+              )
+            : await db.queryOne<{ id: string }>(
+                `INSERT INTO clients (full_name, email, phone, status)
+                 VALUES ($1, $2, $3, 'active')
+                 RETURNING id`,
+                [meta.clientName, meta.clientEmail.toLowerCase(), meta.clientPhone || null]
+              )
+          clientId = newClient?.id || null
+        }
       }
 
-      let bookingId: string | null = null
-      if (meta.bookingDate && meta.bookingTime) {
-        const booking = await db.queryOne<{ id: string }>(
-          `INSERT INTO bookings (
-            service_id, package_id, client_id,
-            client_name, client_email, client_phone,
-            booking_date, booking_time, duration_minutes,
-            status, payment_status, amount_cents,
-            stripe_payment_intent_id, notes
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            'confirmed', 'paid', $10, $11, $12
-          ) RETURNING id`,
-          [
-            meta.serviceId || null,
-            meta.packageId || null,
-            clientId,
-            meta.clientName,
-            meta.clientEmail,
-            meta.clientPhone || null,
-            meta.bookingDate,
-            meta.bookingTime,
-            durationMinutes,
-            session.amount_total || 0,
-            session.payment_intent as string,
-            meta.notes || null,
-          ]
+      if (bookingId) {
+        const updates: string[] = ["payment_status = 'paid'"]
+        const values: unknown[] = [bookingId]
+
+        if (columns.has('amount_cents')) {
+          updates.push(`amount_cents = $${values.length + 1}`)
+          values.push(session.amount_total || 0)
+        }
+        if (columns.has('stripe_payment_intent_id')) {
+          updates.push(`stripe_payment_intent_id = $${values.length + 1}`)
+          values.push(session.payment_intent as string)
+        }
+        if (columns.has('client_id') && clientId) {
+          updates.push(`client_id = COALESCE(client_id, $${values.length + 1})`)
+          values.push(clientId)
+        }
+        if (columns.has('updated_at')) {
+          updates.push('updated_at = NOW()')
+        }
+
+        values.push(bookingId)
+
+        await db.query(
+          `UPDATE bookings
+           SET ${updates.join(', ')}
+           WHERE id = $${values.length}`,
+          values
         )
-        bookingId = booking?.id || null
       }
 
       if (meta.packageId && clientId) {
@@ -165,44 +184,22 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await sendBookingConfirmation({
-          clientName: meta.clientName,
-          clientEmail: meta.clientEmail,
-          serviceName: itemName,
-          bookingDate: meta.bookingDate,
-          bookingTime: meta.bookingTime,
-          durationMinutes,
-          isPaid: true,
-          amountPaid: (session.amount_total || 0) / 100,
-        })
+        const recipientEmail = meta.clientEmail || session.customer_email || ''
+        if (recipientEmail) {
+          await sendBookingConfirmation({
+            clientName: meta.clientName || 'there',
+            clientEmail: recipientEmail,
+            serviceName: itemName || 'Booking request',
+            bookingDate: meta.bookingDate,
+            bookingTime: meta.bookingTime,
+            durationMinutes,
+            isPaid: false,
+            amountPaid: (session.amount_total || 0) / 100,
+          })
+        }
       } catch (emailErr) {
         console.error('[webhook] email failed:', emailErr)
       }
-
-      if (meta.bookingDate && meta.bookingTime) {
-        try {
-          const eventId = await createCalendarEvent({
-            summary: `${itemName} — ${meta.clientName}`,
-            description: `Client: ${meta.clientName}\nEmail: ${meta.clientEmail}\nPhone: ${meta.clientPhone || 'N/A'}\nNotes: ${meta.notes || 'None'}`,
-            date: meta.bookingDate,
-            time: meta.bookingTime,
-            durationMinutes,
-            attendeeEmail: meta.clientEmail,
-            attendeeName: meta.clientName,
-          })
-
-          if (bookingId && eventId) {
-            await db.query(
-              `UPDATE bookings SET google_calendar_event_id = $1
-               WHERE id = $2`,
-              [eventId, bookingId]
-            )
-          }
-        } catch (calErr) {
-          console.error('[webhook] calendar failed:', calErr)
-        }
-      }
-
     } catch (err) {
       console.error('[webhook] processing failed:', err)
     }

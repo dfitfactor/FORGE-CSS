@@ -49,16 +49,16 @@ export function ThankYouClient({
     <div className="px-6 py-16">
       <div className="mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-10 text-center shadow-sm">
         {loading ? <Loader2 className="mx-auto h-14 w-14 animate-spin text-[#D4AF37]" /> : <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />}
-        <h1 className="mt-6 text-3xl font-semibold text-[#1b140d]">You&apos;re booked!</h1>
+        <h1 className="mt-6 text-3xl font-semibold text-[#1b140d]">Request received</h1>
         <p className="mt-3 text-base text-black/60">
           {paymentComplete
-            ? `Thank you ${displayName}, your payment was received and your booking has been confirmed.`
+            ? `Thank you ${displayName}, your payment was received and your booking request is now pending coach review.`
             : `Thank you ${displayName}, your booking request has been received.`}
         </p>
 
         {paymentComplete && paidDetails ? (
           <div className="mt-8 rounded-2xl bg-[#f6f1e2] p-6 text-left">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-black/45">Payment confirmed ✅</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-black/45">Payment received ✅</h2>
             <div className="mt-4 space-y-3 text-sm text-black/65">
               <div><strong>Service:</strong> {paidDetails.serviceName || 'Booking'}</div>
               {paidDetails.bookingDate ? <div><strong>Date:</strong> {new Date(`${paidDetails.bookingDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div> : null}
@@ -73,9 +73,9 @@ export function ThankYouClient({
             <ol className="mt-4 space-y-3 text-sm text-black/65">
               {paymentComplete ? (
                 <>
-                  <li>1. Your booking has been confirmed</li>
-                  <li>2. You will receive a confirmation email and payment receipt</li>
-                  <li>3. Complete any required forms before your appointment</li>
+                  <li>1. Your payment has been received</li>
+                  <li>2. Your booking request is pending coach review</li>
+                  <li>3. We will confirm the appointment details with you shortly</li>
                 </>
               ) : (
                 <>
@@ -95,3 +95,5 @@ export function ThankYouClient({
     </div>
   )
 }
+
+

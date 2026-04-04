@@ -75,6 +75,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const booking = await db.queryOne<{ id: string }>(
+      `INSERT INTO bookings (
+        service_id, package_id, client_name, client_email, client_phone,
+        booking_date, booking_time, notes,
+        status, payment_status
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8,
+        'pending', 'unpaid'
+      )
+      RETURNING id`,
+      [
+        data.serviceId ?? null,
+        data.packageId ?? null,
+        data.clientName,
+        data.clientEmail,
+        data.clientPhone || null,
+        data.bookingDate || null,
+        data.bookingTime || null,
+        data.notes || null,
+      ]
+    )
+
+    if (!booking?.id) {
+      return NextResponse.json({ error: 'Failed to create booking request' }, { status: 500 })
+    }
+
     const baseUrl = process.env.NEXTAUTH_URL || 'https://forge-css.vercel.app'
 
     const session = await stripe.checkout.sessions.create({
@@ -93,6 +120,7 @@ export async function POST(request: NextRequest) {
         quantity: 1,
       }],
       metadata: {
+        bookingId: booking.id,
         serviceId: data.serviceId || '',
         packageId: data.packageId || '',
         clientName: data.clientName,
@@ -106,7 +134,7 @@ export async function POST(request: NextRequest) {
       cancel_url: `${baseUrl}/book`,
     })
 
-    return NextResponse.json({ checkoutUrl: session.url })
+    return NextResponse.json({ checkoutUrl: session.url, bookingId: booking.id })
   } catch (err: any) {
     console.error('[stripe/checkout] error:', err)
     return NextResponse.json(
