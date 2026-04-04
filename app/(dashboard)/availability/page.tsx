@@ -185,8 +185,24 @@ function addDays(date: Date, days: number) {
   return copy
 }
 
+function shiftWeek(date: Date, weeks: number) {
+  return addDays(date, weeks * 7)
+}
+
 function formatDayLabel(date: Date) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function formatWeekRangeLabel(weekStart: Date) {
+  const weekEnd = addDays(weekStart, 6)
+  const startLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const endLabel = weekEnd.toLocaleDateString('en-US', {
+    month: weekStart.getMonth() === weekEnd.getMonth() ? undefined : 'short',
+    day: 'numeric',
+    year: weekStart.getFullYear() === weekEnd.getFullYear() ? undefined : 'numeric',
+  })
+  const yearLabel = weekEnd.toLocaleDateString('en-US', { year: 'numeric' })
+  return `${startLabel} - ${endLabel}, ${yearLabel}`
 }
 
 function isSameDate(dateString: string, date: Date) {
@@ -196,6 +212,7 @@ function isSameDate(dateString: string, date: Date) {
 export default function AvailabilityPage() {
   const [rules, setRules] = useState<AvailabilityRule[]>([])
   const [bookings, setBookings] = useState<CoachBooking[]>([])
+  const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(new Date()))
   const [days, setDays] = useState<DayConfig[]>(createDefaultDays())
   const [bufferMinutes, setBufferMinutes] = useState(10)
   const [minimumNoticeHours, setMinimumNoticeHours] = useState(24)
@@ -421,8 +438,7 @@ export default function AvailabilityPage() {
     }
     return slots
   }, [])
-  const weekStart = useMemo(() => startOfWeek(new Date()), [])
-  const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
+  const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(selectedWeekStart, index)), [selectedWeekStart])
   const visibleBookings = useMemo(
     () => bookings.filter((booking) => booking.status === 'pending' || booking.status === 'confirmed'),
     [bookings]
@@ -611,13 +627,39 @@ export default function AvailabilityPage() {
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div>
                     <h3 className="text-base font-semibold text-white">Calendar View</h3>
-                    <p className="mt-1 text-sm text-white/40">Preview this week's availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
+                    <p className="mt-1 text-sm text-white/40">Preview any week of availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
+                    <p className="mt-2 text-sm font-medium text-white/70">{formatWeekRangeLabel(selectedWeekStart)}</p>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <button type="button" onClick={() => toggleCalendarFilter('available')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.available ? 'border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#D4AF37]' : 'border-white/10 bg-white/5 text-white/35'}`}>Available</button>
-                    <button type="button" onClick={() => toggleCalendarFilter('blocked')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.blocked ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Blocked</button>
-                    <button type="button" onClick={() => toggleCalendarFilter('pending')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.pending ? 'border-white/20 bg-white/10 text-white/75' : 'border-white/10 bg-white/5 text-white/35'}`}>Pending / Requested</button>
-                    <button type="button" onClick={() => toggleCalendarFilter('confirmed')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.confirmed ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Confirmed</button>
+                  <div className="flex flex-col gap-3 md:items-end">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWeekStart((current) => shiftWeek(current, -1))}
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                      >
+                        Previous Week
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWeekStart(startOfWeek(new Date()))}
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                      >
+                        Current Week
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWeekStart((current) => shiftWeek(current, 1))}
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                      >
+                        Next Week
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <button type="button" onClick={() => toggleCalendarFilter('available')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.available ? 'border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#D4AF37]' : 'border-white/10 bg-white/5 text-white/35'}`}>Available</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('blocked')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.blocked ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Blocked</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('pending')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.pending ? 'border-white/20 bg-white/10 text-white/75' : 'border-white/10 bg-white/5 text-white/35'}`}>Pending / Requested</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('confirmed')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.confirmed ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Confirmed</button>
+                    </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">

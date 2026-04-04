@@ -64,6 +64,21 @@ function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1)
 }
 
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 1)
+}
+
+function shiftMonth(date: Date, offset: number) {
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1)
+}
+
+function formatMonthLabel(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 function formatBookingDate(date: string, time: string) {
   const timestamp = new Date(`${date}T${time}`)
   if (Number.isNaN(timestamp.getTime())) return `${date} · ${time}`
@@ -241,6 +256,7 @@ function DetailDrawer({
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState('')
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null)
@@ -392,21 +408,32 @@ export default function BookingsPage() {
     }
   }
 
-  const filteredBookings = useMemo(() => {
+  const monthBookings = useMemo(() => {
+    const monthStart = startOfMonth(selectedMonth)
+    const monthEnd = endOfMonth(selectedMonth)
+
     return bookings.filter((booking) => {
+      const timestamp = new Date(`${booking.booking_date}T${booking.booking_time}`)
+      return timestamp >= monthStart && timestamp < monthEnd
+    })
+  }, [bookings, selectedMonth])
+
+  const filteredBookings = useMemo(() => {
+    return monthBookings.filter((booking) => {
       if (statusFilter !== 'all' && booking.status !== statusFilter) return false
       if (!search.trim()) return true
       const query = search.trim().toLowerCase()
       return booking.client_name.toLowerCase().includes(query) || booking.client_email.toLowerCase().includes(query)
     })
-  }, [bookings, search, statusFilter])
+  }, [monthBookings, search, statusFilter])
 
   const stats = useMemo(() => {
     const now = new Date()
     const todayKey = now.toISOString().slice(0, 10)
     const weekStart = startOfWeek(now)
     const weekEnd = endOfWeek(now)
-    const monthStart = startOfMonth(now)
+    const monthStart = startOfMonth(selectedMonth)
+    const monthEnd = endOfMonth(selectedMonth)
 
     const withDates = bookings.map((booking) => ({
       ...booking,
@@ -416,10 +443,10 @@ export default function BookingsPage() {
     return {
       today: withDates.filter((booking) => booking.booking_date === todayKey).length,
       week: withDates.filter((booking) => booking.timestamp >= weekStart && booking.timestamp < weekEnd).length,
-      pending: withDates.filter((booking) => booking.status === 'pending').length,
-      completedMonth: withDates.filter((booking) => booking.status === 'completed' && booking.timestamp >= monthStart).length,
+      pending: withDates.filter((booking) => booking.status === 'pending' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
+      completedMonth: withDates.filter((booking) => booking.status === 'completed' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
     }
-  }, [bookings])
+  }, [bookings, selectedMonth])
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
@@ -429,14 +456,43 @@ export default function BookingsPage() {
           <p className="mt-1 text-sm text-white/40">Manage booking requests, confirmations, and attendance.</p>
         </div>
 
+        <div className="rounded-2xl border border-white/8 bg-[#111111] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-widest text-white/35">Viewing Month</div>
+              <div className="mt-2 text-lg font-semibold text-white">{formatMonthLabel(selectedMonth)}</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+              >
+                Previous Month
+              </button>
+              <button
+                onClick={() => setSelectedMonth(startOfMonth(new Date()))}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+              >
+                Current Month
+              </button>
+              <button
+                onClick={() => setSelectedMonth((current) => shiftMonth(current, 1))}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+              >
+                Next Month
+              </button>
+            </div>
+          </div>
+        </div>
+
         {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
         {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{success}</div> : null}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Today's Bookings" value={stats.today} />
           <StatCard label="This Week" value={stats.week} />
-          <StatCard label="Pending Confirmation" value={stats.pending} />
-          <StatCard label="Completed This Month" value={stats.completedMonth} />
+          <StatCard label={`Pending In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.pending} />
+          <StatCard label={`Completed In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.completedMonth} />
         </div>
 
         <div className="rounded-2xl border border-white/8 bg-[#111111] p-4">
@@ -468,8 +524,8 @@ export default function BookingsPage() {
         ) : filteredBookings.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-[#111111] p-12 text-center">
             <XCircle className="mx-auto h-10 w-10 text-white/20" />
-            <h2 className="mt-4 text-lg font-semibold text-white">No bookings yet</h2>
-            <p className="mt-2 text-sm text-white/40">Share the public booking page to start collecting requests.</p>
+            <h2 className="mt-4 text-lg font-semibold text-white">No bookings for {formatMonthLabel(selectedMonth)}</h2>
+            <p className="mt-2 text-sm text-white/40">Try another month or share the public booking page to start collecting requests.</p>
             <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <button onClick={() => void copyBookingLink()} className="forge-btn-gold inline-flex items-center gap-2">
                 <Copy size={15} />
