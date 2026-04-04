@@ -45,6 +45,21 @@ const PAYMENT_BADGES: Record<string, string> = {
   waived: 'border-white/15 bg-white/5 text-white/55',
 }
 
+function normalizeDateOnly(value: string) {
+  return value.includes('T') ? value.slice(0, 10) : value
+}
+
+function normalizeTimeOnly(value: string) {
+  return value.length >= 5 ? value.slice(0, 5) : value
+}
+
+function parseBookingDateTime(booking: Pick<Booking, 'booking_date' | 'booking_time'>) {
+  const normalizedDate = normalizeDateOnly(booking.booking_date)
+  const normalizedTime = normalizeTimeOnly(booking.booking_time)
+  const timestamp = new Date(`${normalizedDate}T${normalizedTime}:00`)
+  return Number.isNaN(timestamp.getTime()) ? null : timestamp
+}
+
 function startOfWeek(date: Date) {
   const copy = new Date(date)
   const day = copy.getDay()
@@ -73,15 +88,17 @@ function shiftMonth(date: Date, offset: number) {
 }
 
 function formatMonthLabel(date: Date) {
-  return date.toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  })
+  return Number.isNaN(date.getTime())
+    ? 'Unknown Month'
+    : date.toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      })
 }
 
 function formatBookingDate(date: string, time: string) {
-  const timestamp = new Date(`${date}T${time}`)
-  if (Number.isNaN(timestamp.getTime())) return `${date} · ${time}`
+  const timestamp = parseBookingDateTime({ booking_date: date, booking_time: time })
+  if (!timestamp) return `${normalizeDateOnly(date)} · ${normalizeTimeOnly(time)}`
   return timestamp.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -289,18 +306,18 @@ export default function BookingsPage() {
         const currentMonthStart = startOfMonth(new Date())
         const currentMonthEnd = endOfMonth(currentMonthStart)
         const hasCurrentMonthBookings = nextBookings.some((booking: Booking) => {
-          const timestamp = new Date(`${booking.booking_date}T${booking.booking_time}`)
-          return timestamp >= currentMonthStart && timestamp < currentMonthEnd
+          const timestamp = parseBookingDateTime(booking)
+          return timestamp ? timestamp >= currentMonthStart && timestamp < currentMonthEnd : false
         })
 
         if (!hasCurrentMonthBookings && nextBookings.length > 0) {
-          const latestBooking = [...nextBookings].sort((left, right) => (
-            new Date(`${right.booking_date}T${right.booking_time}`).getTime() -
-            new Date(`${left.booking_date}T${left.booking_time}`).getTime()
-          ))[0]
+          const latestBooking = [...nextBookings]
+            .map((booking) => ({ booking, timestamp: parseBookingDateTime(booking) }))
+            .filter((entry): entry is { booking: Booking; timestamp: Date } => Boolean(entry.timestamp))
+            .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0]
 
           if (latestBooking) {
-            setSelectedMonth(startOfMonth(new Date(`${latestBooking.booking_date}T12:00:00`)))
+            setSelectedMonth(startOfMonth(latestBooking.timestamp))
           }
         }
 
@@ -320,8 +337,8 @@ export default function BookingsPage() {
   async function openBookingDetails(booking: Booking) {
     setDetailBooking(booking)
     setDetailForm({
-      booking_date: booking.booking_date,
-      booking_time: booking.booking_time,
+      booking_date: normalizeDateOnly(booking.booking_date),
+      booking_time: normalizeTimeOnly(booking.booking_time),
       payment_status: booking.payment_status,
       notes: booking.notes ?? '',
     })
@@ -333,8 +350,8 @@ export default function BookingsPage() {
       if (data.booking) {
         setDetailBooking(data.booking)
         setDetailForm({
-          booking_date: data.booking.booking_date,
-          booking_time: data.booking.booking_time,
+          booking_date: normalizeDateOnly(data.booking.booking_date),
+          booking_time: normalizeTimeOnly(data.booking.booking_time),
           payment_status: data.booking.payment_status,
           notes: data.booking.notes ?? '',
         })
@@ -443,8 +460,8 @@ export default function BookingsPage() {
     const monthEnd = endOfMonth(selectedMonth)
 
     return bookings.filter((booking) => {
-      const timestamp = new Date(`${booking.booking_date}T${booking.booking_time}`)
-      return timestamp >= monthStart && timestamp < monthEnd
+      const timestamp = parseBookingDateTime(booking)
+      return timestamp ? timestamp >= monthStart && timestamp < monthEnd : false
     })
   }, [bookings, selectedMonth])
 
@@ -465,13 +482,15 @@ export default function BookingsPage() {
     const monthStart = startOfMonth(selectedMonth)
     const monthEnd = endOfMonth(selectedMonth)
 
-    const withDates = bookings.map((booking) => ({
-      ...booking,
-      timestamp: new Date(`${booking.booking_date}T${booking.booking_time}`),
-    }))
+    const withDates = bookings
+      .map((booking) => ({
+        ...booking,
+        timestamp: parseBookingDateTime(booking),
+      }))
+      .filter((booking): booking is Booking & { timestamp: Date } => Boolean(booking.timestamp))
 
     return {
-      today: withDates.filter((booking) => booking.booking_date === todayKey).length,
+      today: withDates.filter((booking) => normalizeDateOnly(booking.booking_date) === todayKey).length,
       week: withDates.filter((booking) => booking.timestamp >= weekStart && booking.timestamp < weekEnd).length,
       pending: withDates.filter((booking) => booking.status === 'pending' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
       completedMonth: withDates.filter((booking) => booking.status === 'completed' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
@@ -479,12 +498,12 @@ export default function BookingsPage() {
   }, [bookings, selectedMonth])
 
   const latestBookingMonth = useMemo(() => {
-    if (bookings.length === 0) return null
-    const latestBooking = [...bookings].sort((left, right) => (
-      new Date(`${right.booking_date}T${right.booking_time}`).getTime() -
-      new Date(`${left.booking_date}T${left.booking_time}`).getTime()
-    ))[0]
-    return latestBooking ? startOfMonth(new Date(`${latestBooking.booking_date}T12:00:00`)) : null
+    const latestBooking = [...bookings]
+      .map((booking) => ({ booking, timestamp: parseBookingDateTime(booking) }))
+      .filter((entry): entry is { booking: Booking; timestamp: Date } => Boolean(entry.timestamp))
+      .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0]
+
+    return latestBooking ? startOfMonth(latestBooking.timestamp) : null
   }, [bookings])
 
   return (
