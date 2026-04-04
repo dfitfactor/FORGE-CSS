@@ -1,11 +1,14 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function PortalAuthClient() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [loading, setLoading] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
   const searchParams = useSearchParams()
@@ -18,8 +21,7 @@ export default function PortalAuthClient() {
     server: 'Something went wrong. Please try again.',
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleMagicLink() {
     if (!email) return
     setLoading(true)
     setError('')
@@ -27,12 +29,12 @@ export default function PortalAuthClient() {
       const res = await fetch('/api/portal/auth/magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email }),
       })
       if (res.ok) {
         setSent(true)
       } else {
-        const data = await res.json()
+        const data = await res.json().catch(() => ({}))
         setError(data.error || 'Failed to send link')
       }
     } catch {
@@ -42,77 +44,100 @@ export default function PortalAuthClient() {
     }
   }
 
+  async function handleDirectSignIn() {
+    if (!email || !dateOfBirth) {
+      setError('Enter your email and date of birth to sign in.')
+      return
+    }
+
+    setSigningIn(true)
+    setError('')
+    try {
+      const res = await fetch('/api/portal/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, dateOfBirth }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to sign in')
+      }
+      router.push('/portal/dashboard')
+      router.refresh()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to sign in')
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
   return (
-    <div style={{
-      maxWidth: '400px',
-      margin: '60px auto',
-      padding: '0 16px'
-    }}>
-      <div style={{
-        backgroundColor: '#111111',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '16px',
-        padding: '40px'
-      }}>
-        <h1 style={{
-          color: '#D4AF37',
-          fontSize: '24px',
-          marginBottom: '8px',
-          fontWeight: 'bold'
-        }}>
+    <div style={{ maxWidth: '400px', margin: '60px auto', padding: '0 16px' }}>
+      <div
+        style={{
+          backgroundColor: '#111111',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '16px',
+          padding: '40px',
+        }}
+      >
+        <h1 style={{ color: '#D4AF37', fontSize: '24px', marginBottom: '8px', fontWeight: 'bold' }}>
           Client Portal
         </h1>
         <p style={{ color: '#666', fontSize: '14px', marginBottom: '32px' }}>
-          Enter your email to receive a login link
+          Sign in with your email and date of birth, or request a magic link.
         </p>
 
         {errorParam && errorMessages[errorParam] && (
-          <div style={{
-            backgroundColor: 'rgba(239,68,68,0.1)',
-            border: '1px solid rgba(239,68,68,0.3)',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            marginBottom: '20px',
-            color: '#f87171',
-            fontSize: '14px'
-          }}>
+          <div
+            style={{
+              backgroundColor: 'rgba(239,68,68,0.1)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              marginBottom: '20px',
+              color: '#f87171',
+              fontSize: '14px',
+            }}
+          >
             {errorMessages[errorParam]}
           </div>
         )}
 
         {sent ? (
-          <div style={{
-            backgroundColor: 'rgba(212,175,55,0.1)',
-            border: '1px solid rgba(212,175,55,0.3)',
-            borderRadius: '8px',
-            padding: '20px',
-            textAlign: 'center'
-          }}>
-            <p style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>
-              Check your email
-            </p>
+          <div
+            style={{
+              backgroundColor: 'rgba(212,175,55,0.1)',
+              border: '1px solid rgba(212,175,55,0.3)',
+              borderRadius: '8px',
+              padding: '20px',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>Check your email</p>
             <p style={{ color: '#888', fontSize: '14px' }}>
-              We sent a login link to {email}.
-              It expires in 30 minutes.
+              We sent a login link to {email}. It expires in 30 minutes.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit}>
+          <div>
             <div style={{ marginBottom: '16px' }}>
-              <label style={{
-                display: 'block',
-                color: '#888',
-                fontSize: '12px',
-                marginBottom: '8px',
-                textTransform: 'uppercase',
-                letterSpacing: '1px'
-              }}>
+              <label
+                style={{
+                  display: 'block',
+                  color: '#888',
+                  fontSize: '12px',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                }}
+              >
                 Email Address
               </label>
               <input
                 type="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 required
                 style={{
@@ -124,24 +149,50 @@ export default function PortalAuthClient() {
                   color: '#ffffff',
                   fontSize: '14px',
                   outline: 'none',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label
+                style={{
+                  display: 'block',
+                  color: '#888',
+                  fontSize: '12px',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                }}
+              >
+                Date of Birth
+              </label>
+              <input
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                style={{
+                  width: '100%',
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  color: '#ffffff',
+                  fontSize: '14px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
             {error && (
-              <p style={{
-                color: '#f87171',
-                fontSize: '13px',
-                marginBottom: '16px'
-              }}>
-                {error}
-              </p>
+              <p style={{ color: '#f87171', fontSize: '13px', marginBottom: '16px' }}>{error}</p>
             )}
 
             <button
-              type="submit"
-              disabled={loading}
+              type="button"
+              onClick={handleDirectSignIn}
+              disabled={signingIn}
               style={{
                 width: '100%',
                 backgroundColor: '#D4AF37',
@@ -151,13 +202,34 @@ export default function PortalAuthClient() {
                 padding: '14px',
                 fontSize: '15px',
                 fontWeight: 'bold',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1
+                cursor: signingIn ? 'not-allowed' : 'pointer',
+                opacity: signingIn ? 0.7 : 1,
+                marginBottom: '12px',
               }}
             >
-              {loading ? 'Sending...' : 'Send Login Link →'}
+              {signingIn ? 'Signing In...' : 'Sign In'}
             </button>
-          </form>
+
+            <button
+              type="button"
+              onClick={handleMagicLink}
+              disabled={loading}
+              style={{
+                width: '100%',
+                backgroundColor: 'transparent',
+                color: '#D4AF37',
+                border: '1px solid rgba(212,175,55,0.35)',
+                borderRadius: '8px',
+                padding: '14px',
+                fontSize: '15px',
+                fontWeight: 'bold',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+              }}
+            >
+              {loading ? 'Sending...' : 'Email Me a Magic Link'}
+            </button>
+          </div>
         )}
       </div>
     </div>
