@@ -1,5 +1,7 @@
 ﻿import { google } from 'googleapis'
 
+const CALENDAR_TIMEZONE = 'America/New_York'
+
 function getCalendarClient() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -31,19 +33,24 @@ function buildEventRequest({
   attendeeEmail: string
   attendeeName: string
 }) {
-  const startDateTime = new Date(`${date}T${time}:00`)
-  const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000)
+  const startDateTimeStr = `${date}T${time}:00`
+  const endDate = new Date(`${date}T${time}:00`)
+  endDate.setMinutes(endDate.getMinutes() + durationMinutes)
+  const endHours = endDate.getHours().toString().padStart(2, '0')
+  const endMins = endDate.getMinutes().toString().padStart(2, '0')
+  const endDateTimeStr = `${date}T${endHours}:${endMins}:00`
 
   return {
     summary,
     description,
     start: {
-      dateTime: startDateTime.toISOString(),
-      timeZone: 'America/New_York',
+      dateTime: startDateTimeStr,
+      // TODO: Make coach calendar timezone configurable instead of hardcoding Eastern.
+      timeZone: CALENDAR_TIMEZONE,
     },
     end: {
-      dateTime: endDateTime.toISOString(),
-      timeZone: 'America/New_York',
+      dateTime: endDateTimeStr,
+      timeZone: CALENDAR_TIMEZONE,
     },
     attendees: [{ email: attendeeEmail, displayName: attendeeName }],
     reminders: {
