@@ -1,10 +1,11 @@
-import { notFound } from 'next/navigation'
+﻿import { notFound } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Link from 'next/link'
 import { BIEDisplay } from '@/components/modules/clients/BIEDisplay'
 import { ClientActionsMenu } from '@/components/modules/clients/ClientActionsMenu'
 import { BIEScoreCard } from '@/components/modules/clients/BIEScoreCard'
+import { SessionBankCard } from '@/components/modules/clients/SessionBankCard'
 import {
   ArrowLeft, Dumbbell, Apple, BookOpen, FlaskConical,
   TrendingUp, Clock, Zap, Activity, Ruler, ClipboardList, Edit, FileText 
@@ -134,7 +135,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                 <h1 className="text-2xl font-bold text-forge-text-primary">{client.full_name}</h1>
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   {email && <span className="text-sm text-forge-text-muted">{email}</span>}
-                  <span className="stage-badge capitalize">{currentStage ?? '—'}</span>
+                  <span className="stage-badge capitalize">{currentStage ?? 'â€”'}</span>
                   {snap?.generation_state && (
                     <span className="forge-badge text-xs">State {snap.generation_state}</span>
                   )}
@@ -166,7 +167,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                   <div className="text-xs text-forge-text-muted">DOB / Age</div>
                   <div className="text-sm font-medium text-forge-text-secondary">
                     {new Date(`${dateOfBirth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    {age !== null ? ` · ${age}` : ''}
+                    {age !== null ? ` Â· ${age}` : ''}
                   </div>
                 </div>
               )}
@@ -202,6 +203,8 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
           gps: typeof snap.gps === 'number' ? Number(snap.gps) : null,
         } : null}
       />
+
+      <SessionBankCard clientId={client.id} />
 
       {snap && (
         <div className="forge-card">
@@ -285,3 +288,4 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
     )
   }
 }
+

@@ -3,9 +3,13 @@ import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { bookingPatchSchema } from '@/lib/booking'
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-calendar'
+import { consumeSession, handleCancellation, handleNoShow } from '@/lib/session-bank'
 
 type BookingWithDetails = {
   id: string
+  client_id: string | null
+  enrollment_id: string | null
+  entitlement_id: string | null
   client_name: string
   client_email: string
   client_phone: string | null
@@ -13,6 +17,8 @@ type BookingWithDetails = {
   booking_time: string
   notes: string | null
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  service_id: string | null
+  package_id: string | null
   service_name: string | null
   package_name: string | null
   google_calendar_event_id: string | null
@@ -110,7 +116,14 @@ export async function PATCH(
 
   values.push(params.bookingId)
 
+  let sessionBankPayload: Record<string, unknown> = {}
+
   try {
+    const originalBooking = await getBookingWithDetails(params.bookingId)
+    if (!originalBooking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    }
+
     const booking = await db.queryOne(
       `UPDATE bookings
        SET ${updates.join(', ')}
@@ -118,6 +131,64 @@ export async function PATCH(
        RETURNING *`,
       values
     )
+
+    if (data.status === 'confirmed') {
+      try {
+        const bookingDetails = await getBookingWithDetails(params.bookingId)
+        if (bookingDetails?.client_id) {
+          const enrollment = await db.queryOne<{ id: string }>(
+            `SELECT *
+             FROM package_enrollments
+             WHERE client_id = $1 AND status = 'active'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [bookingDetails.client_id]
+          )
+
+          if (enrollment && !bookingDetails.entitlement_id) {
+            const serviceName = (bookingDetails.service_name ?? '').toLowerCase()
+            const entitlementType = serviceName.includes('makeup') ? 'makeup' : 'standard'
+            const entitlementId = await consumeSession(enrollment.id, bookingDetails.client_id, params.bookingId, entitlementType)
+            await db.query(
+              `UPDATE bookings
+               SET entitlement_id = $2, enrollment_id = COALESCE(enrollment_id, $3)
+               WHERE id = $1`,
+              [params.bookingId, entitlementId, enrollment.id]
+            )
+            sessionBankPayload = { entitlementId }
+          }
+        }
+      } catch (sessionBankError) {
+        console.error('Failed to consume session entitlement for confirmed booking', sessionBankError)
+      }
+    }
+
+    if (data.status === 'cancelled') {
+      try {
+        const bookingDetails = await getBookingWithDetails(params.bookingId)
+        if (bookingDetails) {
+          const sessionDateTime = new Date(`${bookingDetails.booking_date}T${bookingDetails.booking_time}:00`)
+          const result = await handleCancellation(params.bookingId, sessionDateTime, new Date())
+          sessionBankPayload = {
+            action: result.action,
+            message: result.action === 'forfeited'
+              ? 'Session forfeited - cancelled within 24 hours of appointment'
+              : 'Session returned to your bank',
+          }
+        }
+      } catch (sessionBankError) {
+        console.error('Failed to handle booking cancellation entitlement logic', sessionBankError)
+      }
+    }
+
+    if (data.status === 'no_show') {
+      try {
+        await handleNoShow(params.bookingId)
+        sessionBankPayload = { success: true }
+      } catch (sessionBankError) {
+        console.error('Failed to handle booking no-show entitlement logic', sessionBankError)
+      }
+    }
 
     const requiresCalendarSync = Boolean(
       data.status === 'confirmed' ||
@@ -174,14 +245,14 @@ export async function PATCH(
           session.id,
           'booking.updated',
           params.bookingId,
-          JSON.stringify(data),
+          JSON.stringify({ ...data, ...sessionBankPayload, previousStatus: originalBooking.status }),
         ]
       )
     } catch (auditError) {
       console.error('Failed to write booking audit log', auditError)
     }
 
-    return NextResponse.json({ booking })
+    return NextResponse.json({ booking, ...sessionBankPayload })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to update booking' }, { status: 500 })
   }
