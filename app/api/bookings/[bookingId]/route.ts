@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { bookingPatchSchema } from '@/lib/booking'
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/lib/google-calendar'
 import { consumeSession, handleCancellation, handleNoShow } from '@/lib/session-bank'
+import { sendBookingConfirmation } from '@/lib/email'
 
 type BookingWithDetails = {
   id: string
@@ -17,6 +18,7 @@ type BookingWithDetails = {
   booking_time: string
   notes: string | null
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  payment_status: 'unpaid' | 'paid' | 'waived'
   service_id: string | null
   package_id: string | null
   service_name: string | null
@@ -146,8 +148,8 @@ export async function PATCH(
           )
 
           if (enrollment && !bookingDetails.entitlement_id) {
-            const serviceName = (bookingDetails.service_name ?? '').toLowerCase()
-            const entitlementType = serviceName.includes('makeup') ? 'makeup' : 'standard'
+            const movementName = (bookingDetails.service_name ?? '').toLowerCase()
+            const entitlementType = movementName.includes('makeup') ? 'makeup' : 'standard'
             const entitlementId = await consumeSession(enrollment.id, bookingDetails.client_id, params.bookingId, entitlementType)
             await db.query(
               `UPDATE bookings
@@ -203,12 +205,14 @@ export async function PATCH(
         const syncedBooking = await getBookingWithDetails(params.bookingId)
 
         if (syncedBooking) {
+          const serviceName = syncedBooking.service_name ?? syncedBooking.package_name ?? 'Booking'
+          const durationMinutes = Number(syncedBooking.duration_minutes ?? syncedBooking.pkg_duration ?? 60)
           const calendarDetails = {
-            summary: `${syncedBooking.service_name ?? syncedBooking.package_name ?? 'Booking'} — ${syncedBooking.client_name}`,
-            description: `Client: ${syncedBooking.client_name}\nEmail: ${syncedBooking.client_email}\nPhone: ${syncedBooking.client_phone ?? ''}\nNotes: ${syncedBooking.notes ?? ''}`,
+            summary: `${serviceName} — ${syncedBooking.client_name}`,
+            description: `Client: ${syncedBooking.client_name}\nEmail: ${syncedBooking.client_email}\nPhone: ${syncedBooking.client_phone ?? ''}`,
             date: syncedBooking.booking_date,
             time: syncedBooking.booking_time,
-            durationMinutes: Number(syncedBooking.duration_minutes ?? syncedBooking.pkg_duration ?? 60),
+            durationMinutes,
             attendeeEmail: syncedBooking.client_email,
             attendeeName: syncedBooking.client_name,
           }
@@ -231,9 +235,21 @@ export async function PATCH(
               )
             }
           }
+
+          if (data.status === 'confirmed' && syncedBooking.status === 'confirmed') {
+            await sendBookingConfirmation({
+              clientName: syncedBooking.client_name,
+              clientEmail: syncedBooking.client_email,
+              serviceName,
+              bookingDate: syncedBooking.booking_date,
+              bookingTime: syncedBooking.booking_time,
+              durationMinutes,
+              isPaid: syncedBooking.payment_status === 'paid',
+            })
+          }
         }
       } catch (calendarError) {
-        console.error('Failed to sync Google Calendar event for booking update', calendarError)
+        console.error('Failed to sync Google Calendar event or send confirmation email for booking update', calendarError)
       }
     }
 

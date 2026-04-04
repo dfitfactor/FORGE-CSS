@@ -1,8 +1,8 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
 import { db } from '@/lib/db'
 import { publicBookingSchema } from '@/lib/booking'
 import { createCalendarEvent } from '@/lib/google-calendar'
+import { sendBookingConfirmation } from '@/lib/email'
 
 type BookingTarget = {
   duration_minutes: number
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       try {
         const eventId = await createCalendarEvent({
           summary: `${bookingName} — ${data.client_name}`,
-          description: `Client: ${data.client_name}\nEmail: ${data.client_email}\nPhone: ${data.client_phone ?? ''}\nNotes: ${data.notes ?? ''}`,
+          description: `Client: ${data.client_name}\nEmail: ${data.client_email}\nPhone: ${data.client_phone ?? ''}`,
           date: data.booking_date,
           time: data.booking_time,
           durationMinutes: Number(durationMinutes ?? 60),
@@ -99,37 +99,19 @@ export async function POST(request: NextRequest) {
             [eventId, booking.id]
           )
         }
-      } catch (calendarError) {
-        console.error('Failed to create Google Calendar event for public booking', calendarError)
-      }
-    }
 
-    const html = `
-      <h2>Thank you, ${data.client_name}!</h2>
-      <p>We've received your booking request for <strong>${bookingName}</strong>.</p>
-      <p>Requested appointment: <strong>${data.booking_date}</strong> at <strong>${data.booking_time}</strong>.</p>
-      <p>${priceCents === 0 ? "We've confirmed your booking and sent a calendar invite." : "We'll confirm within 24 hours."}</p>
-      <p>DFitFactor</p>
-    `
-
-    if (process.env.RESEND_API_KEY) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        await resend.emails.send({
-          from: process.env.BOOKING_FROM_EMAIL || 'DFitFactor <onboarding@resend.dev>',
-          to: data.client_email,
-          subject: 'Booking Request Received — DFitFactor',
-          html,
+        await sendBookingConfirmation({
+          clientName: data.client_name,
+          clientEmail: data.client_email,
+          serviceName: bookingName,
+          bookingDate: data.booking_date,
+          bookingTime: data.booking_time,
+          durationMinutes: Number(durationMinutes ?? 60),
+          isPaid: false,
         })
-      } catch (emailError) {
-        console.error('Failed to send booking confirmation email', emailError)
+      } catch (calendarError) {
+        console.error('Failed to create Google Calendar event or send confirmation email for public booking', calendarError)
       }
-    } else {
-      console.log('Booking confirmation email skipped (missing RESEND_API_KEY)', {
-        to: data.client_email,
-        subject: 'Booking Request Received — DFitFactor',
-        html,
-      })
     }
 
     return NextResponse.json({ bookingId: booking?.id, success: true }, { status: 201 })
