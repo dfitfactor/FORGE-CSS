@@ -1,101 +1,29 @@
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { verifyClientToken } from '@/lib/client-auth'
-import { db } from '@/lib/db'
+﻿import Link from 'next/link'
+import { getClientBankStatus } from '@/lib/session-bank'
+import {
+  formatMoney,
+  getPortalBookings,
+  getPortalClientOrRedirect,
+  getPortalEnrollment,
+  getPortalForms,
+  getPortalProtocol,
+} from '@/lib/client-portal'
 
 export default async function PortalDashboard() {
-  const cookieStore = cookies()
-  const sessionToken = cookieStore.get('forge_client_session')?.value
+  const { client } = await getPortalClientOrRedirect()
+  const [protocol, allBookings, forms, enrollment] = await Promise.all([
+    getPortalProtocol(client.id),
+    getPortalBookings(client),
+    getPortalForms(client.id),
+    getPortalEnrollment(client.id),
+  ])
 
-  if (!sessionToken) {
-    redirect('/portal/auth')
-  }
-
-  const session = verifyClientToken(sessionToken)
-  if (!session) {
-    redirect('/portal/auth')
-  }
-
-  const client = await db.queryOne<{
-    id: string
-    full_name: string
-    email: string
-    current_stage: string
-    primary_goal: string
-    status: string
-  }>(
-    `SELECT id, full_name, email, current_stage,
-            primary_goal, status
-     FROM clients WHERE id = $1`,
-    [session.clientId]
-  ).catch(() => null)
-
-  if (!client) {
-    redirect('/portal/auth')
-  }
-
-  const protocol = await db.queryOne<{
-    id: string
-    name: string
-    protocol_type: string
-    created_at: string
-  }>(
-    `SELECT id, name, protocol_type, created_at::text
-     FROM protocols
-     WHERE client_id = $1 AND is_active = true
-     ORDER BY created_at DESC LIMIT 1`,
-    [client.id]
-  ).catch(() => null)
-
-  const bookings = await db.query<{
-    id: string
-    booking_date: string
-    booking_time: string
-    duration_minutes: number
-    status: string
-    service_name: string
-  }>(
-    `SELECT b.id, b.booking_date::text, b.booking_time::text,
-            b.duration_minutes, b.status,
-            COALESCE(s.name, p.name, 'Session') as service_name
-     FROM bookings b
-     LEFT JOIN services s ON b.service_id = s.id
-     LEFT JOIN packages p ON b.package_id = p.id
-     WHERE b.client_email = $1
-     AND b.booking_date >= CURRENT_DATE
-     AND b.status IN ('pending', 'confirmed')
-     ORDER BY b.booking_date ASC, b.booking_time ASC
-     LIMIT 3`,
-    [client.email]
-  ).catch(() => [])
-
-  const completedForms = await db.query<{ form_template_id: string }>(
-    `SELECT form_template_id FROM form_submissions
-     WHERE client_id = $1
-     AND status = 'submitted'
-     AND (expires_at IS NULL OR expires_at > NOW())`,
-    [client.id]
-  ).catch(() => [])
-
-  const completedFormIds = completedForms.map((form) => form.form_template_id)
-
-  const requiredForms = await db.query<{
-    id: string
-    name: string
-    slug: string
-    form_type: string
-  }>(
-    `SELECT id, name, slug, form_type
-     FROM form_templates
-     WHERE form_type IN ('waiver', 'parq')
-     AND is_active = true`,
-    []
-  ).catch(() => [])
-
-  const outstandingForms = requiredForms.filter(
-    (form) => !completedFormIds.includes(form.id)
-  )
+  const outstandingForms = forms.outstandingForms
+  const today = new Date().toISOString().slice(0, 10)
+  const bookings = allBookings
+    .filter((booking) => booking.booking_date >= today && ['pending', 'approved', 'confirmed', 'rescheduled'].includes(booking.status))
+    .slice(0, 3)
+  const bank = enrollment ? await getClientBankStatus(enrollment.id).catch(() => null) : null
 
   const cardStyle = {
     backgroundColor: '#111111',
@@ -117,7 +45,7 @@ export default async function PortalDashboard() {
   })
 
   return (
-    <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '760px', margin: '0 auto' }}>
       <div style={{ marginBottom: '32px' }}>
         <h1
           style={{
@@ -130,7 +58,7 @@ export default async function PortalDashboard() {
           Welcome back, {client.full_name.split(' ')[0]}
         </h1>
         <p style={{ color: '#666', fontSize: '14px' }}>
-          {client.primary_goal || 'Your FORGË journey continues'}
+          {client.primary_goal || 'Your FORGE journey continues'}
         </p>
       </div>
 
@@ -149,18 +77,11 @@ export default async function PortalDashboard() {
           }}
         >
           <div>
-            <p
-              style={{
-                color: '#D4AF37',
-                fontWeight: 'bold',
-                fontSize: '14px',
-                marginBottom: '4px',
-              }}
-            >
-              ⚠️ {outstandingForms.length} form{outstandingForms.length > 1 ? 's' : ''} required
+            <p style={{ color: '#D4AF37', fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
+              {outstandingForms.length} form{outstandingForms.length > 1 ? 's' : ''} required
             </p>
             <p style={{ color: '#888', fontSize: '13px' }}>
-              Complete your required forms before your appointment
+              Complete your required forms before your appointment.
             </p>
           </div>
           <Link
@@ -176,106 +97,44 @@ export default async function PortalDashboard() {
               whiteSpace: 'nowrap',
             }}
           >
-            Complete Now →
+            Complete Now &rarr;
           </Link>
         </div>
       )}
 
       <div style={cardStyle}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '16px',
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '18px' }}>⚡</span>
-            <span
-              style={{
-                color: '#D4AF37',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                letterSpacing: '1px',
-                textTransform: 'uppercase',
-              }}
-            >
+            <span style={{ fontSize: '18px' }}>Protocol</span>
+            <span style={{ color: '#D4AF37', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
               My Protocol
             </span>
           </div>
-          <span style={badgeStyle('#8b5cf6')}>
-            {client.current_stage || 'Foundations'}
-          </span>
+          <span style={badgeStyle('#8b5cf6')}>{client.current_stage || 'Foundations'}</span>
         </div>
 
         {protocol ? (
           <div>
-            <p
-              style={{
-                color: '#ffffff',
-                fontWeight: 'bold',
-                fontSize: '16px',
-                marginBottom: '8px',
-              }}
-            >
-              {protocol.name}
-            </p>
+            <p style={{ color: '#ffffff', fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>{protocol.name}</p>
             <p style={{ color: '#666', fontSize: '13px', marginBottom: '16px' }}>
-              Generated{' '}
-              {new Date(protocol.created_at).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })}
+              Generated {new Date(protocol.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
-            <Link
-              href={`/portal/protocol/${protocol.id}`}
-              style={{
-                display: 'inline-block',
-                backgroundColor: '#D4AF37',
-                color: '#000',
-                padding: '10px 20px',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                fontSize: '14px',
-                fontWeight: 'bold',
-              }}
-            >
-              View My Protocol →
+            <Link href={`/portal/protocol/${protocol.id}`} style={{ display: 'inline-block', backgroundColor: '#D4AF37', color: '#000', padding: '10px 20px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: 'bold' }}>
+              View My Protocol &rarr;
             </Link>
           </div>
         ) : (
           <div>
-            <p style={{ color: '#666', fontSize: '14px', marginBottom: '4px' }}>
-              No protocol generated yet
-            </p>
-            <p style={{ color: '#555', fontSize: '13px' }}>
-              Your coach will generate your personalized protocol soon
-            </p>
+            <p style={{ color: '#666', fontSize: '14px', marginBottom: '4px' }}>No protocol generated yet</p>
+            <p style={{ color: '#555', fontSize: '13px' }}>Your coach will generate your personalized protocol soon.</p>
           </div>
         )}
       </div>
 
       <div style={cardStyle}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginBottom: '16px',
-          }}
-        >
-          <span style={{ fontSize: '18px' }}>📅</span>
-          <span
-            style={{
-              color: '#D4AF37',
-              fontSize: '11px',
-              fontWeight: 'bold',
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-            }}
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '18px' }}>Sessions</span>
+          <span style={{ color: '#D4AF37', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
             Upcoming Sessions
           </span>
         </div>
@@ -283,145 +142,105 @@ export default async function PortalDashboard() {
         {bookings.length > 0 ? (
           <div>
             {bookings.map((booking) => (
-              <div
-                key={booking.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 0',
-                  borderBottom: '1px solid rgba(255,255,255,0.05)',
-                }}
-              >
+              <div key={booking.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <div>
-                  <p
-                    style={{
-                      color: '#ffffff',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      marginBottom: '2px',
-                    }}
-                  >
-                    {booking.service_name}
-                  </p>
+                  <p style={{ color: '#ffffff', fontSize: '14px', fontWeight: '500', marginBottom: '2px' }}>{booking.item_name}</p>
                   <p style={{ color: '#666', fontSize: '13px' }}>
-                    {new Date(`${booking.booking_date}T12:00:00`).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}{' '}
-                    at {booking.booking_time}
+                    {new Date(`${booking.booking_date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {booking.booking_time.slice(0, 5)}
                   </p>
                 </div>
-                <span style={badgeStyle(
-                  booking.status === 'confirmed' ? '#10b981' : '#f59e0b'
-                )}>
+                <span style={badgeStyle(booking.status === 'confirmed' ? '#10b981' : booking.status === 'approved' ? '#D4AF37' : '#f59e0b')}>
                   {booking.status}
                 </span>
               </div>
             ))}
             <div style={{ marginTop: '16px' }}>
-              <Link
-                href="/book"
-                style={{
-                  color: '#D4AF37',
-                  fontSize: '13px',
-                  textDecoration: 'none',
-                }}
-              >
-                + Book another session
+              <Link href="/portal/bookings" style={{ color: '#D4AF37', fontSize: '13px', textDecoration: 'none' }}>
+                Manage my sessions &rarr;
               </Link>
             </div>
           </div>
         ) : (
           <div>
-            <p style={{ color: '#666', fontSize: '14px', marginBottom: '12px' }}>
-              No upcoming sessions
-            </p>
-            <Link
-              href="/book"
-              style={{
-                display: 'inline-block',
-                border: '1px solid rgba(212,175,55,0.4)',
-                color: '#D4AF37',
-                padding: '10px 20px',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                fontSize: '14px',
-              }}
-            >
-              Book a Session →
+            <p style={{ color: '#666', fontSize: '14px', marginBottom: '12px' }}>No upcoming sessions</p>
+            <Link href="/book" style={{ display: 'inline-block', border: '1px solid rgba(212,175,55,0.4)', color: '#D4AF37', padding: '10px 20px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px' }}>
+              Request a Session &rarr;
             </Link>
           </div>
         )}
       </div>
 
       <div style={cardStyle}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginBottom: '16px',
-          }}
-        >
-          <span style={{ fontSize: '18px' }}>🔗</span>
-          <span
-            style={{
-              color: '#D4AF37',
-              fontSize: '11px',
-              fontWeight: 'bold',
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-            }}
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '18px' }}>Billing</span>
+          <span style={{ color: '#D4AF37', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            Package & Billing
+          </span>
+        </div>
+        {enrollment ? (
+          <div>
+            <p style={{ color: '#ffffff', fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>{enrollment.package_name ?? 'Active Package'}</p>
+            <p style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>
+              Payment status: {enrollment.payment_status ?? 'unpaid'} · Amount: {formatMoney(enrollment.amount_cents)}
+            </p>
+            <p style={{ color: '#666', fontSize: '13px', marginBottom: '16px' }}>
+              Sessions remaining: {enrollment.sessions_remaining ?? 0}{bank ? ` · Weekly usage: ${bank.weeklyUsed}/${bank.weeklyLimit || 0}` : ''}
+            </p>
+            <Link href="/portal/package" style={{ color: '#D4AF37', fontSize: '13px', textDecoration: 'none' }}>
+              View package details &rarr;
+            </Link>
+          </div>
+        ) : (
+          <p style={{ color: '#666', fontSize: '14px' }}>No active package or billing record found yet.</p>
+        )}
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '18px' }}>Alerts</span>
+          <span style={{ color: '#D4AF37', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            Notifications
+          </span>
+        </div>
+        <div style={{ color: '#666', fontSize: '13px', marginBottom: '12px' }}>
+          {outstandingForms.length > 0 ? `${outstandingForms.length} form(s) still need attention before your next appointment.` : 'No urgent portal notifications right now.'}
+        </div>
+        <Link href="/portal/notifications" style={{ color: '#D4AF37', textDecoration: 'none', fontSize: '13px' }}>
+          Open notifications &rarr;
+        </Link>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '18px' }}>Links</span>
+          <span style={{ color: '#D4AF37', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', textTransform: 'uppercase' }}>
             Quick Links
           </span>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <Link
-            href="/book"
-            style={{
-              color: '#888',
-              fontSize: '14px',
-              textDecoration: 'none',
-              padding: '8px 16px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '8px',
-            }}
-          >
-            📅 Book Session
+          <Link href="/portal/bookings" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            My Sessions
           </Link>
-          <Link
-            href="/portal/forms"
-            style={{
-              color: '#888',
-              fontSize: '14px',
-              textDecoration: 'none',
-              padding: '8px 16px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '8px',
-            }}
-          >
-            📋 My Forms
+          <Link href="/book" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            Book Session
           </Link>
-          {protocol && (
-            <Link
-              href={`/portal/protocol/${protocol.id}`}
-              style={{
-                color: '#888',
-                fontSize: '14px',
-                textDecoration: 'none',
-                padding: '8px 16px',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '8px',
-              }}
-            >
-              ⚡ My Protocol
+          <Link href="/portal/forms" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            My Forms
+          </Link>
+          <Link href="/portal/package" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            Package & Billing
+          </Link>
+          <Link href="/portal/notifications" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            Notifications
+          </Link>
+          {protocol ? (
+            <Link href={`/portal/protocol/${protocol.id}`} style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+              My Protocol
             </Link>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   )
 }
+
