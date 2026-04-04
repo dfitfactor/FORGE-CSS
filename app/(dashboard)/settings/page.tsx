@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut
+  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail
 } from 'lucide-react'
 
 type AccountState = {
@@ -80,6 +80,10 @@ export default function SettingsPage() {
   const [templateError, setTemplateError] = useState('')
   const [templateSuccess, setTemplateSuccess] = useState('')
   const [loggingOut, setLoggingOut] = useState(false)
+  const [portalTestEmail, setPortalTestEmail] = useState('')
+  const [portalTestLoading, setPortalTestLoading] = useState(false)
+  const [portalTestError, setPortalTestError] = useState('')
+  const [portalTestSuccess, setPortalTestSuccess] = useState('')
   const [activeTemplateType, setActiveTemplateType] = useState<'movement' | 'nutrition' | 'habit_coaching'>('movement')
   const [showTemplateForm, setShowTemplateForm] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -163,6 +167,34 @@ export default function SettingsPage() {
     } finally {
       window.location.href = '/auth/login'
       router.refresh()
+    }
+  }
+
+  async function handlePortalTest(event: React.FormEvent) {
+    event.preventDefault()
+    if (!portalTestEmail) return
+
+    setPortalTestLoading(true)
+    setPortalTestError('')
+    setPortalTestSuccess('')
+
+    try {
+      const res = await fetch('/api/portal/auth/test-magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: portalTestEmail }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Failed to send portal login link')
+      }
+
+      setPortalTestSuccess(data.message ?? 'Portal login link sent.')
+    } catch (err: unknown) {
+      setPortalTestError(err instanceof Error ? err.message : 'Failed to send portal login link')
+    } finally {
+      setPortalTestLoading(false)
     }
   }
 
@@ -548,6 +580,45 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="rounded-2xl border border-white/8 bg-[#111111] p-5 space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-mono uppercase tracking-widest text-white/30">Client Portal</p>
+              <h2 className="mt-3 text-sm font-semibold text-white">Portal Login Test</h2>
+              <p className="mt-2 text-sm text-white/55">
+                Send a one-time portal login link to a client email and confirm whether the address matches an active client record.
+              </p>
+            </div>
+          </div>
+
+          {portalTestError ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{portalTestError}</div> : null}
+          {portalTestSuccess ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{portalTestSuccess}</div> : null}
+
+          <form onSubmit={handlePortalTest} className="grid gap-4 md:grid-cols-[1fr_auto]">
+            <div>
+              <label className="forge-label">Client Email</label>
+              <input
+                type="email"
+                className="forge-input"
+                value={portalTestEmail}
+                onChange={(event) => setPortalTestEmail(event.target.value)}
+                placeholder="client@email.com"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={portalTestLoading}
+                className="forge-btn-gold inline-flex w-full items-center justify-center gap-2 disabled:opacity-50 md:w-auto"
+              >
+                {portalTestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                {portalTestLoading ? 'Sending...' : 'Send Test Link'}
+              </button>
+            </div>
+          </form>
         </section>
       </div>
     </div>
