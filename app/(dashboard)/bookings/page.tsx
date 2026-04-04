@@ -13,7 +13,7 @@ type Booking = {
   booking_date: string
   booking_time: string
   duration_minutes: number | null
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  status: 'pending' | 'approved' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed' | 'no_show'
   payment_status: 'unpaid' | 'paid' | 'waived'
   attended: boolean | null
   notes: string | null
@@ -29,11 +29,13 @@ type BookingHistoryEntry = {
   created_at: string
 }
 
-const STATUS_OPTIONS = ['all', 'pending', 'confirmed', 'completed', 'cancelled', 'no_show'] as const
+const STATUS_OPTIONS = ['all', 'pending', 'approved', 'confirmed', 'rescheduled', 'completed', 'cancelled', 'no_show'] as const
 
 const STATUS_BADGES: Record<string, string> = {
   pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  approved: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
   confirmed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  rescheduled: 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300',
   completed: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
   cancelled: 'border-red-500/30 bg-red-500/10 text-red-300',
   no_show: 'border-white/15 bg-white/5 text-white/55',
@@ -110,19 +112,50 @@ function formatBookingDate(date: string, time: string) {
 
 function availableActions(status: Booking['status']) {
   const actions: Array<{ label: string; value: Booking['status'] }> = []
+
   if (status === 'pending') {
-    actions.push({ label: 'Confirm', value: 'confirmed' }, { label: 'Cancel', value: 'cancelled' })
+    actions.push(
+      { label: 'Approve', value: 'approved' },
+      { label: 'Mark Rescheduled', value: 'rescheduled' },
+      { label: 'Cancel', value: 'cancelled' }
+    )
   }
+
+  if (status === 'approved') {
+    actions.push(
+      { label: 'Mark Confirmed', value: 'confirmed' },
+      { label: 'Mark Rescheduled', value: 'rescheduled' },
+      { label: 'Cancel', value: 'cancelled' }
+    )
+  }
+
   if (status === 'confirmed') {
     actions.push(
       { label: 'Mark Complete', value: 'completed' },
+      { label: 'Mark Rescheduled', value: 'rescheduled' },
       { label: 'Mark No Show', value: 'no_show' },
       { label: 'Cancel', value: 'cancelled' }
     )
   }
-  if (status === 'completed') actions.push({ label: 'Mark No Show', value: 'no_show' })
-  if (status === 'no_show') actions.push({ label: 'Confirm', value: 'confirmed' }, { label: 'Cancel', value: 'cancelled' })
-  if (status === 'cancelled') actions.push({ label: 'Confirm', value: 'confirmed' })
+
+  if (status === 'rescheduled') {
+    actions.push(
+      { label: 'Mark Confirmed', value: 'confirmed' },
+      { label: 'Cancel', value: 'cancelled' }
+    )
+  }
+
+  if (status === 'no_show') {
+    actions.push(
+      { label: 'Mark Confirmed', value: 'confirmed' },
+      { label: 'Cancel', value: 'cancelled' }
+    )
+  }
+
+  if (status === 'cancelled') {
+    actions.push({ label: 'Approve', value: 'approved' })
+  }
+
   return actions
 }
 
@@ -492,7 +525,7 @@ export default function BookingsPage() {
     return {
       today: withDates.filter((booking) => normalizeDateOnly(booking.booking_date) === todayKey).length,
       week: withDates.filter((booking) => booking.timestamp >= weekStart && booking.timestamp < weekEnd).length,
-      pending: withDates.filter((booking) => booking.status === 'pending' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
+      openRequests: withDates.filter((booking) => (booking.status === 'pending' || booking.status === 'approved' || booking.status === 'rescheduled') && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
       completedMonth: withDates.filter((booking) => booking.status === 'completed' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
     }
   }, [bookings, selectedMonth])
@@ -549,7 +582,7 @@ export default function BookingsPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Today's Bookings" value={stats.today} />
           <StatCard label="This Week" value={stats.week} />
-          <StatCard label={`Pending In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.pending} />
+          <StatCard label={`Open Requests In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.openRequests} />
           <StatCard label={`Completed In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.completedMonth} />
         </div>
 
@@ -708,3 +741,6 @@ export default function BookingsPage() {
     </div>
   )
 }
+
+
+

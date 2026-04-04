@@ -26,7 +26,7 @@ type CoachBooking = {
   booking_date: string
   booking_time: string
   duration_minutes: number | null
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  status: 'pending' | 'approved' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed' | 'no_show'
   payment_status?: 'unpaid' | 'paid' | 'waived'
   notes?: string | null
   service_name: string | null
@@ -440,7 +440,7 @@ export default function AvailabilityPage() {
   }, [])
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(selectedWeekStart, index)), [selectedWeekStart])
   const visibleBookings = useMemo(
-    () => bookings.filter((booking) => booking.status === 'pending' || booking.status === 'confirmed'),
+    () => bookings.filter((booking) => booking.status === 'pending' || booking.status === 'approved' || booking.status === 'rescheduled' || booking.status === 'confirmed'),
     [bookings]
   )
   const blockedByDay = useMemo(() => {
@@ -701,11 +701,15 @@ export default function AvailabilityPage() {
                                     {slotBookings.map((booking) => {
                                       const statusClass = booking.status === 'confirmed'
                                         ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
-                                        : 'border-white/20 bg-white/10 text-white/75'
+                                        : booking.status === 'approved'
+                                          ? 'border-sky-500/40 bg-sky-500/15 text-sky-200'
+                                          : booking.status === 'rescheduled'
+                                            ? 'border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-200'
+                                            : 'border-white/20 bg-white/10 text-white/75'
                                       return (
                                         <button key={booking.id} type="button" onClick={() => setSelectedBooking(booking)} className={`block w-full rounded-md border px-2 py-1 text-left ${statusClass}`}>
                                           <div className="font-medium">{booking.client_name}</div>
-                                          <div className="text-[10px] uppercase tracking-wide opacity-80">{booking.status === 'pending' ? 'Requested' : 'Confirmed'} · {booking.service_name ?? booking.package_name ?? 'Booking'}</div>
+                                          <div className="text-[10px] uppercase tracking-wide opacity-80">{booking.status === 'confirmed' ? 'Confirmed' : booking.status === 'approved' ? 'Approved' : booking.status === 'rescheduled' ? 'Rescheduled' : 'Requested'} · {booking.service_name ?? booking.package_name ?? 'Booking'}</div>
                                         </button>
                                       )
                                     })}
@@ -876,3 +880,7 @@ export default function AvailabilityPage() {
     </div>
   )
 }
+
+
+
+

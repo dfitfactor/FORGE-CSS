@@ -17,7 +17,7 @@ type BookingWithDetails = {
   booking_date: string
   booking_time: string
   notes: string | null
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  status: 'pending' | 'approved' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed' | 'no_show'
   payment_status: 'unpaid' | 'paid' | 'waived'
   service_id: string | null
   package_id: string | null
@@ -99,6 +99,18 @@ async function getBookingHistory(bookingId: string) {
   }
 }
 
+async function writeBookingAuditLog(userId: string, bookingId: string, payload: Record<string, unknown>) {
+  try {
+    await db.query(
+      `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
+       VALUES ($1, $2, 'booking', $3, $4)`,
+      [userId, 'booking.updated', bookingId, JSON.stringify(payload)]
+    )
+  } catch (auditError) {
+    console.error('Failed to write booking audit log', auditError)
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { bookingId: string } }
@@ -142,6 +154,26 @@ export async function PATCH(
     const originalBooking = await getBookingWithDetails(params.bookingId)
     if (!originalBooking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    }
+
+    if (data.status === 'approved') {
+      await db.query(
+        `UPDATE bookings
+         SET status = 'approved', updated_at = NOW()
+         WHERE id = $1`,
+        [params.bookingId]
+      )
+
+      await writeBookingAuditLog(session.id, params.bookingId, {
+        status: 'approved',
+        previousStatus: originalBooking.status,
+      })
+
+      return NextResponse.json({
+        success: true,
+        action: 'approved',
+        message: 'Booking approved. Awaiting client confirmation.',
+      })
     }
 
     if (data.status === 'confirmed') {
@@ -205,8 +237,12 @@ export async function PATCH(
       }
 
       try {
+        if (booking.google_calendar_event_id) {
+          await deleteCalendarEvent(booking.google_calendar_event_id)
+        }
+
         const eventId = await createCalendarEvent({
-          summary: `${booking.item_name ?? 'Booking'} — ${booking.client_name}`,
+          summary: `${booking.item_name ?? 'Booking'} - ${booking.client_name}`,
           description: `Client: ${booking.client_name}\nEmail: ${booking.client_email}\nPhone: ${booking.client_phone ?? ''}`,
           date: booking.booking_date,
           time: booking.booking_time,
@@ -241,17 +277,48 @@ export async function PATCH(
         console.error('Failed to send booking confirmation email for confirmed booking', emailError)
       }
 
-      try {
-        await db.query(
-          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
-           VALUES ($1, $2, 'booking', $3, $4)`,
-          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'confirmed', previousStatus: originalBooking.status })]
-        )
-      } catch (auditError) {
-        console.error('Failed to write booking audit log', auditError)
-      }
+      await writeBookingAuditLog(session.id, params.bookingId, {
+        status: 'confirmed',
+        previousStatus: originalBooking.status,
+      })
 
       return NextResponse.json({ success: true, action: 'confirmed' })
+    }
+
+    if (data.status === 'rescheduled') {
+      await db.query(
+        `UPDATE bookings
+         SET status = 'rescheduled', attended = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [params.bookingId]
+      )
+
+      if (originalBooking.google_calendar_event_id) {
+        try {
+          await deleteCalendarEvent(originalBooking.google_calendar_event_id)
+          if (columns.has('google_calendar_event_id')) {
+            await db.query(
+              `UPDATE bookings
+               SET google_calendar_event_id = NULL, updated_at = NOW()
+               WHERE id = $1`,
+              [params.bookingId]
+            )
+          }
+        } catch (calendarError) {
+          console.error('Failed to delete Google Calendar event for rescheduled booking', calendarError)
+        }
+      }
+
+      await writeBookingAuditLog(session.id, params.bookingId, {
+        status: 'rescheduled',
+        previousStatus: originalBooking.status,
+      })
+
+      return NextResponse.json({
+        success: true,
+        action: 'rescheduled',
+        message: 'Booking marked for reschedule. Update the date/time and re-confirm when ready.',
+      })
     }
 
     if (data.status === 'cancelled') {
@@ -283,25 +350,25 @@ export async function PATCH(
         }
       }
 
-      const sessionDateTime = new Date(`${booking.booking_date}T${booking.booking_time}:00`)
-      const result = await handleCancellation(params.bookingId, sessionDateTime, new Date())
+      const requiresEntitlementHandling = booking.status === 'confirmed' || booking.status === 'completed' || Boolean(booking.entitlement_id)
+      const result = requiresEntitlementHandling
+        ? await handleCancellation(params.bookingId, new Date(`${booking.booking_date}T${booking.booking_time}:00`), new Date())
+        : { action: 'returned' as const, hoursBeforeSession: 0 }
 
-      try {
-        await db.query(
-          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
-           VALUES ($1, $2, 'booking', $3, $4)`,
-          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'cancelled', action: result.action, previousStatus: originalBooking.status })]
-        )
-      } catch (auditError) {
-        console.error('Failed to write booking audit log', auditError)
-      }
+      await writeBookingAuditLog(session.id, params.bookingId, {
+        status: 'cancelled',
+        action: result.action,
+        previousStatus: originalBooking.status,
+      })
 
       return NextResponse.json({
         success: true,
         action: result.action,
-        message: result.action === 'forfeited'
-          ? 'Session forfeited — cancelled within 24 hours'
-          : 'Session returned to bank',
+        message: !requiresEntitlementHandling
+          ? 'Booking request cancelled'
+          : result.action === 'forfeited'
+            ? 'Session forfeited - cancelled within 24 hours'
+            : 'Session returned to bank',
       })
     }
 
@@ -315,15 +382,10 @@ export async function PATCH(
 
       await handleNoShow(params.bookingId)
 
-      try {
-        await db.query(
-          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
-           VALUES ($1, $2, 'booking', $3, $4)`,
-          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'no_show', previousStatus: originalBooking.status })]
-        )
-      } catch (auditError) {
-        console.error('Failed to write booking audit log', auditError)
-      }
+      await writeBookingAuditLog(session.id, params.bookingId, {
+        status: 'no_show',
+        previousStatus: originalBooking.status,
+      })
 
       return NextResponse.json({ success: true, action: 'no_show' })
     }
@@ -336,15 +398,10 @@ export async function PATCH(
         [params.bookingId]
       )
 
-      try {
-        await db.query(
-          `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
-           VALUES ($1, $2, 'booking', $3, $4)`,
-          [session.id, 'booking.updated', params.bookingId, JSON.stringify({ status: 'completed', previousStatus: originalBooking.status })]
-        )
-      } catch (auditError) {
-        console.error('Failed to write booking audit log', auditError)
-      }
+      await writeBookingAuditLog(session.id, params.bookingId, {
+        status: 'completed',
+        previousStatus: originalBooking.status,
+      })
 
       return NextResponse.json({ success: true, action: 'completed' })
     }
@@ -374,15 +431,10 @@ export async function PATCH(
       values
     )
 
-    try {
-      await db.query(
-        `INSERT INTO audit_log (user_id, action, resource_type, resource_id, payload)
-         VALUES ($1, $2, 'booking', $3, $4)`,
-        [session.id, 'booking.updated', params.bookingId, JSON.stringify({ ...data, previousStatus: originalBooking.status })]
-      )
-    } catch (auditError) {
-      console.error('Failed to write booking audit log', auditError)
-    }
+    await writeBookingAuditLog(session.id, params.bookingId, {
+      ...data,
+      previousStatus: originalBooking.status,
+    })
 
     return NextResponse.json({ success: true, booking })
   } catch (err: unknown) {
