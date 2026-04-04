@@ -77,6 +77,10 @@ export async function POST(request: NextRequest) {
             If you were not expecting this message, you can ignore it.
             <br>This link can only be used once.
           </p>
+
+          <p style="font-size: 12px; color: #999; word-break: break-all;">
+            Direct link: ${magicLink}
+          </p>
         </body>
         </html>
       `,
@@ -86,6 +90,7 @@ export async function POST(request: NextRequest) {
       success: true,
       clientName: client.full_name,
       clientEmail: client.email,
+      magicLink,
       message: `Portal login link sent to ${client.email}.`,
     })
   } catch (err) {

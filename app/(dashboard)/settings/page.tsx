@@ -84,6 +84,7 @@ export default function SettingsPage() {
   const [portalTestLoading, setPortalTestLoading] = useState(false)
   const [portalTestError, setPortalTestError] = useState('')
   const [portalTestSuccess, setPortalTestSuccess] = useState('')
+  const [portalTestLink, setPortalTestLink] = useState('')
   const [activeTemplateType, setActiveTemplateType] = useState<'movement' | 'nutrition' | 'habit_coaching'>('movement')
   const [showTemplateForm, setShowTemplateForm] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -177,6 +178,7 @@ export default function SettingsPage() {
     setPortalTestLoading(true)
     setPortalTestError('')
     setPortalTestSuccess('')
+    setPortalTestLink('')
 
     try {
       const res = await fetch('/api/portal/auth/test-magic-link', {
@@ -191,6 +193,7 @@ export default function SettingsPage() {
       }
 
       setPortalTestSuccess(data.message ?? 'Portal login link sent.')
+      setPortalTestLink(typeof data.magicLink === 'string' ? data.magicLink : '')
     } catch (err: unknown) {
       setPortalTestError(err instanceof Error ? err.message : 'Failed to send portal login link')
     } finally {
@@ -595,6 +598,29 @@ export default function SettingsPage() {
 
           {portalTestError ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{portalTestError}</div> : null}
           {portalTestSuccess ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{portalTestSuccess}</div> : null}
+          {portalTestLink ? (
+            <div className="rounded-xl border border-[#D4AF37]/25 bg-[#D4AF37]/8 px-4 py-3 text-sm text-[#f6dfa1]">
+              <p className="font-medium text-[#D4AF37]">Fallback magic link</p>
+              <p className="mt-1 break-all text-white/75">{portalTestLink}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(portalTestLink)}
+                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/75 hover:text-white"
+                >
+                  Copy Link
+                </button>
+                <a
+                  href={portalTestLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/75 hover:text-white"
+                >
+                  Open Link
+                </a>
+              </div>
+            </div>
+          ) : null}
 
           <form onSubmit={handlePortalTest} className="grid gap-4 md:grid-cols-[1fr_auto]">
             <div>
