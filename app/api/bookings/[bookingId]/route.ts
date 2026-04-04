@@ -34,11 +34,47 @@ type AuditEntry = {
   created_at: string
 }
 
+let cachedBookingColumns: Set<string> | null = null
+
+async function getBookingColumns() {
+  if (cachedBookingColumns) return cachedBookingColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'bookings'`
+  )
+
+  cachedBookingColumns = new Set(rows.map((row) => row.column_name))
+  return cachedBookingColumns
+}
+
 async function getBookingWithDetails(bookingId: string) {
+  const columns = await getBookingColumns()
+  const selectColumns = [
+    'b.id',
+    columns.has('client_id') ? 'b.client_id' : 'NULL::uuid as client_id',
+    columns.has('enrollment_id') ? 'b.enrollment_id' : 'NULL::uuid as enrollment_id',
+    columns.has('entitlement_id') ? 'b.entitlement_id' : 'NULL::uuid as entitlement_id',
+    'b.client_name',
+    'b.client_email',
+    'b.client_phone',
+    'b.booking_date::text as booking_date',
+    'b.booking_time::text as booking_time',
+    'b.notes',
+    'b.status',
+    'b.payment_status',
+    'b.service_id',
+    'b.package_id',
+    columns.has('google_calendar_event_id') ? 'b.google_calendar_event_id' : 'NULL::text as google_calendar_event_id',
+    'b.duration_minutes',
+    'COALESCE(s.name, p.name) as item_name',
+    'COALESCE(s.duration_minutes, p.duration_minutes) as duration',
+  ]
+
   return db.queryOne<BookingWithDetails>(
-    `SELECT b.*,
-            COALESCE(s.name, p.name) as item_name,
-            COALESCE(s.duration_minutes, p.duration_minutes) as duration
+    `SELECT ${selectColumns.join(', ')}
      FROM bookings b
      LEFT JOIN services s ON b.service_id = s.id
      LEFT JOIN packages p ON b.package_id = p.id
@@ -102,6 +138,7 @@ export async function PATCH(
   const data = parsed.data
 
   try {
+    const columns = await getBookingColumns()
     const originalBooking = await getBookingWithDetails(params.bookingId)
     if (!originalBooking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
@@ -125,7 +162,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
       }
 
-      if (booking.client_id) {
+      if (columns.has('client_id') && booking.client_id) {
         try {
           const enrollment = await db.queryOne<{ id: string }>(
             `SELECT id
@@ -136,16 +173,31 @@ export async function PATCH(
             [booking.client_id]
           )
 
-          if (enrollment && !booking.entitlement_id) {
+          if (enrollment && (!columns.has('entitlement_id') || !booking.entitlement_id)) {
             const itemName = (booking.item_name ?? '').toLowerCase()
             const entitlementType = itemName.includes('makeup') ? 'makeup' : 'standard'
             const entitlementId = await consumeSession(enrollment.id, booking.client_id, params.bookingId, entitlementType)
-            await db.query(
-              `UPDATE bookings
-               SET entitlement_id = $2, enrollment_id = COALESCE(enrollment_id, $3), updated_at = NOW()
-               WHERE id = $1`,
-              [params.bookingId, entitlementId, enrollment.id]
-            )
+
+            if (columns.has('entitlement_id') || columns.has('enrollment_id')) {
+              const entitlementUpdates: string[] = []
+              const entitlementValues: unknown[] = [params.bookingId]
+              if (columns.has('entitlement_id')) {
+                entitlementUpdates.push(`entitlement_id = $${entitlementValues.length + 1}`)
+                entitlementValues.push(entitlementId)
+              }
+              if (columns.has('enrollment_id')) {
+                entitlementUpdates.push(`enrollment_id = COALESCE(enrollment_id, $${entitlementValues.length + 1})`)
+                entitlementValues.push(enrollment.id)
+              }
+              entitlementUpdates.push('updated_at = NOW()')
+
+              await db.query(
+                `UPDATE bookings
+                 SET ${entitlementUpdates.join(', ')}
+                 WHERE id = $1`,
+                entitlementValues
+              )
+            }
           }
         } catch (sessionBankError) {
           console.error('Failed to consume session entitlement for confirmed booking', sessionBankError)
@@ -163,7 +215,7 @@ export async function PATCH(
           attendeeName: booking.client_name,
         })
 
-        if (eventId) {
+        if (eventId && columns.has('google_calendar_event_id')) {
           await db.query(
             `UPDATE bookings
              SET google_calendar_event_id = $2, updated_at = NOW()
@@ -218,12 +270,14 @@ export async function PATCH(
       if (booking.google_calendar_event_id) {
         try {
           await deleteCalendarEvent(booking.google_calendar_event_id)
-          await db.query(
-            `UPDATE bookings
-             SET google_calendar_event_id = NULL, updated_at = NOW()
-             WHERE id = $1`,
-            [params.bookingId]
-          )
+          if (columns.has('google_calendar_event_id')) {
+            await db.query(
+              `UPDATE bookings
+               SET google_calendar_event_id = NULL, updated_at = NOW()
+               WHERE id = $1`,
+              [params.bookingId]
+            )
+          }
         } catch (calendarError) {
           console.error('Failed to delete Google Calendar event for cancelled booking', calendarError)
         }
@@ -299,6 +353,7 @@ export async function PATCH(
     const values: unknown[] = []
 
     for (const [key, value] of Object.entries(data)) {
+      if (!columns.has(key)) continue
       updates.push(`${key} = $${values.length + 1}`)
       values.push(value ?? null)
     }
