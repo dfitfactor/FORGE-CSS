@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     let priceInCents = 0
     let itemName = ''
     let itemDescription = ''
+    let durationMinutes: number | null = null
 
     if (data.serviceId) {
       const service = await db.queryOne<{
@@ -49,14 +50,15 @@ export async function POST(request: NextRequest) {
       }
       priceInCents = Number(service.price_cents ?? 0)
       itemName = service.name
+      durationMinutes = Number(service.duration_minutes ?? 60)
       itemDescription = `${service.duration_minutes} min session`
     }
 
     if (data.packageId) {
       const pkg = await db.queryOne<{
-        name: string; price_cents: number; session_count: number
+        name: string; price_cents: number; session_count: number; duration_minutes?: number | null
       }>(
-        `SELECT name, price_cents, session_count
+        `SELECT name, price_cents, session_count, duration_minutes
          FROM packages WHERE id = $1 AND is_active = true`,
         [data.packageId]
       )
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
       }
       priceInCents = Number(pkg.price_cents ?? 0)
       itemName = pkg.name
+      durationMinutes = Number(pkg.duration_minutes ?? 60)
       itemDescription = `${pkg.session_count} sessions`
     }
 
@@ -78,11 +81,11 @@ export async function POST(request: NextRequest) {
     const booking = await db.queryOne<{ id: string }>(
       `INSERT INTO bookings (
         service_id, package_id, client_name, client_email, client_phone,
-        booking_date, booking_time, notes,
+        booking_date, booking_time, duration_minutes, notes,
         status, payment_status
       ) VALUES (
         $1, $2, $3, $4, $5,
-        $6, $7, $8,
+        $6, $7, $8, $9,
         'pending', 'unpaid'
       )
       RETURNING id`,
@@ -94,6 +97,7 @@ export async function POST(request: NextRequest) {
         data.clientPhone || null,
         data.bookingDate || null,
         data.bookingTime || null,
+        durationMinutes,
         data.notes || null,
       ]
     )

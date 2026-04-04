@@ -38,7 +38,13 @@ type BookingFormState = {
   clientPhone: string
   bookingDate: string
   bookingTime: string
+  preferredWindow: 'morning' | 'afternoon' | 'evening'
   notes: string
+}
+
+type AvailableSlot = {
+  value: string
+  label: string
 }
 
 type SelectedBookingTarget =
@@ -51,6 +57,7 @@ const INITIAL_FORM: BookingFormState = {
   clientPhone: '',
   bookingDate: '',
   bookingTime: '',
+  preferredWindow: 'morning',
   notes: '',
 }
 
@@ -64,6 +71,9 @@ export default function PublicBookingDetailPage() {
   const [loading, setLoading] = useState(true)
   const [inquiryLoading, setInquiryLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([])
+  const [slotsMessage, setSlotsMessage] = useState('Select a date to view available times.')
   const [error, setError] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
 
@@ -95,7 +105,66 @@ export default function PublicBookingDetailPage() {
     return null
   }, [packages, params.slug, services])
 
+  useEffect(() => {
+    async function loadAvailability() {
+      if (!selectedTarget || !form.bookingDate) {
+        setAvailableSlots([])
+        setSlotsMessage('Select a date to view available times.')
+        setForm((current) => ({ ...current, bookingTime: '' }))
+        return
+      }
+
+      setSlotsLoading(true)
+      setCheckoutError('')
+      try {
+        const duration = selectedTarget.duration_minutes ?? 60
+        const res = await fetch(
+          `/api/public/availability?date=${encodeURIComponent(form.bookingDate)}&duration=${duration}&period=${form.preferredWindow}`,
+          { cache: 'no-store' }
+        )
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error ?? 'Failed to load availability')
+
+        const nextSlots = Array.isArray(data.slots) ? data.slots : []
+        setAvailableSlots(nextSlots)
+        setSlotsMessage(data.reason || (nextSlots.length > 0 ? 'Choose one of the available times below.' : 'Unavailable for this time window.'))
+        setForm((current) => ({
+          ...current,
+          bookingTime: nextSlots.some((slot: AvailableSlot) => slot.value === current.bookingTime) ? current.bookingTime : '',
+        }))
+      } catch (err: unknown) {
+        setAvailableSlots([])
+        setSlotsMessage(err instanceof Error ? err.message : 'Failed to load availability')
+      } finally {
+        setSlotsLoading(false)
+      }
+    }
+
+    void loadAvailability()
+  }, [form.bookingDate, form.preferredWindow, selectedTarget])
+
+  function validateBookingSelection() {
+    if (!form.clientName || !form.clientEmail || !form.clientPhone) {
+      return 'Please fill in your name, email, and phone'
+    }
+    if (!form.bookingDate) {
+      return 'Please choose a date first'
+    }
+    if (!form.bookingTime) {
+      return availableSlots.length > 0
+        ? 'Please choose one of the available time slots'
+        : 'No times are available in this window. Try another date or time of day.'
+    }
+    return null
+  }
+
   async function submitBookingRequest() {
+    const validationMessage = validateBookingSelection()
+    if (validationMessage) {
+      setError(validationMessage)
+      return
+    }
+
     setInquiryLoading(true)
     setError('')
     try {
@@ -130,10 +199,12 @@ export default function PublicBookingDetailPage() {
   }
 
   async function handleCheckout() {
-    if (!form.clientName || !form.clientEmail || !form.clientPhone) {
-      setCheckoutError('Please fill in your name, email, and phone')
+    const validationMessage = validateBookingSelection()
+    if (validationMessage) {
+      setCheckoutError(validationMessage)
       return
     }
+
     setCheckoutLoading(true)
     setCheckoutError('')
     try {
@@ -193,11 +264,11 @@ export default function PublicBookingDetailPage() {
     <div className="px-6 py-12">
       <div className="mx-auto max-w-4xl space-y-8">
         <section className="rounded-[2rem] border border-black/10 bg-white p-8 shadow-sm">
-          <h2 className="text-xl font-semibold text-[#1b140d]">{isFree ? 'Request this booking' : 'Request this booking'}</h2>
+          <h2 className="text-xl font-semibold text-[#1b140d]">Request this booking</h2>
           <p className="mt-2 text-sm text-black/55">
             {isFree
-              ? "Choose your preferred date and time and we'll confirm within 24 hours."
-              : 'Complete the form below, then pay securely to confirm your booking.'}
+              ? "Choose your preferred date and one of the available times below. We'll confirm within 24 hours."
+              : 'Choose your preferred date and available time below, then pay securely to submit your booking request.'}
           </p>
 
           {cancelled ? <div className="mt-4 rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-sm text-black/60">Checkout was cancelled. Your booking request was not paid yet.</div> : null}
@@ -216,29 +287,74 @@ export default function PublicBookingDetailPage() {
               <label className="mb-2 block text-sm font-medium text-[#1b140d]">Phone*</label>
               <input value={form.clientPhone} onChange={(event) => setForm((current) => ({ ...current, clientPhone: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="grid gap-4 lg:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Date*</label>
-                <input type="date" value={form.bookingDate} onChange={(event) => setForm((current) => ({ ...current, bookingDate: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+                <input
+                  type="date"
+                  value={form.bookingDate}
+                  onChange={(event) => setForm((current) => ({ ...current, bookingDate: event.target.value, bookingTime: '' }))}
+                  className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]"
+                />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Time*</label>
-                <input type="time" value={form.bookingTime} onChange={(event) => setForm((current) => ({ ...current, bookingTime: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+                <label className="mb-2 block text-sm font-medium text-[#1b140d]">Time Of Day*</label>
+                <select
+                  value={form.preferredWindow}
+                  onChange={(event) => setForm((current) => ({ ...current, preferredWindow: event.target.value as BookingFormState['preferredWindow'], bookingTime: '' }))}
+                  className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]"
+                >
+                  <option value="morning">Morning</option>
+                  <option value="afternoon">Afternoon</option>
+                  <option value="evening">Evening</option>
+                </select>
               </div>
             </div>
+
+            <div className="rounded-2xl border border-black/10 bg-[#faf8f2] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-[#1b140d]">Available times</div>
+                  <div className="mt-1 text-xs text-black/50">{slotsMessage}</div>
+                </div>
+                {slotsLoading ? <Loader2 className="h-4 w-4 animate-spin text-[#2B154A]/50" /> : null}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {availableSlots.length > 0 ? availableSlots.map((slot) => (
+                  <button
+                    key={slot.value}
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, bookingTime: slot.value }))}
+                    className={`rounded-xl border px-3 py-2 text-sm transition ${form.bookingTime === slot.value ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#664c07]' : 'border-black/10 bg-white text-black/70 hover:border-[#D4AF37]/50'}`}
+                  >
+                    {slot.label}
+                  </button>
+                )) : (
+                  <div className="text-sm text-black/45">Unavailable. Try another date or switch between morning, afternoon, and evening.</div>
+                )}
+              </div>
+
+              {form.bookingTime ? (
+                <div className="mt-4 rounded-xl bg-white px-3 py-2 text-sm text-black/65">
+                  Selected time: <span className="font-medium text-[#1b140d]">{availableSlots.find((slot) => slot.value === form.bookingTime)?.label ?? form.bookingTime}</span>
+                </div>
+              ) : null}
+            </div>
+
             <div>
               <label className="mb-2 block text-sm font-medium text-[#1b140d]">Notes</label>
               <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="min-h-[120px] w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             {isFree ? (
-              <button onClick={() => void submitBookingRequest()} disabled={inquiryLoading} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
+              <button onClick={() => void submitBookingRequest()} disabled={inquiryLoading || slotsLoading} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
                 {inquiryLoading ? 'Submitting...' : 'Submit Booking Request'}
               </button>
             ) : (
               <div className="space-y-3">
                 <button
                   onClick={() => void handleCheckout()}
-                  disabled={checkoutLoading}
+                  disabled={checkoutLoading || slotsLoading}
                   className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 text-base font-semibold disabled:opacity-60"
                 >
                   {checkoutLoading
@@ -248,7 +364,7 @@ export default function PublicBookingDetailPage() {
                 {checkoutError && (
                   <p className="text-red-400 text-sm mt-2">{checkoutError}</p>
                 )}
-                <button onClick={() => void submitBookingRequest()} disabled={inquiryLoading} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
+                <button onClick={() => void submitBookingRequest()} disabled={inquiryLoading || slotsLoading} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
                   {inquiryLoading ? 'Submitting Inquiry...' : 'Submit Inquiry Without Payment'}
                 </button>
                 <p className="text-xs text-black/45">
@@ -304,7 +420,7 @@ export default function PublicBookingDetailPage() {
 
           {!isFree ? (
             <div className="mt-6 rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4 text-sm text-[#664c07]">
-              Secure checkout confirms payment first, then your booking details are finalized automatically.
+              Payment secures your request, and your coach will confirm the final appointment details after review.
             </div>
           ) : null}
         </section>
