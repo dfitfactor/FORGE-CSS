@@ -1,102 +1,210 @@
-﻿import Stripe from 'stripe'
-import { headers } from 'next/headers'
-import { NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import Stripe from 'stripe'
 import { db } from '@/lib/db'
 import { createCalendarEvent } from '@/lib/google-calendar'
-import { getStripe } from '@/lib/stripe'
+import { sendBookingConfirmation } from '@/lib/email'
 
-type BookingWithDetails = {
-  id: string
-  client_name: string
-  client_email: string
-  client_phone: string | null
-  booking_date: string
-  booking_time: string
-  notes: string | null
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
-  service_name: string | null
-  package_name: string | null
-  google_calendar_event_id: string | null
-  duration_minutes: number | null
-  pkg_duration: number | null
-}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-06-20' as any,
+})
 
-async function getBookingWithDetails(bookingId: string) {
-  return db.queryOne<BookingWithDetails>(
-    `SELECT b.*, s.name as service_name, s.duration_minutes,
-            p.name as package_name, p.duration_minutes as pkg_duration
-     FROM bookings b
-     LEFT JOIN services s ON b.service_id = s.id
-     LEFT JOIN packages p ON b.package_id = p.id
-     WHERE b.id = $1`,
-    [bookingId]
+async function resolveCoachId() {
+  const coachDee = await db.queryOne<{ id: string }>(
+    `SELECT id FROM users WHERE lower(email) = 'coach@dfitfactor.com' LIMIT 1`
   )
+  if (coachDee?.id) return coachDee.id
+
+  const fallbackCoach = await db.queryOne<{ id: string }>(
+    `SELECT id FROM users WHERE role IN ('admin', 'coach') AND is_active = true ORDER BY role = 'admin' DESC, created_at ASC LIMIT 1`
+  )
+  return fallbackCoach?.id ?? null
 }
 
-export async function POST(request: Request) {
-  const stripe = getStripe()
+export async function POST(request: NextRequest) {
   const body = await request.text()
-  const signature = headers().get('stripe-signature')
-
-  if (!signature || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json({ error: 'Missing Stripe webhook configuration' }, { status: 400 })
-  }
+  const sig = request.headers.get('stripe-signature')!
 
   let event: Stripe.Event
 
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
-  } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid webhook signature' }, { status: 400 })
+    event = stripe.webhooks.constructEvent(
+      body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    )
+  } catch (err: any) {
+    console.error('[webhook] signature verification failed:', err.message)
+    return NextResponse.json(
+      { error: 'Invalid signature' },
+      { status: 400 }
+    )
   }
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
-    const bookingId = session.metadata?.bookingId
+    const meta = session.metadata!
 
-    if (bookingId) {
-      try {
-        await db.query(
-          `UPDATE bookings
-           SET payment_status = 'paid', status = 'confirmed'
-           WHERE id = $1`,
-          [bookingId]
+    try {
+      let durationMinutes = 60
+      let itemName = ''
+
+      if (meta.serviceId) {
+        const service = await db.queryOne<{
+          name: string; duration_minutes: number
+        }>(
+          `SELECT name, duration_minutes FROM services WHERE id = $1`,
+          [meta.serviceId]
         )
+        if (service) {
+          durationMinutes = Number(service.duration_minutes ?? 60)
+          itemName = service.name
+        }
+      }
 
-        const booking = await getBookingWithDetails(bookingId)
+      if (meta.packageId) {
+        const pkg = await db.queryOne<{
+          name: string; duration_minutes: number
+        }>(
+          `SELECT name, duration_minutes FROM packages WHERE id = $1`,
+          [meta.packageId]
+        )
+        if (pkg) {
+          durationMinutes = Number(pkg.duration_minutes ?? 60)
+          itemName = pkg.name
+        }
+      }
 
-        if (booking && !booking.google_calendar_event_id) {
+      let clientId: string | null = null
+      const existingClient = await db.queryOne<{ id: string }>(
+        `SELECT id FROM clients WHERE lower(email) = $1`,
+        [meta.clientEmail.toLowerCase()]
+      )
+
+      if (existingClient) {
+        clientId = existingClient.id
+      } else {
+        const coachId = await resolveCoachId()
+        const newClient = coachId
+          ? await db.queryOne<{ id: string }>(
+              `INSERT INTO clients (coach_id, full_name, email, phone, status, intake_date, current_stage)
+               VALUES ($1, $2, $3, $4, 'active', CURRENT_DATE, 'foundations')
+               RETURNING id`,
+              [coachId, meta.clientName, meta.clientEmail.toLowerCase(), meta.clientPhone || null]
+            )
+          : await db.queryOne<{ id: string }>(
+              `INSERT INTO clients (full_name, email, phone, status)
+               VALUES ($1, $2, $3, 'active')
+               RETURNING id`,
+              [meta.clientName, meta.clientEmail.toLowerCase(), meta.clientPhone || null]
+            )
+        clientId = newClient?.id || null
+      }
+
+      let bookingId: string | null = null
+      if (meta.bookingDate && meta.bookingTime) {
+        const booking = await db.queryOne<{ id: string }>(
+          `INSERT INTO bookings (
+            service_id, package_id, client_id,
+            client_name, client_email, client_phone,
+            booking_date, booking_time, duration_minutes,
+            status, payment_status, amount_cents,
+            stripe_payment_intent_id, notes
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9,
+            'confirmed', 'paid', $10, $11, $12
+          ) RETURNING id`,
+          [
+            meta.serviceId || null,
+            meta.packageId || null,
+            clientId,
+            meta.clientName,
+            meta.clientEmail,
+            meta.clientPhone || null,
+            meta.bookingDate,
+            meta.bookingTime,
+            durationMinutes,
+            session.amount_total || 0,
+            session.payment_intent as string,
+            meta.notes || null,
+          ]
+        )
+        bookingId = booking?.id || null
+      }
+
+      if (meta.packageId && clientId) {
+        const pkg = await db.queryOne<{
+          session_count: number; sessions_per_week: number | null
+        }>(
+          `SELECT session_count,
+                  COALESCE(
+                    (SELECT sessions_per_week FROM package_enrollments
+                     WHERE package_id = $1 LIMIT 1), 1
+                  ) as sessions_per_week
+           FROM packages WHERE id = $1`,
+          [meta.packageId]
+        )
+        if (pkg) {
+          await db.query(
+            `INSERT INTO package_enrollments (
+              client_id, package_id, sessions_total,
+              sessions_per_week, sessions_remaining,
+              payment_status, amount_cents,
+              stripe_payment_intent_id, status
+            ) VALUES ($1, $2, $3, $4, $3, 'paid', $5, $6, 'active')
+            ON CONFLICT DO NOTHING`,
+            [
+              clientId,
+              meta.packageId,
+              pkg.session_count,
+              pkg.sessions_per_week || 1,
+              session.amount_total || 0,
+              session.payment_intent as string,
+            ]
+          )
+        }
+      }
+
+      try {
+        await sendBookingConfirmation({
+          clientName: meta.clientName,
+          clientEmail: meta.clientEmail,
+          serviceName: itemName,
+          bookingDate: meta.bookingDate,
+          bookingTime: meta.bookingTime,
+          durationMinutes,
+          isPaid: true,
+          amountPaid: (session.amount_total || 0) / 100,
+        })
+      } catch (emailErr) {
+        console.error('[webhook] email failed:', emailErr)
+      }
+
+      if (meta.bookingDate && meta.bookingTime) {
+        try {
           const eventId = await createCalendarEvent({
-            summary: `${booking.service_name ?? booking.package_name ?? 'Booking'} — ${booking.client_name}`,
-            description: `Client: ${booking.client_name}\nEmail: ${booking.client_email}\nPhone: ${booking.client_phone ?? ''}\nNotes: ${booking.notes ?? ''}`,
-            date: booking.booking_date,
-            time: booking.booking_time,
-            durationMinutes: Number(booking.duration_minutes ?? booking.pkg_duration ?? 60),
-            attendeeEmail: booking.client_email,
-            attendeeName: booking.client_name,
+            summary: `${itemName} — ${meta.clientName}`,
+            description: `Client: ${meta.clientName}\nEmail: ${meta.clientEmail}\nPhone: ${meta.clientPhone || 'N/A'}\nNotes: ${meta.notes || 'None'}`,
+            date: meta.bookingDate,
+            time: meta.bookingTime,
+            durationMinutes,
+            attendeeEmail: meta.clientEmail,
+            attendeeName: meta.clientName,
           })
 
-          if (eventId) {
+          if (bookingId && eventId) {
             await db.query(
-              `UPDATE bookings SET google_calendar_event_id = $1 WHERE id = $2`,
+              `UPDATE bookings SET google_calendar_event_id = $1
+               WHERE id = $2`,
               [eventId, bookingId]
             )
           }
+        } catch (calErr) {
+          console.error('[webhook] calendar failed:', calErr)
         }
-
-        try {
-          await db.query(
-            `INSERT INTO audit_log (action, resource_type, resource_id, payload)
-             VALUES ($1, 'booking', $2, $3)`,
-            ['booking.payment_completed', bookingId, JSON.stringify({ stripe_session_id: session.id })]
-          )
-        } catch (auditError) {
-          console.error('Failed to write booking payment audit log', auditError)
-        }
-      } catch (processingError) {
-        console.error('Failed to process checkout.session.completed', processingError)
-        return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
       }
+
+    } catch (err) {
+      console.error('[webhook] processing failed:', err)
     }
   }
 

@@ -33,11 +33,11 @@ type Package = {
 }
 
 type BookingFormState = {
-  client_name: string
-  client_email: string
-  client_phone: string
-  booking_date: string
-  booking_time: string
+  clientName: string
+  clientEmail: string
+  clientPhone: string
+  bookingDate: string
+  bookingTime: string
   notes: string
 }
 
@@ -46,11 +46,11 @@ type SelectedBookingTarget =
   | ({ kind: 'package' } & Package)
 
 const INITIAL_FORM: BookingFormState = {
-  client_name: '',
-  client_email: '',
-  client_phone: '',
-  booking_date: '',
-  booking_time: '',
+  clientName: '',
+  clientEmail: '',
+  clientPhone: '',
+  bookingDate: '',
+  bookingTime: '',
   notes: '',
 }
 
@@ -62,8 +62,10 @@ export default function PublicBookingDetailPage() {
   const [packages, setPackages] = useState<Package[]>([])
   const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(true)
-  const [savingAction, setSavingAction] = useState<'inquiry' | 'checkout' | null>(null)
+  const [inquiryLoading, setInquiryLoading] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [error, setError] = useState('')
+  const [checkoutError, setCheckoutError] = useState('')
 
   useEffect(() => {
     async function loadOptions() {
@@ -94,15 +96,15 @@ export default function PublicBookingDetailPage() {
   }, [packages, params.slug, services])
 
   async function submitBookingRequest() {
-    setSavingAction('inquiry')
+    setInquiryLoading(true)
     setError('')
     try {
       const payload: Record<string, unknown> = {
-        client_name: form.client_name,
-        client_email: form.client_email,
-        client_phone: form.client_phone,
-        booking_date: form.booking_date,
-        booking_time: form.booking_time,
+        client_name: form.clientName,
+        client_email: form.clientEmail,
+        client_phone: form.clientPhone,
+        booking_date: form.bookingDate,
+        booking_time: form.bookingTime,
         notes: form.notes || null,
       }
 
@@ -119,46 +121,46 @@ export default function PublicBookingDetailPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to submit booking request')
-      router.push(`/thank-you?name=${encodeURIComponent(form.client_name)}`)
+      router.push(`/thank-you?name=${encodeURIComponent(form.clientName)}`)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to submit booking request')
     } finally {
-      setSavingAction(null)
+      setInquiryLoading(false)
     }
   }
 
-  async function startCheckout() {
-    setSavingAction('checkout')
-    setError('')
+  async function handleCheckout() {
+    if (!form.clientName || !form.clientEmail || !form.clientPhone) {
+      setCheckoutError('Please fill in your name, email, and phone')
+      return
+    }
+    setCheckoutLoading(true)
+    setCheckoutError('')
     try {
-      const payload: Record<string, unknown> = {
-        client_name: form.client_name,
-        client_email: form.client_email,
-        client_phone: form.client_phone,
-        booking_date: form.booking_date,
-        booking_time: form.booking_time,
-        notes: form.notes || null,
-        slug: params.slug,
-      }
-
-      if (selectedTarget?.kind === 'service') {
-        payload.service_id = selectedTarget.id
-      } else if (selectedTarget?.kind === 'package') {
-        payload.package_id = selectedTarget.id
-      }
-
-      const res = await fetch('/api/public/checkout', {
+      const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          serviceId: selectedTarget?.kind === 'service' ? selectedTarget.id : undefined,
+          packageId: selectedTarget?.kind === 'package' ? selectedTarget.id : undefined,
+          clientName: form.clientName,
+          clientEmail: form.clientEmail,
+          clientPhone: form.clientPhone,
+          bookingDate: form.bookingDate,
+          bookingTime: form.bookingTime,
+          notes: form.notes,
+        })
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to start checkout')
-      if (!data.url) throw new Error('Stripe checkout URL was not returned')
-      window.location.href = data.url
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to start checkout')
-      setSavingAction(null)
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+      } else {
+        setCheckoutError(data.error || 'Checkout failed')
+      }
+    } catch {
+      setCheckoutError('Network error — please try again')
+    } finally {
+      setCheckoutLoading(false)
     }
   }
 
@@ -195,7 +197,7 @@ export default function PublicBookingDetailPage() {
           <p className="mt-2 text-sm text-black/55">
             {isFree
               ? "Choose your preferred date and time and we'll confirm within 24 hours."
-              : 'Complete the form below, then either proceed to checkout now or submit an inquiry without payment.'}
+              : 'Complete the form below, then pay securely to confirm your booking.'}
           </p>
 
           {cancelled ? <div className="mt-4 rounded-xl border border-black/10 bg-black/5 px-4 py-3 text-sm text-black/60">Checkout was cancelled. Your booking request was not paid yet.</div> : null}
@@ -204,24 +206,24 @@ export default function PublicBookingDetailPage() {
           <div className="mt-6 space-y-4">
             <div>
               <label className="mb-2 block text-sm font-medium text-[#1b140d]">Full Name*</label>
-              <input value={form.client_name} onChange={(event) => setForm((current) => ({ ...current, client_name: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+              <input value={form.clientName} onChange={(event) => setForm((current) => ({ ...current, clientName: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-[#1b140d]">Email*</label>
-              <input type="email" value={form.client_email} onChange={(event) => setForm((current) => ({ ...current, client_email: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+              <input type="email" value={form.clientEmail} onChange={(event) => setForm((current) => ({ ...current, clientEmail: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-[#1b140d]">Phone*</label>
-              <input value={form.client_phone} onChange={(event) => setForm((current) => ({ ...current, client_phone: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+              <input value={form.clientPhone} onChange={(event) => setForm((current) => ({ ...current, clientPhone: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
               <div>
                 <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Date*</label>
-                <input type="date" value={form.booking_date} onChange={(event) => setForm((current) => ({ ...current, booking_date: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+                <input type="date" value={form.bookingDate} onChange={(event) => setForm((current) => ({ ...current, bookingDate: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-[#1b140d]">Preferred Time*</label>
-                <input type="time" value={form.booking_time} onChange={(event) => setForm((current) => ({ ...current, booking_time: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
+                <input type="time" value={form.bookingTime} onChange={(event) => setForm((current) => ({ ...current, bookingTime: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
               </div>
             </div>
             <div>
@@ -229,19 +231,28 @@ export default function PublicBookingDetailPage() {
               <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="min-h-[120px] w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             {isFree ? (
-              <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
-                {savingAction === 'inquiry' ? 'Submitting...' : 'Submit Booking Request'}
+              <button onClick={() => void submitBookingRequest()} disabled={inquiryLoading} className="w-full rounded-xl bg-[#D4AF37] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
+                {inquiryLoading ? 'Submitting...' : 'Submit Booking Request'}
               </button>
             ) : (
               <div className="space-y-3">
-                <button onClick={() => void startCheckout()} disabled={savingAction !== null} className="w-full rounded-xl bg-[#2B154A] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
-                  {savingAction === 'checkout' ? 'Redirecting...' : 'Proceed to Checkout'}
+                <button
+                  onClick={() => void handleCheckout()}
+                  disabled={checkoutLoading}
+                  className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 text-base font-semibold disabled:opacity-60"
+                >
+                  {checkoutLoading
+                    ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
+                    : <>Book & Pay — ${(selectedTarget.price_cents / 100).toFixed(2)}</>}
                 </button>
-                <button onClick={() => void submitBookingRequest()} disabled={savingAction !== null} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
-                  {savingAction === 'inquiry' ? 'Submitting Inquiry...' : 'Submit Inquiry Without Payment'}
+                {checkoutError && (
+                  <p className="text-red-400 text-sm mt-2">{checkoutError}</p>
+                )}
+                <button onClick={() => void submitBookingRequest()} disabled={inquiryLoading} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-[#1b140d] disabled:opacity-50">
+                  {inquiryLoading ? 'Submitting Inquiry...' : 'Submit Inquiry Without Payment'}
                 </button>
                 <p className="text-xs text-black/45">
-                  Proceed to checkout to pay now and confirm faster, or submit an inquiry if you want us to review your request first.
+                  Proceed to checkout to pay now, or submit an inquiry if you want us to review your request first.
                 </p>
               </div>
             )}
@@ -293,7 +304,7 @@ export default function PublicBookingDetailPage() {
 
           {!isFree ? (
             <div className="mt-6 rounded-2xl border border-[#D4AF37]/25 bg-[#D4AF37]/10 p-4 text-sm text-[#664c07]">
-              Choose whether you want to proceed straight to checkout or submit an inquiry for us to review first.
+              Secure checkout confirms payment first, then your booking details are finalized automatically.
             </div>
           ) : null}
         </section>
@@ -301,7 +312,3 @@ export default function PublicBookingDetailPage() {
     </div>
   )
 }
-
-
-
-
