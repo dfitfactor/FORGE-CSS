@@ -257,6 +257,7 @@ function DetailDrawer({
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
+  const [hasInitializedMonth, setHasInitializedMonth] = useState(false)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null)
@@ -281,7 +282,30 @@ export default function BookingsPage() {
       const res = await fetch('/api/bookings', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to load bookings')
-      setBookings(Array.isArray(data.bookings) ? data.bookings : [])
+      const nextBookings = Array.isArray(data.bookings) ? data.bookings : []
+      setBookings(nextBookings)
+
+      if (!hasInitializedMonth) {
+        const currentMonthStart = startOfMonth(new Date())
+        const currentMonthEnd = endOfMonth(currentMonthStart)
+        const hasCurrentMonthBookings = nextBookings.some((booking: Booking) => {
+          const timestamp = new Date(`${booking.booking_date}T${booking.booking_time}`)
+          return timestamp >= currentMonthStart && timestamp < currentMonthEnd
+        })
+
+        if (!hasCurrentMonthBookings && nextBookings.length > 0) {
+          const latestBooking = [...nextBookings].sort((left, right) => (
+            new Date(`${right.booking_date}T${right.booking_time}`).getTime() -
+            new Date(`${left.booking_date}T${left.booking_time}`).getTime()
+          ))[0]
+
+          if (latestBooking) {
+            setSelectedMonth(startOfMonth(new Date(`${latestBooking.booking_date}T12:00:00`)))
+          }
+        }
+
+        setHasInitializedMonth(true)
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load bookings')
     } finally {
@@ -454,6 +478,15 @@ export default function BookingsPage() {
     }
   }, [bookings, selectedMonth])
 
+  const latestBookingMonth = useMemo(() => {
+    if (bookings.length === 0) return null
+    const latestBooking = [...bookings].sort((left, right) => (
+      new Date(`${right.booking_date}T${right.booking_time}`).getTime() -
+      new Date(`${left.booking_date}T${left.booking_time}`).getTime()
+    ))[0]
+    return latestBooking ? startOfMonth(new Date(`${latestBooking.booking_date}T12:00:00`)) : null
+  }, [bookings])
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -531,8 +564,20 @@ export default function BookingsPage() {
           <div className="rounded-2xl border border-dashed border-white/10 bg-[#111111] p-12 text-center">
             <XCircle className="mx-auto h-10 w-10 text-white/20" />
             <h2 className="mt-4 text-lg font-semibold text-white">No bookings for {formatMonthLabel(selectedMonth)}</h2>
-            <p className="mt-2 text-sm text-white/40">Try another month or share the public booking page to start collecting requests.</p>
+            <p className="mt-2 text-sm text-white/40">
+              {bookings.length > 0
+                ? 'Bookings exist in other months. Jump to the latest booking month or choose another month above.'
+                : 'Try another month or share the public booking page to start collecting requests.'}
+            </p>
             <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              {bookings.length > 0 && latestBookingMonth ? (
+                <button
+                  onClick={() => setSelectedMonth(latestBookingMonth)}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                >
+                  Jump To Latest Booking
+                </button>
+              ) : null}
               <button onClick={() => void copyBookingLink()} className="forge-btn-gold inline-flex items-center gap-2">
                 <Copy size={15} />
                 {copied ? 'Copied booking link' : 'Copy booking page link'}
