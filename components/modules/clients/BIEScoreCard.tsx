@@ -1,8 +1,9 @@
-"use client"
+﻿"use client"
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Loader2, PencilLine, RefreshCw } from 'lucide-react'
+import { BIEReviewWidget } from '@/components/modules/clients/BIEReviewWidget'
 
 type Scores = {
   bar: number
@@ -52,10 +53,12 @@ export function BIEScoreCard({
   clientId,
   primaryGoal,
   initialScores,
+  pendingReviewCount = 0,
 }: {
   clientId: string
   primaryGoal?: string | null
   initialScores: Scores | null
+  pendingReviewCount?: number
 }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
@@ -183,6 +186,20 @@ export function BIEScoreCard({
           </span>
         </div>
       </div>
+
+      {pendingReviewCount > 0 && (
+        <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Pending coach review</p>
+              <p className="text-xs text-amber-100/80 mt-1">
+                {pendingReviewCount} snapshot{pendingReviewCount > 1 ? 's are' : ' is'} waiting for coach approval.
+              </p>
+            </div>
+            <BIEReviewWidget clientId={clientId} triggerLabel="Review & Approve" inline />
+          </div>
+        </div>
+      )}
 
       {(recalcMessage || recalcError) && (
         <p className={`text-sm mb-2 ${recalcError ? 'text-amber-400' : 'text-emerald-400'}`} role="status">

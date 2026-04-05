@@ -75,7 +75,15 @@ async function getClientDetail(clientId: string, coachId: string) {
     }
   })()
 
-  return { client, latestSnapshot, recentTimeline }
+  const pendingReviewCount = await db.queryOne<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM behavioral_snapshots
+     WHERE client_id = $1
+       AND review_status = 'pending_review'`,
+    [clientId]
+  ).then((row) => Number(row?.count ?? 0)).catch(() => 0)
+
+  return { client, latestSnapshot, recentTimeline, pendingReviewCount }
 }
 
 export default async function ClientDetailPage({ params }: { params: { clientId: string } }) {
@@ -86,7 +94,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
     const data = await getClientDetail(params.clientId, session.id)
     if (!data) return notFound()
 
-    const { client, latestSnapshot, recentTimeline } = data
+    const { client, latestSnapshot, recentTimeline, pendingReviewCount } = data
     const snap = latestSnapshot
 
     const fullName = typeof client.full_name === 'string' && client.full_name.trim().length > 0 ? client.full_name.trim() : 'Client'
@@ -202,6 +210,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
           pps: Number(snap.pps),
           gps: typeof snap.gps === 'number' ? Number(snap.gps) : null,
         } : null}
+        pendingReviewCount={pendingReviewCount}
       />
 
       <SessionBankCard clientId={client.id} />

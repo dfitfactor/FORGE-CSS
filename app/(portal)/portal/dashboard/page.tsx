@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link'
+import { db } from '@/lib/db'
 import { getClientBankStatus } from '@/lib/session-bank'
 import {
   formatMoney,
@@ -11,11 +12,19 @@ import {
 
 export default async function PortalDashboard() {
   const { client } = await getPortalClientOrRedirect()
-  const [protocol, allBookings, forms, enrollment] = await Promise.all([
+  const [protocol, allBookings, forms, enrollment, latestCheckin] = await Promise.all([
     getPortalProtocol(client.id),
     getPortalBookings(client),
     getPortalForms(client.id),
     getPortalEnrollment(client.id),
+    db.queryOne<{ checkin_date: string }>(
+      `SELECT checkin_date::text AS checkin_date
+       FROM client_checkins
+       WHERE client_id = $1
+       ORDER BY checkin_date DESC
+       LIMIT 1`,
+      [client.id]
+    ).catch(() => null),
   ])
 
   const outstandingForms = forms.outstandingForms
@@ -24,6 +33,11 @@ export default async function PortalDashboard() {
     .filter((booking) => booking.booking_date >= today && ['pending', 'approved', 'confirmed', 'rescheduled'].includes(booking.status))
     .slice(0, 3)
   const bank = enrollment ? await getClientBankStatus(enrollment.id).catch(() => null) : null
+
+  const lastSunday = new Date()
+  lastSunday.setDate(lastSunday.getDate() - lastSunday.getDay())
+  const lastSundayStr = lastSunday.toISOString().split('T')[0]
+  const showCheckinReminder = new Date().getDay() >= 1 && latestCheckin?.checkin_date !== lastSundayStr
 
   const cardStyle = {
     backgroundColor: '#111111',
@@ -47,14 +61,7 @@ export default async function PortalDashboard() {
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto' }}>
       <div style={{ marginBottom: '32px' }}>
-        <h1
-          style={{
-            color: '#ffffff',
-            fontSize: '24px',
-            marginBottom: '4px',
-            fontWeight: 'bold',
-          }}
-        >
+        <h1 style={{ color: '#ffffff', fontSize: '24px', marginBottom: '4px', fontWeight: 'bold' }}>
           Welcome back, {client.full_name.split(' ')[0]}
         </h1>
         <p style={{ color: '#666', fontSize: '14px' }}>
@@ -62,20 +69,24 @@ export default async function PortalDashboard() {
         </p>
       </div>
 
+      {showCheckinReminder && (
+        <div style={{ backgroundColor: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div>
+            <p style={{ color: '#D4AF37', fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
+              Weekly check-in due
+            </p>
+            <p style={{ color: '#888', fontSize: '13px' }}>
+              Your weekly check-in for the week ending {new Date(`${lastSundayStr}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} is waiting.
+            </p>
+          </div>
+          <Link href="/portal/forms/weekly-checkin" style={{ backgroundColor: '#D4AF37', color: '#000', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+            Complete Check-In &rarr;
+          </Link>
+        </div>
+      )}
+
       {outstandingForms.length > 0 && (
-        <div
-          style={{
-            backgroundColor: 'rgba(212,175,55,0.1)',
-            border: '1px solid rgba(212,175,55,0.3)',
-            borderRadius: '12px',
-            padding: '16px 20px',
-            marginBottom: '24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-          }}
-        >
+        <div style={{ backgroundColor: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
           <div>
             <p style={{ color: '#D4AF37', fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
               {outstandingForms.length} form{outstandingForms.length > 1 ? 's' : ''} required
@@ -84,19 +95,7 @@ export default async function PortalDashboard() {
               Complete your required forms before your appointment.
             </p>
           </div>
-          <Link
-            href="/portal/forms"
-            style={{
-              backgroundColor: '#D4AF37',
-              color: '#000',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              textDecoration: 'none',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          <Link href="/portal/forms" style={{ backgroundColor: '#D4AF37', color: '#000', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
             Complete Now &rarr;
           </Link>
         </div>
@@ -227,6 +226,9 @@ export default async function PortalDashboard() {
           <Link href="/portal/forms" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
             My Forms
           </Link>
+          <Link href="/portal/forms/weekly-checkin" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            Weekly Check-In
+          </Link>
           <Link href="/portal/package" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
             Package & Billing
           </Link>
@@ -243,4 +245,3 @@ export default async function PortalDashboard() {
     </div>
   )
 }
-

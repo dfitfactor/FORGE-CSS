@@ -6,6 +6,7 @@ import {
   Minus
 } from 'lucide-react'
 import Link from 'next/link'
+import { BIEReviewWidget } from '@/components/modules/clients/BIEReviewWidget'
 
 type DashboardClientRow = {
   id: string
@@ -21,6 +22,16 @@ type DashboardClientRow = {
   bli_score: number | null
   snapshot_updated_at: string | null
   needs_attention: boolean
+}
+
+type PendingReviewRow = {
+  client_id: string
+  full_name: string
+  snapshot_date: string
+  bar_score: number | null
+  dbi_score: number | null
+  bli_score: number | null
+  generation_state: string | null
 }
 
 function getClientInfoScore(client: DashboardClientRow) {
@@ -94,7 +105,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
     const accessFilter = role === 'admin' ? '' : 'AND c.coach_id = $1'
     const params = role === 'admin' ? [] : [userId]
 
-    const [clientRows, alerts, recentActivity] = await Promise.all([
+    const [clientRows, alerts, recentActivity, pendingReviews] = await Promise.all([
       db.query<DashboardClientRow>(`
         SELECT
           c.id,
@@ -189,6 +200,21 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           return []
         }
       })(),
+
+      db.query<PendingReviewRow>(`
+        SELECT c.id AS client_id,
+               c.full_name,
+               bs.snapshot_date::text AS snapshot_date,
+               bs.bar_score,
+               bs.dbi_score,
+               bs.bli_score,
+               bs.generation_state
+        FROM behavioral_snapshots bs
+        JOIN clients c ON c.id = bs.client_id
+        WHERE bs.review_status = 'pending_review'
+          ${accessFilter}
+        ORDER BY bs.snapshot_date DESC
+      `, params).catch(() => []),
     ])
 
     const clients = dedupeSparseClientRows(clientRows)
@@ -199,7 +225,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
       needs_attention: clients.filter((client) => client.status === 'active' && client.needs_attention).length,
     }
 
-    return { clientStats, alerts, recentActivity: dedupeRecentActivityRows(recentActivity) }
+    return { clientStats, alerts, recentActivity: dedupeRecentActivityRows(recentActivity), pendingReviews }
   } catch (err) {
     console.error('[dashboard] getDashboardStats failed:', err)
     return {
@@ -219,6 +245,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
         title: string
         event_date: string
       }[],
+      pendingReviews: [] as PendingReviewRow[],
     }
   }
 }
@@ -227,7 +254,7 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/auth/login')
 
-  const { clientStats, alerts, recentActivity } = await getDashboardStats(session.id, session.role)
+  const { clientStats, alerts, recentActivity, pendingReviews } = await getDashboardStats(session.id, session.role)
 
   const stats = clientStats ?? { total: 0, active: 0, paused: 0, needs_attention: 0 }
 
@@ -249,31 +276,48 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Total Clients"
-          value={stats.total}
-          icon={<Users className="w-5 h-5" />}
-          color="forge-purple"
-        />
-        <StatCard
-          label="Active"
-          value={stats.active}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="state-stable"
-        />
-        <StatCard
-          label="Needs Attention"
-          value={stats.needs_attention}
-          icon={<AlertTriangle className="w-5 h-5" />}
-          color="state-recovery"
-          urgent={stats.needs_attention > 0}
-        />
-        <StatCard
-          label="Paused"
-          value={stats.paused}
-          icon={<Minus className="w-5 h-5" />}
-          color="state-simplified"
-        />
+        <StatCard label="Total Clients" value={stats.total} icon={<Users className="w-5 h-5" />} color="forge-purple" />
+        <StatCard label="Active" value={stats.active} icon={<CheckCircle className="w-5 h-5" />} color="state-stable" />
+        <StatCard label="Needs Attention" value={stats.needs_attention} icon={<AlertTriangle className="w-5 h-5" />} color="state-recovery" urgent={stats.needs_attention > 0} />
+        <StatCard label="Paused" value={stats.paused} icon={<Minus className="w-5 h-5" />} color="state-simplified" />
+      </div>
+
+      <div className="forge-card space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="forge-section-title flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-forge-gold" />
+            Pending Reviews
+          </h2>
+          <span className="text-xs text-forge-text-muted">{pendingReviews.length} awaiting coach approval</span>
+        </div>
+
+        {pendingReviews.length === 0 ? (
+          <div className="text-center py-6 text-forge-text-muted text-sm">
+            No BIE reviews are waiting right now.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pendingReviews.map((review) => (
+              <div key={`${review.client_id}-${review.snapshot_date}`} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <div>
+                  <div className="text-sm font-semibold text-forge-text-primary">{review.full_name}</div>
+                  <div className="text-xs text-forge-text-muted mt-1">
+                    Check-in date {new Date(`${review.snapshot_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                  <div className="text-xs text-forge-text-muted mt-2">
+                    BAR {review.bar_score ?? 0} · DBI {review.dbi_score ?? 0} · BLI {review.bli_score ?? 0} · State {review.generation_state ?? 'B'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link href={`/clients/${review.client_id}`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
+                    Open client
+                  </Link>
+                  <BIEReviewWidget clientId={review.client_id} triggerLabel="Review" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
