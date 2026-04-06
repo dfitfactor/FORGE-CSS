@@ -140,6 +140,75 @@ function parsePreviewFields(fields: unknown) {
   return []
 }
 
+function FormPreview({ template }: { template: FormTemplate }) {
+  const fields = Array.isArray(template.fields)
+    ? template.fields
+    : []
+
+  if (fields.length === 0) {
+    return (
+      <p style={{ color: '#666', fontSize: '14px' }}>
+        No fields configured for this form template.
+      </p>
+    )
+  }
+
+  const sections = fields.reduce((acc: Record<string, Record<string, any>[]>, field: Record<string, any>) => {
+    const section = field.section || 'General'
+    if (!acc[section]) acc[section] = []
+    acc[section].push(field)
+    return acc
+  }, {})
+
+  return (
+    <div style={{ fontSize: '14px' }}>
+      {(Object.entries(sections) as Array<[string, Record<string, any>[]]>).map(([section, sectionFields]) => (
+        <div key={section} style={{ marginBottom: '20px' }}>
+          <p style={{
+            color: '#D4AF37',
+            fontWeight: 'bold',
+            fontSize: '11px',
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            marginBottom: '10px',
+            borderBottom: '1px solid rgba(212,175,55,0.2)',
+            paddingBottom: '6px'
+          }}>
+            {section}
+          </p>
+          {sectionFields.map((field) => (
+            <div key={field.id || `${section}-${field.label || field.type}`} style={{
+              marginBottom: '12px',
+              paddingLeft: '8px'
+            }}>
+              <p style={{ color: '#ccc', marginBottom: '4px' }}>
+                {field.label}
+                {field.required && (
+                  <span style={{ color: '#f87171', marginLeft: '4px' }}>*</span>
+                )}
+                {field.readonly && (
+                  <span style={{
+                    color: '#666',
+                    fontSize: '11px',
+                    marginLeft: '8px'
+                  }}>
+                    (pre-filled)
+                  </span>
+                )}
+              </p>
+              <p style={{ color: '#555', fontSize: '12px' }}>
+                Type: {field.type}
+                {field.options && ` - Options: ${field.options.join(' | ')}`}
+                {field.min !== undefined && ` - Range: ${field.min}-${field.max}`}
+              </p>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function serviceSectionLabel(sectionId: string | null | undefined) {
   const match = SERVICE_SECTIONS.find((section) => section.id === sectionId)
   return match?.title ?? 'Unassigned'
@@ -756,26 +825,8 @@ export default function ServicesPage() {
           <button onClick={() => void save('forms')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Template'}</button>
         </div>
       </SlideOver>
-
       <SlideOver title={templatePreview ? `Preview: ${templatePreview.name}` : 'Preview Form'} open={Boolean(templatePreview)} onClose={() => setTemplatePreview(null)}>
-        {templatePreview ? (
-          <div className="space-y-3">
-            {parsePreviewFields(templatePreview.fields).length > 0 ? (
-              parsePreviewFields(templatePreview.fields).map((field, index) => {
-                const typed = field as { label?: string; type?: string; required?: boolean; options?: string[] }
-                return (
-                  <div key={`${typed.label ?? 'field'}-${index}`} className="rounded-xl border border-white/8 bg-white/3 p-4">
-                    <div className="font-medium text-white">{typed.label ?? `Field ${index + 1}`}</div>
-                    <div className="mt-1 text-xs uppercase text-white/35">{typed.type ?? 'text'}{typed.required ? ' Â· required' : ''}</div>
-                    {typed.options?.length ? <div className="mt-2 text-xs text-white/45">Options: {typed.options.join(', ')}</div> : null}
-                  </div>
-                )
-              })
-            ) : (
-              <pre className="overflow-x-auto rounded-xl border border-white/8 bg-black/20 p-4 text-xs text-white/55">{JSON.stringify(templatePreview.fields, null, 2)}</pre>
-            )}
-          </div>
-        ) : null}
+        {templatePreview ? <FormPreview template={templatePreview} /> : null}
       </SlideOver>
     </div>
   )
