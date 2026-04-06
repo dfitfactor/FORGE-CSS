@@ -7,6 +7,14 @@ const FORM_ROUTES: Record<string, string> = {
   parq: '/portal/forms/parq',
   intake: '/portal/forms/intake',
   'weekly-checkin': '/portal/forms/weekly-checkin',
+  'coaching-agreement': '/portal/forms/coaching-agreement',
+}
+
+type SubmissionSummary = {
+  id: string
+  slug: string
+  name: string
+  submitted_at: string | null
 }
 
 export default async function PortalFormsPage({
@@ -22,7 +30,7 @@ export default async function PortalFormsPage({
   lastSunday.setDate(lastSunday.getDate() - lastSunday.getDay())
   const lastSundayStr = lastSunday.toISOString().split('T')[0]
 
-  const [latestCheckin, intakeSubmission, unsignedEnrollment, unsignedBooking, signedEnrollment, signedBooking] = await Promise.all([
+  const [latestCheckin, intakeSubmission, unsignedEnrollment, unsignedBooking, latestSubmissions] = await Promise.all([
     db.queryOne<{ checkin_date: string }>(
       `SELECT checkin_date::text AS checkin_date
        FROM client_checkins
@@ -65,33 +73,25 @@ export default async function PortalFormsPage({
        LIMIT 1`,
       [client.id]
     ).catch(() => null),
-    db.queryOne<{ package_name: string }>(
-      `SELECT p.name AS package_name
-       FROM package_enrollments pe
-       JOIN packages p ON p.id = pe.package_id
-       WHERE pe.client_id = $1
-         AND pe.status = 'active'
-         AND pe.agreement_signed = true
-       ORDER BY pe.agreement_signed_at DESC NULLS LAST, pe.created_at DESC
-       LIMIT 1`,
+    db.query<SubmissionSummary>(
+      `SELECT DISTINCT ON (ft.slug)
+          fs.id,
+          ft.slug,
+          ft.name,
+          fs.submitted_at::text AS submitted_at
+       FROM form_submissions fs
+       JOIN form_templates ft ON ft.id = fs.form_template_id
+       WHERE fs.client_id = $1
+         AND fs.status = 'submitted'
+       ORDER BY ft.slug, fs.submitted_at DESC NULLS LAST, fs.created_at DESC NULLS LAST`,
       [client.id]
-    ).catch(() => null),
-    db.queryOne<{ item_name: string }>(
-      `SELECT COALESCE(s.name, p2.name, 'Service') AS item_name
-       FROM bookings b
-       LEFT JOIN services s ON b.service_id = s.id
-       LEFT JOIN packages p2 ON b.package_id = p2.id
-       WHERE b.client_id = $1
-         AND b.agreement_signed = true
-       ORDER BY b.agreement_signed_at DESC NULLS LAST, b.created_at DESC
-       LIMIT 1`,
-      [client.id]
-    ).catch(() => null),
+    ).catch(() => []),
   ])
 
   const agreementRequired = !!unsignedEnrollment || !!unsignedBooking
-  const signedAgreementName = signedEnrollment?.package_name || signedBooking?.item_name || null
-  const agreementName = unsignedEnrollment?.package_name || unsignedBooking?.item_name || signedAgreementName || 'DFitFactor Program'
+  const latestSubmissionBySlug = new Map(latestSubmissions.map((submission) => [submission.slug, submission]))
+  const agreementSubmission = latestSubmissionBySlug.get('coaching-agreement') || null
+  const agreementName = unsignedEnrollment?.package_name || unsignedBooking?.item_name || agreementSubmission?.name || 'DFitFactor Program'
 
   const extraForms = [
     {
@@ -119,7 +119,14 @@ export default async function PortalFormsPage({
       description: form.description ?? form.form_type,
       required: outstandingForms.some((item) => item.id === form.id),
     })),
-  ]
+  ].map((form) => ({
+    ...form,
+    submission: latestSubmissionBySlug.get(form.slug) || null,
+  }))
+
+  const completedArchive = latestSubmissions
+    .filter((submission) => submission.slug !== 'coaching-agreement')
+    .sort((left, right) => new Date(right.submitted_at || 0).getTime() - new Date(left.submitted_at || 0).getTime())
 
   return (
     <div style={{ maxWidth: '860px', margin: '0 auto' }}>
@@ -130,19 +137,19 @@ export default async function PortalFormsPage({
         </p>
       </section>
 
-      {(agreementRequired || signedAgreementName) ? (
+      {(agreementRequired || agreementSubmission) ? (
         <section style={{ background: '#111111', border: agreementRequired ? '1px solid rgba(239,68,68,0.32)' : '1px solid rgba(110,231,183,0.25)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
               <div style={{ color: '#fff', fontWeight: 700, marginBottom: 6 }}>DFitFactor® Coaching Agreement</div>
               <div style={{ color: '#777', fontSize: 13 }}>{agreementName}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ color: agreementRequired ? '#f87171' : '#6ee7b7', fontSize: 12, fontWeight: 700 }}>
                 {agreementRequired ? 'Action Required' : 'Completed ✓'}
               </span>
               <Link
-                href="/portal/forms/coaching-agreement"
+                href={agreementRequired || !agreementSubmission ? '/portal/forms/coaching-agreement' : `/portal/forms/completed/${agreementSubmission.id}`}
                 style={{
                   background: agreementRequired ? '#D4AF37' : 'transparent',
                   color: agreementRequired ? '#000' : '#6ee7b7',
@@ -155,7 +162,7 @@ export default async function PortalFormsPage({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {agreementRequired ? 'Review & Sign →' : 'View Agreement'}
+                {agreementRequired ? 'Review & Sign →' : 'View PDF'}
               </Link>
             </div>
           </div>
@@ -180,23 +187,31 @@ export default async function PortalFormsPage({
         </section>
       ) : null}
 
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
+      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
         {allForms.map((form, index) => {
-          const formRoute = FORM_ROUTES[form.slug]
+          const defaultRoute = FORM_ROUTES[form.slug]
+          const targetRoute = form.required || !form.submission
+            ? defaultRoute
+            : `/portal/forms/completed/${form.submission.id}`
           return (
             <div key={form.id} style={{ borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)', padding: '16px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ color: '#fff', fontWeight: 600 }}>{form.name}</div>
                   <div style={{ color: '#777', fontSize: 13, marginTop: 4 }}>{form.description}</div>
+                  {form.submission?.submitted_at && !form.required ? (
+                    <div style={{ color: '#6ee7b7', fontSize: 12, marginTop: 8 }}>
+                      Submitted {new Date(form.submission.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  ) : null}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ color: form.required ? '#D4AF37' : '#6ee7b7', fontSize: 12, fontWeight: 700 }}>
                     {form.required ? 'Outstanding' : 'Completed'}
                   </span>
-                  {formRoute ? (
+                  {targetRoute ? (
                     <Link
-                      href={formRoute}
+                      href={targetRoute}
                       style={{
                         background: form.required ? '#D4AF37' : 'transparent',
                         color: form.required ? '#000' : '#D4AF37',
@@ -209,7 +224,7 @@ export default async function PortalFormsPage({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {form.required ? 'Complete Now' : 'View Form'}
+                      {form.required ? 'Complete Now' : 'View PDF'}
                     </Link>
                   ) : null}
                 </div>
@@ -218,6 +233,29 @@ export default async function PortalFormsPage({
           )
         })}
       </section>
+
+      {completedArchive.length > 0 ? (
+        <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
+          <div style={{ color: '#D4AF37', fontWeight: 700, fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
+            Completed Form Archive
+          </div>
+          {completedArchive.map((submission, index) => (
+            <div key={submission.id} style={{ borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)', padding: '14px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 600 }}>{submission.name}</div>
+                  <div style={{ color: '#777', fontSize: 13, marginTop: 4 }}>
+                    Submitted {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'recently'}
+                  </div>
+                </div>
+                <Link href={`/portal/forms/completed/${submission.id}`} style={{ color: '#D4AF37', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+                  Open PDF View →
+                </Link>
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
     </div>
   )
 }
