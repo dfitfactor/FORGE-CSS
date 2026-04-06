@@ -12,7 +12,7 @@ import {
 
 export default async function PortalDashboard() {
   const { client } = await getPortalClientOrRedirect()
-  const [protocol, allBookings, forms, enrollment, latestCheckin] = await Promise.all([
+  const [protocol, allBookings, forms, enrollment, latestCheckin, unsignedEnrollment] = await Promise.all([
     getPortalProtocol(client.id),
     getPortalBookings(client),
     getPortalForms(client.id),
@@ -25,8 +25,30 @@ export default async function PortalDashboard() {
        LIMIT 1`,
       [client.id]
     ).catch(() => null),
+    db.queryOne<{ id: string }>(
+      `SELECT pe.id FROM package_enrollments pe
+       WHERE pe.client_id = $1
+       AND pe.status = 'active'
+       AND (pe.agreement_signed = false
+            OR pe.agreement_signed IS NULL)
+       LIMIT 1`,
+      [client.id]
+    ).catch(() => null),
   ])
 
+  const unsignedBooking = !unsignedEnrollment
+    ? await db.queryOne<{ id: string }>(
+        `SELECT id FROM bookings
+         WHERE client_id = $1
+         AND status IN ('pending','confirmed')
+         AND (agreement_signed = false
+              OR agreement_signed IS NULL)
+         ORDER BY created_at DESC LIMIT 1`,
+        [client.id]
+      ).catch(() => null)
+    : null
+
+  const hasUnsignedAgreement = !!unsignedEnrollment || !!unsignedBooking
   const outstandingForms = forms.outstandingForms
   const today = new Date().toISOString().slice(0, 10)
   const bookings = allBookings
@@ -60,6 +82,22 @@ export default async function PortalDashboard() {
 
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+      {hasUnsignedAgreement && (
+        <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div>
+            <p style={{ color: '#f87171', fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
+              ?? Coaching Agreement Required
+            </p>
+            <p style={{ color: '#fca5a5', fontSize: '13px' }}>
+              Please sign your coaching agreement before your first session.
+            </p>
+          </div>
+          <Link href="/portal/forms/coaching-agreement" style={{ backgroundColor: '#D4AF37', color: '#000', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+            Review & Sign &rarr;
+          </Link>
+        </div>
+      )}
+
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ color: '#ffffff', fontSize: '24px', marginBottom: '4px', fontWeight: 'bold' }}>
           Welcome back, {client.full_name.split(' ')[0]}
@@ -80,7 +118,7 @@ export default async function PortalDashboard() {
             </p>
           </div>
           <Link href="/portal/forms/weekly-checkin" style={{ backgroundColor: '#D4AF37', color: '#000', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-            Complete Check-In &rarr;
+            Complete Check-In →
           </Link>
         </div>
       )}
@@ -96,7 +134,7 @@ export default async function PortalDashboard() {
             </p>
           </div>
           <Link href="/portal/forms" style={{ backgroundColor: '#D4AF37', color: '#000', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-            Complete Now &rarr;
+            Complete Now →
           </Link>
         </div>
       )}
@@ -119,7 +157,7 @@ export default async function PortalDashboard() {
               Generated {new Date(protocol.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
             <Link href={`/portal/protocol/${protocol.id}`} style={{ display: 'inline-block', backgroundColor: '#D4AF37', color: '#000', padding: '10px 20px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: 'bold' }}>
-              View My Protocol &rarr;
+              View My Protocol →
             </Link>
           </div>
         ) : (
@@ -155,7 +193,7 @@ export default async function PortalDashboard() {
             ))}
             <div style={{ marginTop: '16px' }}>
               <Link href="/portal/bookings" style={{ color: '#D4AF37', fontSize: '13px', textDecoration: 'none' }}>
-                Manage my sessions &rarr;
+                Manage my sessions →
               </Link>
             </div>
           </div>
@@ -163,7 +201,7 @@ export default async function PortalDashboard() {
           <div>
             <p style={{ color: '#666', fontSize: '14px', marginBottom: '12px' }}>No upcoming sessions</p>
             <Link href="/book" style={{ display: 'inline-block', border: '1px solid rgba(212,175,55,0.4)', color: '#D4AF37', padding: '10px 20px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px' }}>
-              Request a Session &rarr;
+              Request a Session →
             </Link>
           </div>
         )}
@@ -186,7 +224,7 @@ export default async function PortalDashboard() {
               Sessions remaining: {enrollment.sessions_remaining ?? 0}{bank ? ` · Weekly usage: ${bank.weeklyUsed}/${bank.weeklyLimit || 0}` : ''}
             </p>
             <Link href="/portal/package" style={{ color: '#D4AF37', fontSize: '13px', textDecoration: 'none' }}>
-              View package details &rarr;
+              View package details →
             </Link>
           </div>
         ) : (
@@ -205,7 +243,7 @@ export default async function PortalDashboard() {
           {outstandingForms.length > 0 ? `${outstandingForms.length} form(s) still need attention before your next appointment.` : 'No urgent portal notifications right now.'}
         </div>
         <Link href="/portal/notifications" style={{ color: '#D4AF37', textDecoration: 'none', fontSize: '13px' }}>
-          Open notifications &rarr;
+          Open notifications →
         </Link>
       </div>
 
@@ -225,6 +263,9 @@ export default async function PortalDashboard() {
           </Link>
           <Link href="/portal/forms" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
             My Forms
+          </Link>
+          <Link href="/portal/forms/coaching-agreement" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+            Coaching Agreement
           </Link>
           <Link href="/portal/forms/weekly-checkin" style={{ color: '#888', fontSize: '14px', textDecoration: 'none', padding: '8px 16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
             Weekly Check-In

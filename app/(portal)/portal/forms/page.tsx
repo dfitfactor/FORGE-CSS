@@ -22,7 +22,7 @@ export default async function PortalFormsPage({
   lastSunday.setDate(lastSunday.getDate() - lastSunday.getDay())
   const lastSundayStr = lastSunday.toISOString().split('T')[0]
 
-  const [latestCheckin, intakeSubmission] = await Promise.all([
+  const [latestCheckin, intakeSubmission, unsignedEnrollment, unsignedBooking, signedEnrollment, signedBooking] = await Promise.all([
     db.queryOne<{ checkin_date: string }>(
       `SELECT checkin_date::text AS checkin_date
        FROM client_checkins
@@ -42,7 +42,56 @@ export default async function PortalFormsPage({
        LIMIT 1`,
       [client.id]
     ).catch(() => null),
+    db.queryOne<{ package_name: string }>(
+      `SELECT p.name AS package_name
+       FROM package_enrollments pe
+       JOIN packages p ON p.id = pe.package_id
+       WHERE pe.client_id = $1
+         AND pe.status = 'active'
+         AND (pe.agreement_signed = false OR pe.agreement_signed IS NULL)
+       ORDER BY pe.created_at DESC
+       LIMIT 1`,
+      [client.id]
+    ).catch(() => null),
+    db.queryOne<{ item_name: string }>(
+      `SELECT COALESCE(s.name, p2.name, 'Service') AS item_name
+       FROM bookings b
+       LEFT JOIN services s ON b.service_id = s.id
+       LEFT JOIN packages p2 ON b.package_id = p2.id
+       WHERE b.client_id = $1
+         AND b.status IN ('pending','confirmed')
+         AND (b.agreement_signed = false OR b.agreement_signed IS NULL)
+       ORDER BY b.created_at DESC
+       LIMIT 1`,
+      [client.id]
+    ).catch(() => null),
+    db.queryOne<{ package_name: string }>(
+      `SELECT p.name AS package_name
+       FROM package_enrollments pe
+       JOIN packages p ON p.id = pe.package_id
+       WHERE pe.client_id = $1
+         AND pe.status = 'active'
+         AND pe.agreement_signed = true
+       ORDER BY pe.agreement_signed_at DESC NULLS LAST, pe.created_at DESC
+       LIMIT 1`,
+      [client.id]
+    ).catch(() => null),
+    db.queryOne<{ item_name: string }>(
+      `SELECT COALESCE(s.name, p2.name, 'Service') AS item_name
+       FROM bookings b
+       LEFT JOIN services s ON b.service_id = s.id
+       LEFT JOIN packages p2 ON b.package_id = p2.id
+       WHERE b.client_id = $1
+         AND b.agreement_signed = true
+       ORDER BY b.agreement_signed_at DESC NULLS LAST, b.created_at DESC
+       LIMIT 1`,
+      [client.id]
+    ).catch(() => null),
   ])
+
+  const agreementRequired = !!unsignedEnrollment || !!unsignedBooking
+  const signedAgreementName = signedEnrollment?.package_name || signedBooking?.item_name || null
+  const agreementName = unsignedEnrollment?.package_name || unsignedBooking?.item_name || signedAgreementName || 'DFitFactor Program'
 
   const extraForms = [
     {
@@ -80,6 +129,38 @@ export default async function PortalFormsPage({
           Complete the forms that support your onboarding, weekly progress review, and protocol accuracy.
         </p>
       </section>
+
+      {(agreementRequired || signedAgreementName) ? (
+        <section style={{ background: '#111111', border: agreementRequired ? '1px solid rgba(239,68,68,0.32)' : '1px solid rgba(110,231,183,0.25)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 700, marginBottom: 6 }}>DFitFactor® Coaching Agreement</div>
+              <div style={{ color: '#777', fontSize: 13 }}>{agreementName}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ color: agreementRequired ? '#f87171' : '#6ee7b7', fontSize: 12, fontWeight: 700 }}>
+                {agreementRequired ? 'Action Required' : 'Completed ✓'}
+              </span>
+              <Link
+                href="/portal/forms/coaching-agreement"
+                style={{
+                  background: agreementRequired ? '#D4AF37' : 'transparent',
+                  color: agreementRequired ? '#000' : '#6ee7b7',
+                  border: agreementRequired ? 'none' : '1px solid rgba(110,231,183,0.35)',
+                  borderRadius: 8,
+                  padding: '8px 14px',
+                  textDecoration: 'none',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {agreementRequired ? 'Review & Sign →' : 'View Agreement'}
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {allForms.some((form) => form.required) ? (
         <section style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
