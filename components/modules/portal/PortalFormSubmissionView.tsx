@@ -9,15 +9,158 @@ type Props = {
   submissionDocument: PortalSubmissionDocument
 }
 
-const cardStyle: React.CSSProperties = {
-  background: '#111111',
-  border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: '16px',
-  padding: '24px',
+const APP_SHELL_STYLE: React.CSSProperties = {
+  maxWidth: '960px',
+  margin: '0 auto',
+  color: '#111827',
+}
+
+const ACTION_BUTTON_STYLE: React.CSSProperties = {
+  borderRadius: '10px',
+  padding: '11px 16px',
+  fontSize: '13px',
+  fontWeight: 700,
+  cursor: 'pointer',
+}
+
+const PRINT_SURFACE_STYLE: React.CSSProperties = {
+  width: '816px',
+  backgroundColor: '#ffffff',
+  color: '#000000',
+  fontFamily: 'Arial, sans-serif',
+  padding: '60px',
+  boxSizing: 'border-box',
+}
+
+function formatSubmittedDate(value: string | null | undefined) {
+  if (!value) return 'Unavailable'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return 'Unavailable'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function PrintableDocument({
+  submissionDocument,
+}: {
+  submissionDocument: PortalSubmissionDocument
+}) {
+  const formattedDate = formatSubmittedDate(submissionDocument.submittedAt)
+  const formattedTimestamp = formatTimestamp(submissionDocument.submittedAt)
+
+  return (
+    <div style={PRINT_SURFACE_STYLE}>
+      <div style={{ borderBottom: '3px solid #1a0a2e', paddingBottom: '20px', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '24px' }}>
+          <div>
+            <h1 style={{ color: '#1a0a2e', fontSize: '28px', margin: 0, fontWeight: 'bold' }}>
+              DFitFactor®
+            </h1>
+            <p style={{ color: '#666666', fontSize: '12px', margin: '2px 0 0' }}>
+              Strength Forged In Training
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ color: '#666666', fontSize: '11px', margin: 0 }}>
+              Document ID: {submissionDocument.id}
+            </p>
+            <p style={{ color: '#666666', fontSize: '11px', margin: 0 }}>
+              {formattedDate}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h2 style={{ color: '#000000', fontSize: '26px', marginBottom: '4px', marginTop: 0 }}>
+        {submissionDocument.title}
+      </h2>
+      <p style={{ color: '#666666', fontSize: '13px', marginBottom: '30px', marginTop: 0 }}>
+        Completed by {submissionDocument.completedBy || 'Client'} on {formattedDate}
+      </p>
+
+      {submissionDocument.sections.map((section) => (
+        <div key={section.title} style={{ marginBottom: '24px', breakInside: 'avoid' }}>
+          <div style={{ borderLeft: '3px solid #D4AF37', paddingLeft: '12px', marginBottom: '12px' }}>
+            <h3 style={{ color: '#1a0a2e', fontSize: '13px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
+              {section.title}
+            </h3>
+          </div>
+          <div style={{ backgroundColor: '#f9f9f9', padding: '16px', borderRadius: '4px' }}>
+            {section.fields.map((field, index) => (
+              <div
+                key={`${section.title}-${field.label}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '200px 1fr',
+                  gap: '8px',
+                  marginBottom: index === section.fields.length - 1 ? 0 : '10px',
+                  paddingBottom: index === section.fields.length - 1 ? 0 : '10px',
+                  borderBottom: index === section.fields.length - 1 ? 'none' : '1px solid #eeeeee',
+                }}
+              >
+                <span style={{ color: '#666666', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', paddingTop: '2px' }}>
+                  {field.label}
+                </span>
+                <span style={{ color: '#000000', fontSize: '13px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {field.value || '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ marginTop: '30px', borderTop: '2px solid #1a0a2e', paddingTop: '20px' }}>
+        <p style={{ color: '#1a0a2e', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', marginTop: 0 }}>
+          Signature
+        </p>
+        <p style={{ fontSize: '20px', fontStyle: 'italic', color: '#000000', marginBottom: '4px', marginTop: 0 }}>
+          {submissionDocument.signature || 'No signature provided'}
+        </p>
+        <p style={{ color: '#666666', fontSize: '12px', margin: 0 }}>
+          {submissionDocument.completedBy || 'Client'} — {formattedDate}
+        </p>
+        <p style={{ color: '#999999', fontSize: '10px', marginTop: '8px', marginBottom: 0, lineHeight: 1.6 }}>
+          Electronically signed via DFitFactor Client Portal. Document ID: {submissionDocument.id}. Submitted: {formattedTimestamp}
+        </p>
+      </div>
+
+      <div style={{ marginTop: '40px', borderTop: '1px solid #cccccc', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+        <div>
+          <p style={{ color: '#333333', fontSize: '11px', fontWeight: 'bold', margin: 0 }}>
+            Coach Dee Byfield, MBA, CHC, CSNC, CPT
+          </p>
+          <p style={{ color: '#666666', fontSize: '10px', margin: 0 }}>
+            DFitfactor
+          </p>
+        </div>
+        <p style={{ color: '#999999', fontSize: '10px', margin: 0 }}>
+          Strength Forged In Training
+        </p>
+      </div>
+    </div>
+  )
 }
 
 export default function PortalFormSubmissionView({ submissionDocument }: Props) {
-  const contentRef = useRef<HTMLDivElement | null>(null)
+  const pdfContentRef = useRef<HTMLDivElement | null>(null)
   const [busyAction, setBusyAction] = useState<'preview' | 'download' | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
@@ -30,11 +173,11 @@ export default function PortalFormSubmissionView({ submissionDocument }: Props) 
   }, [previewUrl])
 
   async function buildPdfBlob() {
-    if (!contentRef.current) return null
+    if (!pdfContentRef.current) return null
 
-    const canvas = await html2canvas(contentRef.current, {
+    const canvas = await html2canvas(pdfContentRef.current, {
       scale: 2,
-      backgroundColor: '#0a0a0a',
+      backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
       windowWidth: 1200,
@@ -45,11 +188,11 @@ export default function PortalFormSubmissionView({ submissionDocument }: Props) 
     const pageHeight = pdf.internal.pageSize.getHeight()
     const margin = 10
     const usableWidth = pageWidth - margin * 2
-    const scaledHeight = (canvas.height * usableWidth) / canvas.width
     const pageCanvas = document.createElement('canvas')
     const pageCtx = pageCanvas.getContext('2d')
     const pxPerMm = canvas.width / usableWidth
     const pageHeightPx = Math.floor((pageHeight - margin * 2) * pxPerMm)
+    const footerY = pageHeight - 6
     let offsetY = 0
     let pageIndex = 0
 
@@ -75,6 +218,10 @@ export default function PortalFormSubmissionView({ submissionDocument }: Props) 
       const renderedHeight = pageCanvas.height / pxPerMm
       if (pageIndex > 0) pdf.addPage()
       pdf.addImage(imgData, 'PNG', margin, margin, usableWidth, renderedHeight)
+      pdf.setFontSize(9)
+      pdf.setTextColor(120, 120, 120)
+      pdf.text(`Page ${pageIndex + 1}`, pageWidth - margin, footerY, { align: 'right' })
+      pdf.text(formatSubmittedDate(submissionDocument.submittedAt), margin, footerY)
       offsetY += pageCanvas.height
       pageIndex += 1
     }
@@ -111,18 +258,18 @@ export default function PortalFormSubmissionView({ submissionDocument }: Props) 
   }
 
   return (
-    <div style={{ maxWidth: '860px', margin: '0 auto', color: '#fff' }}>
+    <div style={APP_SHELL_STYLE}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '6px' }}>{submissionDocument.title}</h1>
-          <p style={{ color: '#777', fontSize: '14px', marginBottom: 0 }}>{submissionDocument.subtitle}</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '6px', color: '#ffffff' }}>{submissionDocument.title}</h1>
+          <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: 0 }}>{submissionDocument.subtitle}</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={handlePreview}
             disabled={busyAction !== null}
-            style={{ background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.14)', borderRadius: '10px', padding: '11px 16px', fontSize: '13px', fontWeight: 700, cursor: busyAction ? 'not-allowed' : 'pointer', opacity: busyAction && busyAction !== 'preview' ? 0.65 : 1 }}
+            style={{ ...ACTION_BUTTON_STYLE, background: 'transparent', color: '#ffffff', border: '1px solid rgba(255,255,255,0.14)', opacity: busyAction && busyAction !== 'preview' ? 0.65 : 1 }}
           >
             {busyAction === 'preview' ? 'Preparing preview...' : 'Preview PDF'}
           </button>
@@ -130,54 +277,36 @@ export default function PortalFormSubmissionView({ submissionDocument }: Props) 
             type="button"
             onClick={handleDownload}
             disabled={busyAction !== null}
-            style={{ background: '#D4AF37', color: '#000', border: 'none', borderRadius: '10px', padding: '11px 16px', fontSize: '13px', fontWeight: 700, cursor: busyAction ? 'not-allowed' : 'pointer', opacity: busyAction && busyAction !== 'download' ? 0.65 : 1 }}
+            style={{ ...ACTION_BUTTON_STYLE, background: '#D4AF37', color: '#000000', border: 'none', opacity: busyAction && busyAction !== 'download' ? 0.65 : 1 }}
           >
             {busyAction === 'download' ? 'Preparing PDF...' : 'Download PDF'}
           </button>
         </div>
       </div>
 
-      <div ref={contentRef} style={{ background: '#0a0a0a', padding: '0 0 24px' }}>
-        <div style={{ ...cardStyle, marginBottom: '16px' }}>
-          <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
-            Completed Form
-          </div>
-          <div style={{ color: '#fff', fontSize: '24px', fontWeight: 700, marginBottom: '6px' }}>{submissionDocument.title}</div>
-          <div style={{ color: '#777', fontSize: '14px' }}>{submissionDocument.subtitle}</div>
+      <div style={{ background: '#ffffff', borderRadius: '18px', overflow: 'hidden', boxShadow: '0 18px 50px rgba(0,0,0,0.24)', border: '1px solid rgba(26,10,46,0.08)' }}>
+        <PrintableDocument submissionDocument={submissionDocument} />
+      </div>
+
+      <div
+        style={{
+          position: 'fixed',
+          left: '-9999px',
+          top: 0,
+          width: '816px',
+          pointerEvents: 'none',
+          opacity: 0,
+        }}
+      >
+        <div ref={pdfContentRef}>
+          <PrintableDocument submissionDocument={submissionDocument} />
         </div>
-
-        {submissionDocument.sections.map((section) => (
-          <section key={section.title} style={{ ...cardStyle, marginBottom: '16px' }}>
-            <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px' }}>
-              {section.title}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px 18px' }}>
-              {section.fields.map((field) => (
-                <div key={`${section.title}-${field.label}`}>
-                  <div style={{ color: '#888', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
-                    {field.label}
-                  </div>
-                  <div style={{ color: '#fff', fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{field.value}</div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-
-        {submissionDocument.signature ? (
-          <section style={cardStyle}>
-            <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
-              Signature
-            </div>
-            <div style={{ color: '#fff', fontSize: '20px', fontStyle: 'italic' }}>{submissionDocument.signature}</div>
-          </section>
-        ) : null}
       </div>
 
       {previewUrl ? (
-        <div style={{ marginTop: '24px', ...cardStyle }}>
+        <div style={{ marginTop: '24px', background: '#ffffff', border: '1px solid rgba(26,10,46,0.08)', borderRadius: '16px', padding: '18px', boxShadow: '0 18px 50px rgba(0,0,0,0.2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>
+            <div style={{ color: '#1a0a2e', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>
               PDF Preview
             </div>
             <button
@@ -186,12 +315,12 @@ export default function PortalFormSubmissionView({ submissionDocument }: Props) 
                 URL.revokeObjectURL(previewUrl)
                 setPreviewUrl(null)
               }}
-              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.14)', color: '#fff', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer' }}
+              style={{ background: 'transparent', border: '1px solid rgba(26,10,46,0.14)', color: '#1a0a2e', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer' }}
             >
               Close Preview
             </button>
           </div>
-          <iframe src={previewUrl} title="Form PDF Preview" style={{ width: '100%', minHeight: '720px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', background: '#fff' }} />
+          <iframe src={previewUrl} title="Form PDF Preview" style={{ width: '100%', minHeight: '720px', border: '1px solid #e5e7eb', borderRadius: '12px', background: '#ffffff' }} />
         </div>
       ) : null}
     </div>

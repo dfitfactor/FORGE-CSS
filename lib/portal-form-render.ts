@@ -9,18 +9,23 @@ export type PortalSubmissionSection = {
 }
 
 export type PortalSubmissionDocument = {
+  id: string
   title: string
   subtitle: string
   signature?: string | null
   sections: PortalSubmissionSection[]
+  completedBy?: string | null
+  submittedAt?: string | null
 }
 
 type SubmissionShape = {
+  id: string
   slug: string
   name: string
   submitted_at: string | null
   signature_data: string | null
   responses: Record<string, unknown>
+  completed_by?: string | null
 }
 
 function asText(value: unknown, fallback = 'Not provided') {
@@ -273,9 +278,12 @@ export function buildPortalSubmissionDocument(submission: SubmissionShape): Port
       ]
 
   return {
+    id: submission.id,
     title: submission.name,
     subtitle: `Completed on ${submittedLabel}`,
     signature: submission.signature_data,
     sections,
+    completedBy: submission.completed_by || null,
+    submittedAt: submission.submitted_at,
   }
 }

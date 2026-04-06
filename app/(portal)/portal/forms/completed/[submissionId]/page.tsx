@@ -44,11 +44,13 @@ export default async function PortalCompletedFormPage({
     : submission.responses || {}
 
   const document = buildPortalSubmissionDocument({
+    id: submission.id,
     slug: submission.slug,
     name: submission.name,
     submitted_at: submission.submitted_at,
     signature_data: submission.signature_data,
     responses,
+    completed_by: client.full_name
   })
 
   return (

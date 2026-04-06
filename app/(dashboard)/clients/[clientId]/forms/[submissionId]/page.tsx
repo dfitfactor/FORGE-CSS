@@ -59,11 +59,13 @@ export default async function ClientFormSubmissionPage({
     : data.submission.responses || {}
 
   const submissionDocument = buildPortalSubmissionDocument({
+    id: data.submission.id,
     slug: data.submission.slug,
-    name: `${data.client.full_name} · ${data.submission.name}`,
+    name: data.submission.name,
     submitted_at: data.submission.submitted_at,
     signature_data: data.submission.signature_data,
     responses,
+    completed_by: data.client.full_name,
   })
 
   return (
