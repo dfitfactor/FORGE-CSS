@@ -2,6 +2,7 @@
 import { Resend } from 'resend'
 import { getClientSession } from '@/lib/client-auth'
 import { db } from '@/lib/db'
+import { getCoachSettings } from '@/lib/coach-settings'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
@@ -113,9 +114,10 @@ export async function POST(request: NextRequest) {
 
     try {
       if (resend) {
+        const coachSettings = await getCoachSettings()
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'FORGE <onboarding@resend.dev>',
-          to: 'coach@dfitfactor.com',
+          to: coachSettings.coachEmail,
           subject: `New Intake Form: ${fullName || 'Client'}`,
           text: `${fullName || 'A client'} completed their intake form.\nView their profile at: https://forge-css.vercel.app/clients/${session.clientId}`,
         })

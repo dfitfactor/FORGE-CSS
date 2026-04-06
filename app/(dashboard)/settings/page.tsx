@@ -11,6 +11,8 @@ type AccountState = {
   email: string
   avatar_url: string
   role: string
+  timezone: string
+  notification_email: string
   current_password: string
   new_password: string
 }
@@ -43,6 +45,8 @@ const INITIAL_STATE: AccountState = {
   email: '',
   avatar_url: '',
   role: '',
+  timezone: 'America/New_York',
+  notification_email: 'coach@dfitfactor.com',
   current_password: '',
   new_password: '',
 }
@@ -55,6 +59,15 @@ const INITIAL_TEMPLATE_FORM: TemplateFormState = {
   is_active: true,
   sort_order: '0',
 }
+
+const TIMEZONE_OPTIONS = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+] as const
 
 const TEMPLATE_TYPES = [
   { value: 'movement', label: 'Movement Templates' },
@@ -95,7 +108,7 @@ export default function SettingsPage() {
       setLoading(true)
       setError('')
       try {
-        const res = await fetch('/api/auth/account', { cache: 'no-store' })
+        const res = await fetch('/api/settings/profile', { cache: 'no-store' })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error ?? 'Failed to load account')
         setForm({
@@ -103,6 +116,8 @@ export default function SettingsPage() {
           email: data.user?.email ?? '',
           avatar_url: data.user?.avatar_url ?? '',
           role: data.user?.role ?? '',
+          timezone: data.user?.timezone ?? 'America/New_York',
+          notification_email: data.user?.notification_email ?? data.user?.email ?? 'coach@dfitfactor.com',
           current_password: '',
           new_password: '',
         })
@@ -144,13 +159,36 @@ export default function SettingsPage() {
     setSuccess('')
 
     try {
-      const res = await fetch('/api/auth/account', {
+      const profileRes = await fetch('/api/settings/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          full_name: form.full_name,
+          email: form.email,
+          avatar_url: form.avatar_url,
+          timezone: form.timezone,
+          notification_email: form.notification_email,
+        }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to save settings')
+      const profileData = await profileRes.json().catch(() => ({}))
+      if (!profileRes.ok) throw new Error(profileData.error ?? 'Failed to save settings')
+
+      if (form.current_password || form.new_password) {
+        const passwordRes = await fetch('/api/auth/account', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: form.full_name,
+            email: form.email,
+            avatar_url: form.avatar_url,
+            current_password: form.current_password,
+            new_password: form.new_password,
+          }),
+        })
+        const passwordData = await passwordRes.json().catch(() => ({}))
+        if (!passwordRes.ok) throw new Error(passwordData.error ?? 'Failed to update password')
+      }
+
       setSuccess('Settings saved successfully')
       setForm((current) => ({ ...current, current_password: '', new_password: '' }))
     } catch (err: unknown) {
@@ -353,6 +391,21 @@ export default function SettingsPage() {
                 <div>
                   <label className="forge-label">Role</label>
                   <input className="forge-input opacity-70" value={form.role} readOnly />
+                </div>
+
+                <div>
+                  <label className="forge-label">Timezone</label>
+                  <select className="forge-input" value={form.timezone} onChange={(event) => setForm((current) => ({ ...current, timezone: event.target.value }))}>
+                    {TIMEZONE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="forge-label">Notification Email</label>
+                  <input type="email" className="forge-input" value={form.notification_email} onChange={(event) => setForm((current) => ({ ...current, notification_email: event.target.value }))} />
+                  <p className="mt-2 text-xs text-white/35">Email for new booking and check-in alerts</p>
                 </div>
               </div>
 

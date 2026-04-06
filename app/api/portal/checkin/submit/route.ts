@@ -2,6 +2,7 @@
 import { Resend } from 'resend'
 import { getClientSession } from '@/lib/client-auth'
 import { db } from '@/lib/db'
+import { getCoachSettings } from '@/lib/coach-settings'
 import { calculateBIEScores } from '@/lib/bie-calculator'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
@@ -164,9 +165,10 @@ export async function POST(request: NextRequest) {
 
     try {
       if (resend) {
+        const coachSettings = await getCoachSettings()
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'FORGE <onboarding@resend.dev>',
-          to: 'coach@dfitfactor.com',
+          to: coachSettings.coachEmail,
           subject: `New Check-In: ${client.full_name} - Review Required`,
           text: `${client.full_name} submitted their weekly check-in for the week ending ${String(data.week_ending_date ?? '')}.\n\nAuto-calculated scores:\nBAR: ${scores.bar ?? 0} | DBI: ${scores.dbi} | BLI: ${scores.bli}\nLSI: ${scores.lsi} | PPS: ${scores.pps}\nGeneration State: ${scores.generation_state}\n\nReview and approve at:\nhttps://forge-css.vercel.app/clients/${session.clientId}`,
         })

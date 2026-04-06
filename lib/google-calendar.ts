@@ -1,6 +1,5 @@
 ﻿import { google } from 'googleapis'
-
-const CALENDAR_TIMEZONE = 'America/New_York'
+import { getCoachSettings } from '@/lib/coach-settings'
 
 function getCalendarClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -16,7 +15,7 @@ function getCalendarClient() {
   return google.calendar({ version: 'v3', auth: oauth2Client })
 }
 
-function buildEventRequest({
+async function buildEventRequest({
   summary,
   description,
   date,
@@ -33,6 +32,9 @@ function buildEventRequest({
   attendeeEmail: string
   attendeeName: string
 }) {
+  const coach = await getCoachSettings()
+  const COACH_TIMEZONE = coach.timezone || 'America/New_York'
+
   const startDateTimeStr = `${date}T${time}:00`
   const endDate = new Date(`${date}T${time}:00`)
   endDate.setMinutes(endDate.getMinutes() + durationMinutes)
@@ -45,12 +47,11 @@ function buildEventRequest({
     description,
     start: {
       dateTime: startDateTimeStr,
-      // TODO: Make coach calendar timezone configurable instead of hardcoding Eastern.
-      timeZone: CALENDAR_TIMEZONE,
+      timeZone: COACH_TIMEZONE,
     },
     end: {
       dateTime: endDateTimeStr,
-      timeZone: CALENDAR_TIMEZONE,
+      timeZone: COACH_TIMEZONE,
     },
     attendees: [{ email: attendeeEmail, displayName: attendeeName }],
     reminders: {
@@ -85,7 +86,7 @@ export async function createCalendarEvent({
   const event = await calendar.events.insert({
     calendarId: 'primary',
     sendUpdates: 'all',
-    requestBody: buildEventRequest({
+    requestBody: await buildEventRequest({
       summary,
       description,
       date,
@@ -117,7 +118,7 @@ export async function updateCalendarEvent(
     calendarId: 'primary',
     eventId,
     sendUpdates: 'all',
-    requestBody: buildEventRequest(details),
+    requestBody: await buildEventRequest(details),
   })
 }
 

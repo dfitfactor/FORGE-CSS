@@ -2,6 +2,7 @@
 import Stripe from 'stripe'
 import { db } from '@/lib/db'
 import { sendBookingConfirmation } from '@/lib/email'
+import { getCoachSettings } from '@/lib/coach-settings'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20' as any,
@@ -24,10 +25,8 @@ async function getBookingColumns() {
 }
 
 async function resolveCoachId() {
-  const coachDee = await db.queryOne<{ id: string }>(
-    `SELECT id FROM users WHERE lower(email) = 'coach@dfitfactor.com' LIMIT 1`
-  )
-  if (coachDee?.id) return coachDee.id
+  const coachSettings = await getCoachSettings()
+  if (coachSettings.coachId) return coachSettings.coachId
 
   const fallbackCoach = await db.queryOne<{ id: string }>(
     `SELECT id FROM users WHERE role IN ('admin', 'coach') AND is_active = true ORDER BY role = 'admin' DESC, created_at ASC LIMIT 1`
