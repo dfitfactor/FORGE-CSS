@@ -124,6 +124,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
     { href: 'protocols',    label: 'Protocols',    icon: Zap,           desc: 'All generated protocols' },
     { href: 'timeline',     label: 'Timeline',     icon: Clock,         desc: 'Full client journey history' },
     { href: 'documents',    label: 'Documents',    icon: FileText,      desc: 'Uploads for AI insights and protocols' },
+    { href: 'forms',        label: 'Forms',        icon: ClipboardList, desc: 'Completed client submissions and PDFs' },
   ]
 
     return (
