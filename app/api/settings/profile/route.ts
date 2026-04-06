@@ -1,15 +1,15 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSession } from '@/lib/auth'
+import { createSession, getSession, setSessionCookie } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { ensureCoachSettingsColumns } from '@/lib/coach-settings'
 
 const ProfileSchema = z.object({
   full_name: z.string().trim().min(2).max(255),
   email: z.string().trim().email().max(255),
-  avatar_url: z.union([z.string().trim().url(), z.literal('')]).optional().nullable(),
+  avatar_url: z.string().trim().max(2000).optional().nullable(),
   timezone: z.string().trim().min(1).max(255).default('America/New_York'),
-  notification_email: z.string().trim().email().max(255),
+  notification_email: z.string().trim().max(255).optional().nullable(),
 })
 
 export async function GET(request: NextRequest) {
@@ -82,8 +82,18 @@ export async function PATCH(request: NextRequest) {
 
     const data = parsed.data
     const normalizedEmail = data.email.toLowerCase().trim()
-    const normalizedNotificationEmail = data.notification_email.toLowerCase().trim()
-    const nextAvatarUrl = data.avatar_url?.trim() ? data.avatar_url.trim() : null
+    const normalizedNotificationEmail = data.notification_email?.trim()
+      ? data.notification_email.trim().toLowerCase()
+      : normalizedEmail
+
+    let nextAvatarUrl: string | null = data.avatar_url?.trim() ? data.avatar_url.trim() : null
+    if (nextAvatarUrl) {
+      try {
+        nextAvatarUrl = new URL(nextAvatarUrl).toString()
+      } catch {
+        nextAvatarUrl = null
+      }
+    }
 
     const existing = await db.queryOne<{ id: string }>(
       `SELECT id FROM users
@@ -116,7 +126,20 @@ export async function PATCH(request: NextRequest) {
       ]
     )
 
-    return NextResponse.json({ success: true })
+    const refreshedToken = await createSession(session.id)
+    setSessionCookie(refreshedToken)
+
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: session.id,
+        full_name: data.full_name.trim(),
+        email: normalizedEmail,
+        avatar_url: nextAvatarUrl,
+        timezone: data.timezone,
+        notification_email: normalizedNotificationEmail,
+      },
+    })
   } catch (err) {
     console.error('[settings/profile] PATCH error:', err)
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
