@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
               full_name,
               email,
               role,
-              avatar_url,
+              ${columns.avatarUrl ? 'avatar_url' : "NULL::text AS avatar_url"},
               ${columns.timezone ? 'timezone' : "NULL::text AS timezone"},
               ${columns.notificationEmail ? 'notification_email' : "NULL::text AS notification_email"}
        FROM users
@@ -112,14 +112,17 @@ export async function PATCH(request: NextRequest) {
     const values: Array<string | null> = [
       data.full_name.trim(),
       normalizedEmail,
-      nextAvatarUrl,
     ]
 
     const updates = [
       'full_name = $1',
       'email = $2',
-      'avatar_url = $3',
     ]
+
+    if (columns.avatarUrl) {
+      values.push(nextAvatarUrl)
+      updates.push(`avatar_url = $${values.length}`)
+    }
 
     if (columns.timezone) {
       values.push(data.timezone)
@@ -150,7 +153,7 @@ export async function PATCH(request: NextRequest) {
         id: session.id,
         full_name: data.full_name.trim(),
         email: normalizedEmail,
-        avatar_url: nextAvatarUrl,
+        avatar_url: columns.avatarUrl ? nextAvatarUrl : null,
         timezone: columns.timezone ? data.timezone : 'America/New_York',
         notification_email: columns.notificationEmail ? normalizedNotificationEmail : normalizedEmail,
       },

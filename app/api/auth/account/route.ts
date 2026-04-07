@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSession, getSession, hashPassword, setSessionCookie, verifyPassword } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib/coach-settings'
 
 const AccountSchema = z.object({
   full_name: z.string().trim().min(2).max(255),
@@ -17,6 +18,9 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
+  await ensureCoachSettingsColumns()
+  const columns = await getCoachSettingsColumnSupport()
+
   const user = await db.queryOne<{
     id: string
     email: string
@@ -24,7 +28,13 @@ export async function GET() {
     role: string
     avatar_url: string | null
   }>(
-    'SELECT id, email, full_name, role, avatar_url FROM users WHERE id = $1 AND is_active = true',
+    `SELECT id,
+            email,
+            full_name,
+            role,
+            ${columns.avatarUrl ? 'avatar_url' : "NULL::text AS avatar_url"}
+     FROM users
+     WHERE id = $1 AND is_active = true`,
     [session.id]
   )
 
@@ -42,6 +52,9 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    await ensureCoachSettingsColumns()
+    const columns = await getCoachSettingsColumnSupport()
+
     const body = await request.json().catch(() => null)
     const parsed = AccountSchema.safeParse(body)
 
@@ -51,7 +64,15 @@ export async function PATCH(request: NextRequest) {
 
     const data = parsed.data
     const normalizedEmail = data.email.toLowerCase().trim()
-    const nextAvatarUrl = data.avatar_url?.trim() ? data.avatar_url.trim() : null
+    let nextAvatarUrl = data.avatar_url?.trim() ? data.avatar_url.trim() : null
+
+    if (nextAvatarUrl) {
+      try {
+        nextAvatarUrl = new URL(nextAvatarUrl).toString()
+      } catch {
+        nextAvatarUrl = null
+      }
+    }
 
     const currentUser = await db.queryOne<{
       id: string
@@ -91,28 +112,28 @@ export async function PATCH(request: NextRequest) {
       passwordHashToSave = await hashPassword(data.new_password!.trim())
     }
 
-    if (passwordHashToSave) {
-      await db.query(
-        `UPDATE users
-         SET full_name = $1,
-             email = $2,
-             avatar_url = $3,
-             password_hash = $4,
-             updated_at = NOW()
-         WHERE id = $5`,
-        [data.full_name.trim(), normalizedEmail, nextAvatarUrl, passwordHashToSave, session.id]
-      )
-    } else {
-      await db.query(
-        `UPDATE users
-         SET full_name = $1,
-             email = $2,
-             avatar_url = $3,
-             updated_at = NOW()
-         WHERE id = $4`,
-        [data.full_name.trim(), normalizedEmail, nextAvatarUrl, session.id]
-      )
+    const values: Array<string | null> = [data.full_name.trim(), normalizedEmail]
+    const updates = ['full_name = $1', 'email = $2']
+
+    if (columns.avatarUrl) {
+      values.push(nextAvatarUrl)
+      updates.push(`avatar_url = $${values.length}`)
     }
+
+    if (passwordHashToSave) {
+      values.push(passwordHashToSave)
+      updates.push(`password_hash = $${values.length}`)
+    }
+
+    values.push(session.id)
+
+    await db.query(
+      `UPDATE users
+       SET ${updates.join(', ')},
+           updated_at = NOW()
+       WHERE id = $${values.length}`,
+      values
+    )
 
     const refreshedToken = await createSession(session.id)
     setSessionCookie(refreshedToken)

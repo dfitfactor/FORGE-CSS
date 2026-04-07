@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 
 export type CoachSettingsColumnSupport = {
+  avatarUrl: boolean
   timezone: boolean
   notificationEmail: boolean
 }
@@ -8,6 +9,7 @@ export type CoachSettingsColumnSupport = {
 export async function ensureCoachSettingsColumns() {
   try {
     await db.query(`ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS avatar_url TEXT,
       ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/New_York',
       ADD COLUMN IF NOT EXISTS notification_email TEXT`)
 
@@ -25,12 +27,13 @@ export async function getCoachSettingsColumnSupport(): Promise<CoachSettingsColu
      FROM information_schema.columns
      WHERE table_schema = 'public'
        AND table_name = 'users'
-       AND column_name IN ('timezone', 'notification_email')`
+       AND column_name IN ('avatar_url', 'timezone', 'notification_email')`
   )
 
   const columns = new Set(rows.map((row) => row.column_name))
 
   return {
+    avatarUrl: columns.has('avatar_url'),
     timezone: columns.has('timezone'),
     notificationEmail: columns.has('notification_email'),
   }
