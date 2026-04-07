@@ -6,8 +6,10 @@ import {
   Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail
 } from 'lucide-react'
 import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
+import TeamAccessCard from '@/components/modules/settings/TeamAccessCard'
 
 type AccountState = {
+  id: string
   full_name: string
   email: string
   avatar_url: string
@@ -42,6 +44,7 @@ type TemplateFormState = {
 }
 
 const INITIAL_STATE: AccountState = {
+  id: '',
   full_name: '',
   email: '',
   avatar_url: '',
@@ -113,6 +116,7 @@ export default function SettingsPage() {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error ?? 'Failed to load account')
         setForm({
+          id: data.user?.id ?? '',
           full_name: data.user?.full_name ?? '',
           email: data.user?.email ?? '',
           avatar_url: data.user?.avatar_url ?? '',
@@ -444,6 +448,7 @@ export default function SettingsPage() {
         )}
 
         <BusinessHoursCard canEdit={form.role === 'admin'} />
+        <TeamAccessCard canManage={form.role === 'admin' && form.email.toLowerCase() === 'coach@dfitfactor.com'} currentUserId={form.id} />
 
         <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
           <div className="flex items-center justify-between gap-4">
