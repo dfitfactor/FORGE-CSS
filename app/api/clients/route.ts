@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
             THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
             ELSE NULL
           END as age,
-          c.status,
+          COALESCE(c.status, 'active') as status,
           c.primary_goal,
           c.current_stage,
           CAST(bs.bar_score AS FLOAT) AS bar_score,
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
               THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
               ELSE NULL
             END as age,
-            c.status,
+            COALESCE(c.status, 'active') as status,
             c.primary_goal,
             c.current_stage,
             CAST(bs.bar_score AS FLOAT) AS bar_score,
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
               THEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.date_of_birth))::int
               ELSE NULL
             END as age,
-            c.status,
+            COALESCE(c.status, 'active') as status,
             c.primary_goal,
             c.current_stage,
             CAST(bs.bar AS FLOAT) AS bar_score,

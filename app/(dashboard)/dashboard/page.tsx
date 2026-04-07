@@ -168,7 +168,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           c.email,
           c.date_of_birth::text as date_of_birth,
           c.gender,
-          c.status,
+          COALESCE(c.status, 'active') as status,
           c.primary_goal,
           c.current_stage,
           CAST(bs.bar AS FLOAT) AS bar_score,
@@ -192,7 +192,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           ORDER BY snapshot_date DESC, created_at DESC
           LIMIT 1
         ) bs ON true
-        WHERE c.status != 'churned'
+        WHERE COALESCE(c.status, 'active') != 'churned'
           ${accessFilter}
         ORDER BY bs.snapshot_updated_at DESC NULLS LAST, c.full_name ASC
       `, params),
@@ -220,7 +220,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
             SELECT MAX(snapshot_date) FROM behavioral_snapshots WHERE client_id = c.id
           )
           AND (bs.dbi >= 50 OR bs.bar < 50)
-          AND c.status = 'active'
+          AND COALESCE(c.status, 'active') = 'active'
           ${accessFilter}
         ORDER BY bs.dbi DESC, bs.bar ASC
         LIMIT 5
