@@ -1,9 +1,8 @@
-﻿import { getSession } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { redirect } from 'next/navigation'
 import {
-  Users, TrendingUp, AlertTriangle, CheckCircle,
-  Minus
+  Users, TrendingUp, AlertTriangle, CheckCircle, Minus, Clock3, ClipboardCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import { BIEReviewWidget } from '@/components/modules/clients/BIEReviewWidget'
@@ -32,6 +31,66 @@ type PendingReviewRow = {
   dbi_score: number | null
   bli_score: number | null
   generation_state: string | null
+}
+
+type StaleClientRow = {
+  client_id: string
+  full_name: string
+  current_stage: string | null
+  last_activity_type: string | null
+  last_activity_at: string | null
+  days_since_activity: number | null
+}
+
+type ProtocolReviewRow = {
+  client_id: string
+  full_name: string
+  current_stage: string | null
+  protocol_id: string | null
+  protocol_name: string | null
+  last_protocol_review_at: string | null
+  days_since_review: number | null
+  review_status: 'missing' | 'due' | 'overdue'
+}
+
+type AlertRow = {
+  client_id: string
+  client_name: string
+  alert_type: string
+  severity: string
+  bar: number
+  dbi: number
+  snapshot_date: string
+}
+
+type RecentActivityRow = {
+  client_name: string
+  event_type: string
+  title: string
+  event_date: string
+}
+
+const tableColumnCache = new Map<string, Set<string>>()
+
+async function getTableColumnSet(tableName: string) {
+  const cached = tableColumnCache.get(tableName)
+  if (cached) return cached
+
+  const columns = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName]
+  )
+
+  const set = new Set(columns.map((column) => column.column_name))
+  tableColumnCache.set(tableName, set)
+  return set
+}
+
+async function getProtocolTimestampExpression() {
+  const protocolColumns = await getTableColumnSet('protocols')
+  return protocolColumns.has('updated_at') ? 'COALESCE(p.updated_at, p.created_at)' : 'p.created_at'
 }
 
 function getClientInfoScore(client: DashboardClientRow) {
@@ -78,12 +137,7 @@ function dedupeSparseClientRows(rows: DashboardClientRow[]) {
   return Array.from(byName.values())
 }
 
-function dedupeRecentActivityRows(rows: Array<{
-  client_name: string
-  event_type: string
-  title: string
-  event_date: string
-}>) {
+function dedupeRecentActivityRows(rows: RecentActivityRow[]) {
   const seen = new Set<string>()
 
   return rows.filter((row) => {
@@ -104,8 +158,9 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
   try {
     const accessFilter = role === 'admin' ? '' : 'AND c.coach_id = $1'
     const params = role === 'admin' ? [] : [userId]
+    const protocolTimestampExpression = await getProtocolTimestampExpression()
 
-    const [clientRows, alerts, recentActivity, pendingReviews] = await Promise.all([
+    const [clientRows, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue] = await Promise.all([
       db.query<DashboardClientRow>(`
         SELECT
           c.id,
@@ -142,15 +197,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
         ORDER BY bs.snapshot_updated_at DESC NULLS LAST, c.full_name ASC
       `, params),
 
-      db.query<{
-        client_id: string
-        client_name: string
-        alert_type: string
-        severity: string
-        bar: number
-        dbi: number
-        snapshot_date: string
-      }>(`
+      db.query<AlertRow>(`
         SELECT
           c.id as client_id,
           c.full_name as client_name,
@@ -181,12 +228,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
 
       (async () => {
         try {
-          const rows = await db.query<{
-            client_name: string
-            event_type: string
-            title: string
-            event_date: string
-          }>(`
+          const rows = await db.query<RecentActivityRow>(`
             SELECT c.full_name as client_name, te.event_type, te.title, te.event_date::text
             FROM timeline_events te
             JOIN clients c ON c.id = te.client_id
@@ -215,6 +257,90 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           ${accessFilter}
         ORDER BY bs.snapshot_date DESC
       `, params).catch(() => []),
+
+      db.query<StaleClientRow>(`
+        SELECT
+          c.id AS client_id,
+          c.full_name,
+          c.current_stage,
+          activity.last_activity_type,
+          activity.last_activity_at::text AS last_activity_at,
+          CASE
+            WHEN activity.last_activity_at IS NULL THEN NULL
+            ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - activity.last_activity_at)) / 86400))::int
+          END AS days_since_activity
+        FROM clients c
+        LEFT JOIN LATERAL (
+          SELECT event_type AS last_activity_type, event_at AS last_activity_at
+          FROM (
+            SELECT 'check-in submitted'::text AS event_type, MAX(checkin_date::timestamp) AS event_at
+            FROM client_checkins WHERE client_id = c.id
+            UNION ALL
+            SELECT 'form submitted'::text, MAX(submitted_at)
+            FROM form_submissions WHERE client_id = c.id
+            UNION ALL
+            SELECT 'booking activity'::text, MAX(COALESCE(created_at, booking_date::timestamp))
+            FROM bookings WHERE client_id = c.id OR (c.email IS NOT NULL AND LOWER(client_email) = LOWER(c.email))
+            UNION ALL
+            SELECT 'behavior snapshot'::text, MAX(COALESCE(reviewed_at, snapshot_date::timestamp))
+            FROM behavioral_snapshots WHERE client_id = c.id
+            UNION ALL
+            SELECT 'timeline event'::text, MAX(event_date::timestamp)
+            FROM timeline_events WHERE client_id = c.id
+            UNION ALL
+            SELECT 'protocol updated'::text, MAX(protocol_event_at)
+            FROM (
+              SELECT MAX(${protocolTimestampExpression}) AS protocol_event_at
+              FROM protocols p
+              WHERE p.client_id = c.id
+            ) protocol_events
+          ) candidate_events
+          WHERE event_at IS NOT NULL
+          ORDER BY event_at DESC
+          LIMIT 1
+        ) activity ON true
+        WHERE c.status = 'active'
+          ${accessFilter}
+          AND (activity.last_activity_at IS NULL OR activity.last_activity_at < NOW() - INTERVAL '7 days')
+        ORDER BY activity.last_activity_at ASC NULLS FIRST, c.full_name ASC
+      `, params).catch(() => []),
+
+      db.query<ProtocolReviewRow>(`
+        SELECT
+          c.id AS client_id,
+          c.full_name,
+          c.current_stage,
+          latest_protocol.protocol_id,
+          latest_protocol.protocol_name,
+          latest_protocol.last_protocol_review_at::text AS last_protocol_review_at,
+          CASE
+            WHEN latest_protocol.last_protocol_review_at IS NULL THEN NULL
+            ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - latest_protocol.last_protocol_review_at)) / 86400))::int
+          END AS days_since_review,
+          CASE
+            WHEN latest_protocol.protocol_id IS NULL THEN 'missing'
+            WHEN latest_protocol.last_protocol_review_at < NOW() - INTERVAL '37 days' THEN 'overdue'
+            ELSE 'due'
+          END AS review_status
+        FROM clients c
+        LEFT JOIN LATERAL (
+          SELECT
+            p.id AS protocol_id,
+            p.name AS protocol_name,
+            ${protocolTimestampExpression} AS last_protocol_review_at
+          FROM protocols p
+          WHERE p.client_id = c.id
+          ORDER BY ${protocolTimestampExpression} DESC
+          LIMIT 1
+        ) latest_protocol ON true
+        WHERE c.status = 'active'
+          ${accessFilter}
+          AND (
+            latest_protocol.protocol_id IS NULL
+            OR latest_protocol.last_protocol_review_at < NOW() - INTERVAL '30 days'
+          )
+        ORDER BY latest_protocol.last_protocol_review_at ASC NULLS FIRST, c.full_name ASC
+      `, params).catch(() => []),
     ])
 
     const clients = dedupeSparseClientRows(clientRows)
@@ -223,29 +349,27 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
       active: clients.filter((client) => client.status === 'active').length,
       paused: clients.filter((client) => client.status === 'paused').length,
       needs_attention: clients.filter((client) => client.status === 'active' && client.needs_attention).length,
+      stale_clients: staleClients.length,
+      protocol_reviews_due: protocolReviewsDue.length,
     }
 
-    return { clientStats, alerts, recentActivity: dedupeRecentActivityRows(recentActivity), pendingReviews }
+    return {
+      clientStats,
+      alerts,
+      recentActivity: dedupeRecentActivityRows(recentActivity),
+      pendingReviews,
+      staleClients,
+      protocolReviewsDue,
+    }
   } catch (err) {
     console.error('[dashboard] getDashboardStats failed:', err)
     return {
       clientStats: null,
-      alerts: [] as {
-        client_id: string
-        client_name: string
-        alert_type: string
-        severity: string
-        bar: number
-        dbi: number
-        snapshot_date: string
-      }[],
-      recentActivity: [] as {
-        client_name: string
-        event_type: string
-        title: string
-        event_date: string
-      }[],
+      alerts: [] as AlertRow[],
+      recentActivity: [] as RecentActivityRow[],
       pendingReviews: [] as PendingReviewRow[],
+      staleClients: [] as StaleClientRow[],
+      protocolReviewsDue: [] as ProtocolReviewRow[],
     }
   }
 }
@@ -254,9 +378,16 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/auth/login')
 
-  const { clientStats, alerts, recentActivity, pendingReviews } = await getDashboardStats(session.id, session.role)
+  const { clientStats, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue } = await getDashboardStats(session.id, session.role)
 
-  const stats = clientStats ?? { total: 0, active: 0, paused: 0, needs_attention: 0 }
+  const stats = clientStats ?? {
+    total: 0,
+    active: 0,
+    paused: 0,
+    needs_attention: 0,
+    stale_clients: 0,
+    protocol_reviews_due: 0,
+  }
 
   return (
     <div className="p-8 space-y-8 animate-fade-in">
@@ -275,10 +406,12 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
         <StatCard label="Total Clients" value={stats.total} icon={<Users className="w-5 h-5" />} color="forge-purple" />
         <StatCard label="Active" value={stats.active} icon={<CheckCircle className="w-5 h-5" />} color="state-stable" />
         <StatCard label="Needs Attention" value={stats.needs_attention} icon={<AlertTriangle className="w-5 h-5" />} color="state-recovery" urgent={stats.needs_attention > 0} />
+        <StatCard label="Stale 7+ Days" value={stats.stale_clients} icon={<Clock3 className="w-5 h-5" />} color="state-simplified" urgent={stats.stale_clients > 0} />
+        <StatCard label="Protocol Reviews Due" value={stats.protocol_reviews_due} icon={<ClipboardCheck className="w-5 h-5" />} color="forge-gold" urgent={stats.protocol_reviews_due > 0} />
         <StatCard label="Paused" value={stats.paused} icon={<Minus className="w-5 h-5" />} color="state-simplified" />
       </div>
 
@@ -305,7 +438,7 @@ export default async function DashboardPage() {
                     Check-in date {new Date(`${review.snapshot_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </div>
                   <div className="text-xs text-forge-text-muted mt-2">
-                    BAR {review.bar_score ?? 0} · DBI {review.dbi_score ?? 0} · BLI {review.bli_score ?? 0} · State {review.generation_state ?? 'B'}
+                    BAR {review.bar_score ?? 0} - DBI {review.dbi_score ?? 0} - BLI {review.bli_score ?? 0} - State {review.generation_state ?? 'B'}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -318,6 +451,88 @@ export default async function DashboardPage() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="forge-card space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="forge-section-title flex items-center gap-2">
+              <Clock3 className="w-4 h-4 text-state-simplified" />
+              Clients Not Updated This Week
+            </h2>
+            <span className="text-xs text-forge-text-muted">{staleClients.length} require coach attention</span>
+          </div>
+
+          {staleClients.length === 0 ? (
+            <QueueEmptyState
+              icon={<CheckCircle className="w-8 h-8 mx-auto mb-2 text-state-stable opacity-50" />}
+              message="All active clients have fresh activity in the last 7 days."
+            />
+          ) : (
+            <div className="space-y-3">
+              {staleClients.map((client) => (
+                <Link key={client.client_id} href={`/clients/${client.client_id}`} className="block rounded-xl border border-state-simplified/20 bg-state-simplified/5 p-4 transition-colors hover:border-state-simplified/40 hover:bg-state-simplified/10">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-forge-text-primary">{client.full_name}</div>
+                      <div className="mt-1 text-xs text-forge-text-muted">
+                        {client.current_stage ? `${client.current_stage} - ` : ''}
+                        {formatStaleMessage(client)}
+                      </div>
+                    </div>
+                    <span className="forge-badge border border-state-simplified/30 bg-state-simplified/10 text-state-simplified text-[11px]">
+                      {client.days_since_activity ?? 7}+ days
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="forge-card space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="forge-section-title flex items-center gap-2">
+              <ClipboardCheck className="w-4 h-4 text-forge-gold" />
+              Protocol Reviews Due
+            </h2>
+            <span className="text-xs text-forge-text-muted">Every client protocol should be reviewed monthly</span>
+          </div>
+
+          {protocolReviewsDue.length === 0 ? (
+            <QueueEmptyState
+              icon={<CheckCircle className="w-8 h-8 mx-auto mb-2 text-state-stable opacity-50" />}
+              message="All active client protocols have been reviewed within the last 30 days."
+            />
+          ) : (
+            <div className="space-y-3">
+              {protocolReviewsDue.map((review) => (
+                <div key={`${review.client_id}-${review.protocol_id ?? 'missing'}`} className={`rounded-xl border p-4 ${review.review_status === 'overdue' || review.review_status === 'missing' ? 'border-state-recovery/25 bg-state-recovery/5' : 'border-forge-gold/20 bg-forge-gold/5'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-forge-text-primary">{review.full_name}</div>
+                      <div className="mt-1 text-xs text-forge-text-muted">
+                        {review.protocol_name ? `${review.protocol_name} - ` : 'No protocol on file - '}
+                        {formatProtocolReviewMessage(review)}
+                      </div>
+                    </div>
+                    <span className={`forge-badge border text-[11px] ${review.review_status === 'overdue' || review.review_status === 'missing' ? 'border-state-recovery/30 bg-state-recovery/10 text-state-recovery' : 'border-forge-gold/20 bg-forge-gold/10 text-forge-gold'}`}>
+                      {review.review_status === 'missing' ? 'Required now' : review.review_status === 'overdue' ? 'Overdue' : 'Due soon'}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <Link href={`/clients/${review.client_id}`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
+                      Open client
+                    </Link>
+                    <Link href={`/clients/${review.client_id}/protocols`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
+                      Review protocols
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -406,6 +621,15 @@ export default async function DashboardPage() {
   )
 }
 
+function QueueEmptyState({ icon, message }: { icon: React.ReactNode; message: string }) {
+  return (
+    <div className="text-center py-6 text-forge-text-muted text-sm">
+      {icon}
+      {message}
+    </div>
+  )
+}
+
 function StatCard({ label, value, icon, color, urgent = false }: {
   label: string
   value: number
@@ -450,4 +674,28 @@ function formatDate(dateStr: string): string {
   if (diff === 0) return 'Today'
   if (diff === 1) return 'Yesterday'
   return `${diff}d ago`
+}
+
+function formatStaleMessage(client: StaleClientRow) {
+  if (!client.last_activity_at || !client.last_activity_type) {
+    return 'No recent client activity is on file. Review and update this client.'
+  }
+
+  return `Last ${client.last_activity_type} ${formatDate(client.last_activity_at)}.`
+}
+
+function formatProtocolReviewMessage(review: ProtocolReviewRow) {
+  if (review.review_status === 'missing') {
+    return 'No protocol has been generated yet. Create the first protocol now.'
+  }
+
+  if (!review.last_protocol_review_at) {
+    return 'Protocol review date is missing. Open the client and validate the current plan.'
+  }
+
+  if (review.review_status === 'overdue') {
+    return `Last reviewed ${formatDate(review.last_protocol_review_at)}. Monthly review is overdue.`
+  }
+
+  return `Last reviewed ${formatDate(review.last_protocol_review_at)}. Monthly review window is due.`
 }
