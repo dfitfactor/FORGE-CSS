@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { getClientSession } from '@/lib/client-auth'
 import { db } from '@/lib/db'
@@ -53,11 +53,11 @@ export async function POST(request: NextRequest) {
 
     const recoveryScore = ({
       'Good - felt ready for next session': 9,
-      'Good – felt ready for next session': 9,
+      'Good - felt ready for next session': 9,
       'Moderate - some lingering soreness but manageable': 6,
-      'Moderate – some lingering soreness but manageable': 6,
+      'Moderate - some lingering soreness but manageable': 6,
       'Slow - persistent soreness or fatigue affected training': 3,
-      'Slow – persistent soreness or fatigue affected training': 3,
+      'Slow - persistent soreness or fatigue affected training': 3,
     } as Record<string, number>)[recoveryKey] ?? 5
 
     const client = await db.queryOne<{ id: string; full_name: string }>(
@@ -130,47 +130,73 @@ export async function POST(request: NextRequest) {
       ]
     )
 
-    const scores = await calculateBIEScores(session.clientId)
+    let scores = {
+      bar: workoutScore * 10,
+      dbi: Math.min(100, (Number(data.stress_rating) || 0) * 10),
+      bli: Math.min(100, Math.round((((Number(data.stress_rating) || 0) + (11 - (Number(data.mindset_rating) || 5))) / 20) * 100)),
+      cdi: Math.min(100, (11 - (Number(data.mindset_rating) || 5)) * 10),
+      lsi: Math.round((sleepScore * 0.45) + (energyScore * 0.55)),
+      pps: Math.round(((workoutScore * 10) * 0.4) + ((nutritionScore * 10) * 0.2) + ((sleepScore * 10) * 0.2) + ((energyScore * 10) * 0.2)),
+      gps: null as number | null,
+      generation_state: 'B',
+    }
 
-    await db.query(
-      `INSERT INTO behavioral_snapshots
-        (client_id, bar_score, dbi_score, bli_score,
-         cdi, lsi, pps, gps, generation_state,
-         snapshot_date, review_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, 'pending_review')
-       ON CONFLICT (client_id, snapshot_date)
-       DO UPDATE SET
-         bar_score = EXCLUDED.bar_score,
-         dbi_score = EXCLUDED.dbi_score,
-         bli_score = EXCLUDED.bli_score,
-         cdi = EXCLUDED.cdi,
-         lsi = EXCLUDED.lsi,
-         pps = EXCLUDED.pps,
-         gps = EXCLUDED.gps,
-         generation_state = EXCLUDED.generation_state,
-         review_status = 'pending_review',
-         updated_at = NOW()`,
-      [
-        session.clientId,
-        scores.bar ?? 0,
-        scores.dbi,
-        scores.bli,
-        scores.cdi,
-        scores.lsi,
-        scores.pps,
-        scores.gps,
-        scores.generation_state,
-      ]
-    )
+    try {
+      const calculatedScores = await calculateBIEScores(session.clientId)
+      scores = {
+        bar: calculatedScores.bar ?? scores.bar,
+        dbi: calculatedScores.dbi,
+        bli: calculatedScores.bli,
+        cdi: calculatedScores.cdi,
+        lsi: calculatedScores.lsi,
+        pps: calculatedScores.pps,
+        gps: calculatedScores.gps,
+        generation_state: calculatedScores.generation_state,
+      }
+
+      await db.query(
+        `INSERT INTO behavioral_snapshots
+          (client_id, bar_score, dbi_score, bli_score,
+           cdi, lsi, pps, gps, generation_state,
+           snapshot_date, review_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, 'pending_review')
+         ON CONFLICT (client_id, snapshot_date)
+         DO UPDATE SET
+           bar_score = EXCLUDED.bar_score,
+           dbi_score = EXCLUDED.dbi_score,
+           bli_score = EXCLUDED.bli_score,
+           cdi = EXCLUDED.cdi,
+           lsi = EXCLUDED.lsi,
+           pps = EXCLUDED.pps,
+           gps = EXCLUDED.gps,
+           generation_state = EXCLUDED.generation_state,
+           review_status = 'pending_review',
+           updated_at = NOW()`,
+        [
+          session.clientId,
+          scores.bar ?? 0,
+          scores.dbi,
+          scores.bli,
+          scores.cdi,
+          scores.lsi,
+          scores.pps,
+          scores.gps,
+          scores.generation_state,
+        ]
+      )
+    } catch (scoreErr) {
+      console.error('[portal/checkin] score calculation failed:', scoreErr)
+    }
 
     try {
       if (resend) {
         const coachSettings = await getCoachSettings()
+        const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin || 'https://forge-css.vercel.app'
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'FORGE <onboarding@resend.dev>',
           to: coachSettings.coachEmail,
           subject: `New Check-In: ${client.full_name} - Review Required`,
-          text: `${client.full_name} submitted their weekly check-in for the week ending ${String(data.week_ending_date ?? '')}.\n\nAuto-calculated scores:\nBAR: ${scores.bar ?? 0} | DBI: ${scores.dbi} | BLI: ${scores.bli}\nLSI: ${scores.lsi} | PPS: ${scores.pps}\nGeneration State: ${scores.generation_state}\n\nReview and approve at:\nhttps://forge-css.vercel.app/clients/${session.clientId}`,
+          text: `${client.full_name} submitted their weekly check-in for the week ending ${String(data.week_ending_date ?? '')}.\n\nAuto-calculated scores:\nBAR: ${scores.bar ?? 0} | DBI: ${scores.dbi} | BLI: ${scores.bli}\nLSI: ${scores.lsi} | PPS: ${scores.pps}\nGeneration State: ${scores.generation_state}\n\nReview and approve at:\n${baseUrl}/clients/${session.clientId}`,
         })
       }
     } catch (emailErr) {

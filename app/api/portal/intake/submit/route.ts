@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { getClientSession } from '@/lib/client-auth'
 import { db } from '@/lib/db'
@@ -115,11 +115,12 @@ export async function POST(request: NextRequest) {
     try {
       if (resend) {
         const coachSettings = await getCoachSettings()
+        const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin || 'https://forge-css.vercel.app'
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'FORGE <onboarding@resend.dev>',
           to: coachSettings.coachEmail,
           subject: `New Intake Form: ${fullName || 'Client'}`,
-          text: `${fullName || 'A client'} completed their intake form.\nView their profile at: https://forge-css.vercel.app/clients/${session.clientId}`,
+          text: `${fullName || 'A client'} completed their intake form.\nView their profile at: ${baseUrl}/clients/${session.clientId}`,
         })
       }
     } catch (emailErr) {
