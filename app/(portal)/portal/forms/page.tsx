@@ -1,4 +1,4 @@
-﻿import Link from 'next/link'
+import Link from 'next/link'
 import { db } from '@/lib/db'
 import { getPortalClientOrRedirect, getPortalForms } from '@/lib/client-portal'
 
@@ -130,19 +130,19 @@ export default async function PortalFormsPage({
 
   return (
     <div style={{ maxWidth: '860px', margin: '0 auto' }}>
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-        <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Forms</h1>
-        <p style={{ color: '#777', fontSize: 14, marginBottom: 0 }}>
+      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <h1 style={{ color: 'var(--app-text)', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Forms</h1>
+        <p style={{ color: 'var(--app-text-muted)', fontSize: 14, marginBottom: 0 }}>
           Complete the forms that support your onboarding, weekly progress review, and protocol accuracy.
         </p>
       </section>
 
       {(agreementRequired || agreementSubmission) ? (
-        <section style={{ background: '#111111', border: agreementRequired ? '1px solid rgba(239,68,68,0.32)' : '1px solid rgba(110,231,183,0.25)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <section style={{ background: 'var(--app-surface)', border: agreementRequired ? '1px solid rgba(239,68,68,0.32)' : '1px solid rgba(110,231,183,0.25)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ color: '#fff', fontWeight: 700, marginBottom: 6 }}>DFitFactor® Coaching Agreement</div>
-              <div style={{ color: '#777', fontSize: 13 }}>{agreementName}</div>
+              <div style={{ color: 'var(--app-text)', fontWeight: 700, marginBottom: 6 }}>DFitFactor® Coaching Agreement</div>
+              <div style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>{agreementName}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ color: agreementRequired ? '#f87171' : '#6ee7b7', fontSize: 12, fontWeight: 700 }}>
@@ -151,7 +151,7 @@ export default async function PortalFormsPage({
               <Link
                 href={agreementRequired || !agreementSubmission ? '/portal/forms/coaching-agreement' : `/portal/forms/completed/${agreementSubmission.id}`}
                 style={{
-                  background: agreementRequired ? '#D4AF37' : 'transparent',
+                  background: agreementRequired ? 'var(--app-gold)' : 'transparent',
                   color: agreementRequired ? '#000' : '#6ee7b7',
                   border: agreementRequired ? 'none' : '1px solid rgba(110,231,183,0.35)',
                   borderRadius: 8,
@@ -162,7 +162,7 @@ export default async function PortalFormsPage({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {agreementRequired ? 'Review & Sign →' : 'View PDF'}
+                {agreementRequired ? 'Review & Sign' : 'View PDF'}
               </Link>
             </div>
           </div>
@@ -170,9 +170,9 @@ export default async function PortalFormsPage({
       ) : null}
 
       {allForms.some((form) => form.required) ? (
-        <section style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-          <div style={{ color: '#D4AF37', fontWeight: 700, marginBottom: 8 }}>{allForms.filter((form) => form.required).length} form(s) still required</div>
-          <div style={{ color: '#ddd', fontSize: 14 }}>
+        <section style={{ background: 'var(--app-gold-soft)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+          <div style={{ color: 'var(--app-gold)', fontWeight: 700, marginBottom: 8 }}>{allForms.filter((form) => form.required).length} form(s) still required</div>
+          <div style={{ color: 'var(--app-text-secondary)', fontSize: 14 }}>
             Please complete these forms before your appointment so your coach can keep your plan safe and on track.
           </div>
         </section>
@@ -187,7 +187,7 @@ export default async function PortalFormsPage({
         </section>
       ) : null}
 
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
         {allForms.map((form, index) => {
           const defaultRoute = FORM_ROUTES[form.slug]
           const targetRoute = form.required || !form.submission
@@ -197,8 +197,8 @@ export default async function PortalFormsPage({
             <div key={form.id} style={{ borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)', padding: '16px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ color: '#fff', fontWeight: 600 }}>{form.name}</div>
-                  <div style={{ color: '#777', fontSize: 13, marginTop: 4 }}>{form.description}</div>
+                  <div style={{ color: 'var(--app-text)', fontWeight: 600 }}>{form.name}</div>
+                  <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>{form.description}</div>
                   {form.submission?.submitted_at && !form.required ? (
                     <div style={{ color: '#6ee7b7', fontSize: 12, marginTop: 8 }}>
                       Submitted {new Date(form.submission.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -206,15 +206,15 @@ export default async function PortalFormsPage({
                   ) : null}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ color: form.required ? '#D4AF37' : '#6ee7b7', fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ color: form.required ? 'var(--app-gold)' : '#6ee7b7', fontSize: 12, fontWeight: 700 }}>
                     {form.required ? 'Outstanding' : 'Completed'}
                   </span>
                   {targetRoute ? (
                     <Link
                       href={targetRoute}
                       style={{
-                        background: form.required ? '#D4AF37' : 'transparent',
-                        color: form.required ? '#000' : '#D4AF37',
+                        background: form.required ? 'var(--app-gold)' : 'transparent',
+                        color: form.required ? '#000' : 'var(--app-gold)',
                         border: form.required ? 'none' : '1px solid rgba(212,175,55,0.35)',
                         borderRadius: 8,
                         padding: '8px 14px',
@@ -235,21 +235,21 @@ export default async function PortalFormsPage({
       </section>
 
       {completedArchive.length > 0 ? (
-        <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
-          <div style={{ color: '#D4AF37', fontWeight: 700, fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
+        <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
+          <div style={{ color: 'var(--app-gold)', fontWeight: 700, fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
             Completed Form Archive
           </div>
           {completedArchive.map((submission, index) => (
             <div key={submission.id} style={{ borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)', padding: '14px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ color: '#fff', fontWeight: 600 }}>{submission.name}</div>
-                  <div style={{ color: '#777', fontSize: 13, marginTop: 4 }}>
+                  <div style={{ color: 'var(--app-text)', fontWeight: 600 }}>{submission.name}</div>
+                  <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>
                     Submitted {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'recently'}
                   </div>
                 </div>
-                <Link href={`/portal/forms/completed/${submission.id}`} style={{ color: '#D4AF37', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
-                  Open PDF View →
+                <Link href={`/portal/forms/completed/${submission.id}`} style={{ color: 'var(--app-gold)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+                  Open PDF View {'->'}
                 </Link>
               </div>
             </div>

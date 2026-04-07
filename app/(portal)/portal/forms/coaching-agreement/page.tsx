@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -156,16 +156,16 @@ export default function CoachingAgreementPage() {
   }
 
   if (loading) {
-    return <div style={{ maxWidth: '760px', margin: '0 auto', color: '#888', padding: '32px 0' }}>Loading agreement...</div>
+    return <div style={{ maxWidth: '760px', margin: '0 auto', color: 'var(--app-text-secondary)', padding: '32px 0' }}>Loading agreement...</div>
   }
 
   if (!agreementData) {
     return (
       <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-        <div style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', color: '#fff' }}>
+        <div style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', color: 'var(--app-text)' }}>
           <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>No active enrollment found</h1>
-          <p style={{ color: '#777', fontSize: '14px', marginBottom: '20px' }}>Visit our booking page to get started.</p>
-          <Link href="/book" style={{ display: 'inline-block', background: '#D4AF37', color: '#000', textDecoration: 'none', borderRadius: '10px', padding: '12px 16px', fontWeight: 700 }}>
+          <p style={{ color: 'var(--app-text-muted)', fontSize: '14px', marginBottom: '20px' }}>Visit our booking page to get started.</p>
+          <Link href="/book" style={{ display: 'inline-block', background: 'var(--app-gold)', color: '#000', textDecoration: 'none', borderRadius: '10px', padding: '12px 16px', fontWeight: 700 }}>
             Visit Booking Page &rarr;
           </Link>
         </div>
@@ -176,14 +176,14 @@ export default function CoachingAgreementPage() {
   const canSubmit = agreed && signatureName.trim().length > 2 && printName.trim().length > 2
 
   return (
-    <div style={{ maxWidth: '760px', margin: '0 auto', color: '#fff' }}>
-      <Link href="/portal/forms" style={{ color: '#888', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
+    <div style={{ maxWidth: '760px', margin: '0 auto', color: 'var(--app-text)' }}>
+      <Link href="/portal/forms" style={{ color: 'var(--app-text-secondary)', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
         Back to forms
       </Link>
 
       {success ? (
         <div style={{ background: 'rgba(110,231,183,0.1)', border: '1px solid rgba(110,231,183,0.3)', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px', color: '#6ee7b7', fontWeight: 700 }}>
-          ✅ {success}
+          {success}
         </div>
       ) : null}
 
@@ -193,8 +193,8 @@ export default function CoachingAgreementPage() {
         </div>
       ) : null}
 
-      <div style={{ background: '#111111', border: '1px solid rgba(212,175,55,0.35)', borderLeft: '4px solid #D4AF37', borderRadius: '16px', padding: '24px', marginBottom: '16px' }}>
-        <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px' }}>
+      <div style={{ background: 'var(--app-surface)', border: '1px solid rgba(212,175,55,0.35)', borderLeft: '4px solid #D4AF37', borderRadius: '16px', padding: '24px', marginBottom: '16px' }}>
+        <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px' }}>
           DFitFactor® Coaching Agreement
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px 20px' }}>
@@ -213,50 +213,50 @@ export default function CoachingAgreementPage() {
             ['Start Date', agreementData.startDate],
           ].map(([label, value]) => (
             <div key={String(label)}>
-              <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>{label}</div>
-              <div style={{ color: '#fff', fontSize: '14px' }}>{value}</div>
+              <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>{label}</div>
+              <div style={{ color: 'var(--app-text)', fontSize: '14px' }}>{value}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', marginBottom: '16px' }}>
-        <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '14px' }}>
+      <div style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', marginBottom: '16px' }}>
+        <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '14px' }}>
           Terms of Use
         </div>
-        <div style={{ maxHeight: '420px', overflowY: 'auto', color: '#ddd', fontSize: '14px', lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: termsHtml }} />
+        <div style={{ maxHeight: '420px', overflowY: 'auto', color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: termsHtml }} />
       </div>
 
-      <div style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px' }}>
-        <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: '16px' }}>
+      <div style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px' }}>
+        <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '16px' }}>
           By signing below, I acknowledge that I have read, understood, and agree to all terms of this DFitFactor® Coaching Agreement. I understand that my participation establishes a health and performance coaching relationship, which may include individualized training sessions as part of a broader coaching program. I agree to participate honestly and take responsibility for my engagement, communication, and adherence to program guidelines.
         </p>
 
-        <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: '#fff', fontSize: '14px', marginBottom: '18px' }}>
+        <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: 'var(--app-text)', fontSize: '14px', marginBottom: '18px' }}>
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
           YES — I confirm I have read and agree to all terms of this DFitFactor® Coaching Agreement
         </label>
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', color: '#D4AF37', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>Electronic Signature</label>
-          <input value={signatureName} onChange={(e) => setSignatureName(e.target.value)} placeholder="Type your full legal name" style={{ width: '100%', background: '#141414', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', color: '#fff', fontSize: '18px', fontStyle: 'italic', boxSizing: 'border-box' }} />
-          <p style={{ color: '#777', fontSize: '12px', marginTop: '8px' }}>By typing your name you agree this constitutes your legally binding electronic signature</p>
+          <label style={{ display: 'block', color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>Electronic Signature</label>
+          <input value={signatureName} onChange={(e) => setSignatureName(e.target.value)} placeholder="Type your full legal name" style={{ width: '100%', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', color: 'var(--app-text)', fontSize: '18px', fontStyle: 'italic', boxSizing: 'border-box' }} />
+          <p style={{ color: 'var(--app-text-muted)', fontSize: '12px', marginTop: '8px' }}>By typing your name you agree this constitutes your legally binding electronic signature</p>
         </div>
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', color: '#D4AF37', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>Print Name</label>
-          <input value={printName} onChange={(e) => setPrintName(e.target.value)} placeholder="Your full legal name" style={{ width: '100%', background: '#141414', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }} />
+          <label style={{ display: 'block', color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>Print Name</label>
+          <input value={printName} onChange={(e) => setPrintName(e.target.value)} placeholder="Your full legal name" style={{ width: '100%', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', color: 'var(--app-text)', fontSize: '14px', boxSizing: 'border-box' }} />
         </div>
 
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', color: '#D4AF37', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>Date</label>
-          <div style={{ width: '100%', background: '#141414', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }}>
+          <label style={{ display: 'block', color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>Date</label>
+          <div style={{ width: '100%', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', color: 'var(--app-text)', fontSize: '14px', boxSizing: 'border-box' }}>
             {signatureDate}
           </div>
         </div>
 
-        <button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting} style={{ width: '100%', background: '#D4AF37', color: '#000', border: 'none', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 700, cursor: !canSubmit || submitting ? 'not-allowed' : 'pointer', opacity: !canSubmit || submitting ? 0.6 : 1 }}>
-          {submitting ? 'Submitting...' : 'Sign Coaching Agreement →'}
+        <button type="button" onClick={handleSubmit} disabled={!canSubmit || submitting} style={{ width: '100%', background: 'var(--app-gold)', color: '#000', border: 'none', borderRadius: '10px', padding: '14px', fontSize: '15px', fontWeight: 700, cursor: !canSubmit || submitting ? 'not-allowed' : 'pointer', opacity: !canSubmit || submitting ? 0.6 : 1 }}>
+          {submitting ? 'Submitting...' : 'Sign Coaching Agreement'}
         </button>
       </div>
     </div>

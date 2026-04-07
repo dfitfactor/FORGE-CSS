@@ -1,11 +1,11 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#111111',
+  backgroundColor: 'var(--app-surface)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '12px',
   padding: '24px',
@@ -14,11 +14,11 @@ const cardStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1a1a1a',
+  backgroundColor: 'var(--app-surface-muted)',
   border: '1px solid rgba(255,255,255,0.1)',
   borderRadius: '8px',
   padding: '12px 16px',
-  color: '#ffffff',
+  color: 'var(--app-text)',
   fontSize: '14px',
   boxSizing: 'border-box',
 }
@@ -95,25 +95,25 @@ export default function WaiverPage() {
 
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-      <Link href="/portal/forms" style={{ color: '#888', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
+      <Link href="/portal/forms" style={{ color: 'var(--app-text-secondary)', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
         Back to forms
       </Link>
 
       <div style={cardStyle}>
-        <h1 style={{ color: '#fff', fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>
+        <h1 style={{ color: 'var(--app-text)', fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>
           Waiver and Release of Liability
         </h1>
-        <p style={{ color: '#777', fontSize: '14px', marginBottom: 0 }}>
+        <p style={{ color: 'var(--app-text-muted)', fontSize: '14px', marginBottom: 0 }}>
           Please review and sign this waiver before participating in DFitfactor health coaching services.
         </p>
       </div>
 
       <form onSubmit={handleSubmit}>
         <section style={cardStyle}>
-          <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+          <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
             Acknowledgment of Risks
           </div>
-          <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: 0 }}>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: 0 }}>
             I acknowledge that I am voluntarily participating in health coaching services provided by
             DFitfactor LLC. I understand that participation in fitness and wellness activities involves
             inherent risks, including but not limited to physical injury, health complications, and other
@@ -122,16 +122,16 @@ export default function WaiverPage() {
         </section>
 
         <section style={cardStyle}>
-          <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+          <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
             Health Disclosure
           </div>
-          <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
             I affirm that I have disclosed all relevant health conditions to my health coach and understand
             that DFitfactor LLC is not a medical provider and does not offer medical advice. I acknowledge
             that it is my responsibility to consult with a healthcare professional before participating in
             any fitness or wellness activities.
           </p>
-          <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: '#fff', fontSize: '14px' }}>
+          <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: 'var(--app-text)', fontSize: '14px' }}>
             <input
               type="checkbox"
               checked={form.health_disclosure}
@@ -142,16 +142,16 @@ export default function WaiverPage() {
         </section>
 
         <section style={cardStyle}>
-          <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+          <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
             Assumption of Responsibility
           </div>
-          <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
             By signing this waiver, I accept full responsibility for my health and well-being during my
             participation in the services and programs offered by DFitfactor LLC. I agree to follow all
             instructions provided by my health coach and to inform them of any discomfort or health issues
             that may arise during my participation.
           </p>
-          <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: '#fff', fontSize: '14px' }}>
+          <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: 'var(--app-text)', fontSize: '14px' }}>
             <input
               type="checkbox"
               checked={form.assumption_of_responsibility}
@@ -164,15 +164,15 @@ export default function WaiverPage() {
         </section>
 
         <section style={cardStyle}>
-          <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+          <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
             Media Consent
           </div>
-          <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
             DFitfactor LLC may take photographs, video, or audio recordings during sessions, events, or
             services for promotional, marketing, educational, or other lawful business purposes.
           </p>
           <div style={{ display: 'grid', gap: '10px' }}>
-            <label style={{ display: 'flex', gap: '10px', color: '#fff', fontSize: '14px' }}>
+            <label style={{ display: 'flex', gap: '10px', color: 'var(--app-text)', fontSize: '14px' }}>
               <input
                 type="radio"
                 name="media_consent"
@@ -181,7 +181,7 @@ export default function WaiverPage() {
               />
               I consent to the use of my image, audio, or video.
             </label>
-            <label style={{ display: 'flex', gap: '10px', color: '#fff', fontSize: '14px' }}>
+            <label style={{ display: 'flex', gap: '10px', color: 'var(--app-text)', fontSize: '14px' }}>
               <input
                 type="radio"
                 name="media_consent"
@@ -194,16 +194,16 @@ export default function WaiverPage() {
         </section>
 
         <section style={cardStyle}>
-          <div style={{ color: '#D4AF37', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+          <div style={{ color: 'var(--app-gold)', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
             Release of Liability
           </div>
-          <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
             I hereby release, waive, and discharge DFitfactor LLC, its staff, and affiliates from any and
             all claims, demands, or causes of action that may arise from my involvement in its services or
             programs, including but not limited to claims for personal injury, property damage, or wrongful
             death.
           </p>
-          <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: '#fff', fontSize: '14px' }}>
+          <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: 'var(--app-text)', fontSize: '14px' }}>
             <input
               type="checkbox"
               checked={form.release_of_liability}
@@ -216,7 +216,7 @@ export default function WaiverPage() {
         <section style={cardStyle}>
           <div style={{ display: 'grid', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+              <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
                 Typed Signature
               </label>
               <input
@@ -228,7 +228,7 @@ export default function WaiverPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+              <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
                 Date
               </label>
               <input
@@ -248,7 +248,7 @@ export default function WaiverPage() {
           disabled={submitting}
           style={{
             width: '100%',
-            backgroundColor: '#D4AF37',
+            backgroundColor: 'var(--app-gold)',
             color: '#000000',
             border: 'none',
             borderRadius: '8px',

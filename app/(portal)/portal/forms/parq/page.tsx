@@ -1,11 +1,11 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#111111',
+  backgroundColor: 'var(--app-surface)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '12px',
   padding: '24px',
@@ -14,11 +14,11 @@ const cardStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1a1a1a',
+  backgroundColor: 'var(--app-surface-muted)',
   border: '1px solid rgba(255,255,255,0.1)',
   borderRadius: '8px',
   padding: '12px 16px',
-  color: '#ffffff',
+  color: 'var(--app-text)',
   fontSize: '14px',
   boxSizing: 'border-box',
 }
@@ -64,13 +64,13 @@ export default function ParqPage() {
   ) {
     return (
       <div style={{ marginBottom: '18px' }}>
-        <div style={{ color: '#fff', fontSize: '14px', marginBottom: '10px', lineHeight: 1.5 }}>{label}</div>
+        <div style={{ color: 'var(--app-text)', fontSize: '14px', marginBottom: '10px', lineHeight: 1.5 }}>{label}</div>
         <div style={{ display: 'flex', gap: '18px' }}>
-          <label style={{ color: '#ddd', fontSize: '14px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ color: 'var(--app-text-secondary)', fontSize: '14px', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <input type="radio" name={field} checked={form[field] === 'yes'} onChange={() => setField(field, 'yes')} />
             Yes
           </label>
-          <label style={{ color: '#ddd', fontSize: '14px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ color: 'var(--app-text-secondary)', fontSize: '14px', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <input type="radio" name={field} checked={form[field] === 'no'} onChange={() => setField(field, 'no')} />
             No
           </label>
@@ -148,15 +148,15 @@ export default function ParqPage() {
 
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-      <Link href="/portal/forms" style={{ color: '#888', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
+      <Link href="/portal/forms" style={{ color: 'var(--app-text-secondary)', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
         Back to forms
       </Link>
 
       <div style={cardStyle}>
-        <h1 style={{ color: '#fff', fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>
+        <h1 style={{ color: 'var(--app-text)', fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>
           Physical Activity Readiness Questionnaire
         </h1>
-        <p style={{ color: '#777', fontSize: '14px', marginBottom: 0 }}>
+        <p style={{ color: 'var(--app-text-muted)', fontSize: '14px', marginBottom: 0 }}>
           Please answer this health screening as accurately as possible before beginning your program.
         </p>
       </div>
@@ -170,27 +170,27 @@ export default function ParqPage() {
           {renderYesNoField('Do you have a bone or joint problem that could be made worse by a change in physical activity?', 'bone_or_joint_problem')}
           {renderYesNoField('Have you had any surgeries in the past?', 'prior_surgeries')}
           <div style={{ marginBottom: '18px' }}>
-            <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+            <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
               List surgeries or hospitalizations and dates
             </label>
             <textarea value={form.surgery_details} onChange={(e) => setField('surgery_details', e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
           {renderYesNoField('Are you currently taking any medications?', 'medications')}
           <div style={{ marginBottom: '18px' }}>
-            <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+            <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
               List medications you are taking and dosage
             </label>
             <textarea value={form.medication_details} onChange={(e) => setField('medication_details', e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
           {renderYesNoField('Do you have any other medical conditions that may affect your ability to exercise?', 'medical_conditions')}
           <div style={{ marginBottom: '18px' }}>
-            <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+            <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
               List medical conditions or injuries that affect your ability to exercise
             </label>
             <textarea value={form.medical_condition_details} onChange={(e) => setField('medical_condition_details', e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
           <div>
-            <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+            <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
               Additional Comments
             </label>
             <textarea value={form.additional_comments} onChange={(e) => setField('additional_comments', e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
@@ -198,7 +198,7 @@ export default function ParqPage() {
         </section>
 
         <section style={cardStyle}>
-          <p style={{ color: '#ddd', fontSize: '14px', lineHeight: 1.7, marginBottom: '16px' }}>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '16px' }}>
             This screening is for wellness planning only. It is not a substitute for medical advice or
             evaluation. If you answered yes to any questions above, please discuss them with your trainer
             and consult your physician before beginning this program.
@@ -206,7 +206,7 @@ export default function ParqPage() {
 
           <div style={{ display: 'grid', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+              <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
                 Typed Signature
               </label>
               <input
@@ -218,7 +218,7 @@ export default function ParqPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+              <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
                 Date
               </label>
               <input type="date" value={form.date} onChange={(e) => setField('date', e.target.value)} style={inputStyle} />
@@ -233,7 +233,7 @@ export default function ParqPage() {
           disabled={submitting}
           style={{
             width: '100%',
-            backgroundColor: '#D4AF37',
+            backgroundColor: 'var(--app-gold)',
             color: '#000000',
             border: 'none',
             borderRadius: '8px',

@@ -1,11 +1,11 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
 const baseCard: React.CSSProperties = {
-  backgroundColor: '#111111',
+  backgroundColor: 'var(--app-surface)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '16px',
   padding: '24px',
@@ -13,11 +13,11 @@ const baseCard: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#141414',
+  backgroundColor: 'var(--app-surface-muted)',
   border: '1px solid rgba(255,255,255,0.1)',
   borderRadius: '10px',
   padding: '12px 14px',
-  color: '#fff',
+  color: 'var(--app-text)',
   fontSize: '14px',
   boxSizing: 'border-box',
 }
@@ -51,8 +51,8 @@ function RadioGroup({
               padding: '12px 14px',
               borderRadius: '10px',
               border: active ? '1px solid rgba(212,175,55,0.8)' : '1px solid rgba(255,255,255,0.08)',
-              background: active ? 'rgba(212,175,55,0.12)' : '#141414',
-              color: active ? '#D4AF37' : '#ddd',
+              background: active ? 'var(--app-gold-soft)' : 'var(--app-surface-muted)',
+              color: active ? 'var(--app-gold)' : 'var(--app-text-secondary)',
               fontSize: '14px',
               cursor: 'pointer',
             }}
@@ -87,8 +87,8 @@ function CheckboxGroup({
               borderRadius: '999px',
               padding: '10px 14px',
               border: active ? '1px solid rgba(212,175,55,0.8)' : '1px solid rgba(255,255,255,0.08)',
-              background: active ? 'rgba(212,175,55,0.14)' : '#141414',
-              color: active ? '#D4AF37' : '#ddd',
+              background: active ? 'var(--app-gold-soft)' : 'var(--app-surface-muted)',
+              color: active ? 'var(--app-gold)' : 'var(--app-text-secondary)',
               fontSize: '13px',
               cursor: 'pointer',
             }}
@@ -120,9 +120,9 @@ function SliderField({
         max={max}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: '#D4AF37' }}
+        style={{ width: '100%', accentColor: 'var(--app-gold)' }}
       />
-      <div style={{ color: '#D4AF37', fontSize: '13px', fontWeight: 700, marginTop: '6px' }}>{value} / {max}</div>
+      <div style={{ color: 'var(--app-gold)', fontSize: '13px', fontWeight: 700, marginTop: '6px' }}>{value} / {max}</div>
     </div>
   )
 }
@@ -130,10 +130,10 @@ function SliderField({
 function Field({ label, helper, children }: { label: string; helper?: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: '20px' }}>
-      <label style={{ display: 'block', color: '#fff', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
+      <label style={{ display: 'block', color: 'var(--app-text)', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
         {label}
       </label>
-      {helper ? <p style={{ color: '#777', fontSize: '12px', marginBottom: '10px' }}>{helper}</p> : null}
+      {helper ? <p style={{ color: 'var(--app-text-muted)', fontSize: '12px', marginBottom: '10px' }}>{helper}</p> : null}
       {children}
     </div>
   )
@@ -328,19 +328,19 @@ export default function WeeklyCheckinPage() {
   const currentStep = steps[step]
 
   return (
-    <div style={{ maxWidth: '640px', margin: '0 auto', color: '#fff' }}>
-      <Link href="/portal/forms" style={{ color: '#888', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
+    <div style={{ maxWidth: '640px', margin: '0 auto', color: 'var(--app-text)' }}>
+      <Link href="/portal/forms" style={{ color: 'var(--app-text-secondary)', fontSize: '13px', textDecoration: 'none', display: 'inline-block', marginBottom: '16px' }}>
         Back to forms
       </Link>
       <div style={baseCard}>
-        <div style={{ color: '#D4AF37', fontSize: '13px', fontWeight: 700, marginBottom: '14px' }}>Step {step + 1} of {steps.length}</div>
+        <div style={{ color: 'var(--app-gold)', fontSize: '13px', fontWeight: 700, marginBottom: '14px' }}>Step {step + 1} of {steps.length}</div>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
           {steps.map((_, index) => (
-            <div key={index} style={{ flex: 1, height: '8px', borderRadius: '999px', background: index <= step ? '#D4AF37' : 'rgba(255,255,255,0.14)' }} />
+            <div key={index} style={{ flex: 1, height: '8px', borderRadius: '999px', background: index <= step ? 'var(--app-gold)' : 'var(--app-border-strong)' }} />
           ))}
         </div>
         <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '6px' }}>Weekly Guided Progress Check-In</h1>
-        <p style={{ color: '#777', fontSize: '14px', marginBottom: '24px' }}>{currentStep.title}</p>
+        <p style={{ color: 'var(--app-text-muted)', fontSize: '14px', marginBottom: '24px' }}>{currentStep.title}</p>
 
         {currentStep.content}
 
@@ -357,7 +357,7 @@ export default function WeeklyCheckinPage() {
               padding: '14px',
               background: 'transparent',
               border: '1px solid rgba(255,255,255,0.14)',
-              color: '#fff',
+              color: 'var(--app-text)',
               opacity: step === 0 ? 0.4 : 1,
               cursor: step === 0 ? 'not-allowed' : 'pointer',
             }}
@@ -368,7 +368,7 @@ export default function WeeklyCheckinPage() {
             <button
               type="button"
               onClick={() => setStep((value) => Math.min(steps.length - 1, value + 1))}
-              style={{ flex: 1, borderRadius: '10px', padding: '14px', background: '#D4AF37', border: 'none', color: '#000', fontWeight: 700, cursor: 'pointer' }}
+              style={{ flex: 1, borderRadius: '10px', padding: '14px', background: 'var(--app-gold)', border: 'none', color: '#000', fontWeight: 700, cursor: 'pointer' }}
             >
               Next
             </button>
@@ -377,7 +377,7 @@ export default function WeeklyCheckinPage() {
               type="button"
               onClick={handleSubmit}
               disabled={submitting}
-              style={{ flex: 1, borderRadius: '10px', padding: '14px', background: '#D4AF37', border: 'none', color: '#000', fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.7 : 1 }}
+              style={{ flex: 1, borderRadius: '10px', padding: '14px', background: 'var(--app-gold)', border: 'none', color: '#000', fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.7 : 1 }}
             >
               {submitting ? 'Submitting...' : 'Submit Weekly Check-In'}
             </button>

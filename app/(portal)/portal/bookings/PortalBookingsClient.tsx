@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useMemo, useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, List, Loader2 } from 'lucide-react'
@@ -25,7 +25,7 @@ function badgeColors(status: string) {
   if (status === 'confirmed') return { background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.35)' }
   if (status === 'completed') return { background: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.35)' }
   if (status === 'cancelled' || status === 'no_show') return { background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.35)' }
-  if (status === 'approved' || status === 'rescheduled') return { background: 'rgba(212,175,55,0.12)', color: '#D4AF37', border: '1px solid rgba(212,175,55,0.35)' }
+  if (status === 'approved' || status === 'rescheduled') return { background: 'var(--app-gold-soft)', color: 'var(--app-gold)', border: '1px solid rgba(212,175,55,0.35)' }
   return { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.35)' }
 }
 
@@ -196,11 +196,11 @@ export default function PortalBookingsClient({
       {message ? <div style={{ marginBottom: 16, borderRadius: 12, border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.12)', color: '#6ee7b7', padding: '14px 16px', fontSize: 14 }}>{message}</div> : null}
       {error ? <div style={{ marginBottom: 16, borderRadius: 12, border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.12)', color: '#fca5a5', padding: '14px 16px', fontSize: 14 }}>{error}</div> : null}
 
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Sessions</h1>
-            <p style={{ color: '#777', fontSize: 14, marginBottom: 0 }}>
+            <h1 style={{ color: 'var(--app-text)', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Sessions</h1>
+            <p style={{ color: 'var(--app-text-muted)', fontSize: 14, marginBottom: 0 }}>
               View your booked sessions, upcoming requests, and make changes more than 24 hours in advance.
             </p>
           </div>
@@ -211,8 +211,8 @@ export default function PortalBookingsClient({
               style={{
                 borderRadius: 10,
                 border: viewMode === 'list' ? '1px solid rgba(212,175,55,0.45)' : '1px solid rgba(255,255,255,0.1)',
-                background: viewMode === 'list' ? 'rgba(212,175,55,0.12)' : 'transparent',
-                color: viewMode === 'list' ? '#D4AF37' : '#ddd',
+                background: viewMode === 'list' ? 'var(--app-gold-soft)' : 'transparent',
+                color: viewMode === 'list' ? 'var(--app-gold)' : 'var(--app-text-secondary)',
                 padding: '10px 14px',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -229,8 +229,8 @@ export default function PortalBookingsClient({
               style={{
                 borderRadius: 10,
                 border: viewMode === 'calendar' ? '1px solid rgba(212,175,55,0.45)' : '1px solid rgba(255,255,255,0.1)',
-                background: viewMode === 'calendar' ? 'rgba(212,175,55,0.12)' : 'transparent',
-                color: viewMode === 'calendar' ? '#D4AF37' : '#ddd',
+                background: viewMode === 'calendar' ? 'var(--app-gold-soft)' : 'transparent',
+                color: viewMode === 'calendar' ? 'var(--app-gold)' : 'var(--app-text-secondary)',
                 padding: '10px 14px',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -246,11 +246,11 @@ export default function PortalBookingsClient({
       </section>
 
       {viewMode === 'calendar' ? (
-        <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
             <div>
-              <div style={{ color: '#D4AF37', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Calendar</div>
-              <div style={{ color: '#fff', fontSize: 20, fontWeight: 600 }}>
+              <div style={{ color: 'var(--app-gold)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Calendar</div>
+              <div style={{ color: 'var(--app-text)', fontSize: 20, fontWeight: 600 }}>
                 {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </div>
             </div>
@@ -258,7 +258,7 @@ export default function PortalBookingsClient({
               <button
                 type="button"
                 onClick={() => setSelectedMonth((current) => addMonths(current, -1))}
-                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#ddd', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
               >
                 <ChevronLeft size={16} />
                 Previous
@@ -266,14 +266,14 @@ export default function PortalBookingsClient({
               <button
                 type="button"
                 onClick={() => setSelectedMonth(startOfMonth(new Date()))}
-                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#ddd', padding: '10px 12px', cursor: 'pointer' }}
+                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 12px', cursor: 'pointer' }}
               >
                 Current Month
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedMonth((current) => addMonths(current, 1))}
-                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#ddd', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
               >
                 Next
                 <ChevronRight size={16} />
@@ -282,10 +282,10 @@ export default function PortalBookingsClient({
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: 760, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ minWidth: 760, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--app-surface-muted)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'var(--app-surface-muted)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                  <div key={day} style={{ padding: '12px 10px', textAlign: 'center', color: '#777', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  <div key={day} style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--app-text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
                     {day}
                   </div>
                 ))}
@@ -310,7 +310,7 @@ export default function PortalBookingsClient({
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <span style={{
-                          color: isToday ? '#D4AF37' : '#fff',
+                          color: isToday ? 'var(--app-gold)' : 'var(--app-text)',
                           fontSize: 14,
                           fontWeight: 700,
                           width: 28,
@@ -319,18 +319,18 @@ export default function PortalBookingsClient({
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          background: isToday ? 'rgba(212,175,55,0.12)' : 'transparent',
+                          background: isToday ? 'var(--app-gold-soft)' : 'transparent',
                         }}>
                           {day.getDate()}
                         </span>
                         {dayBookings.length > 0 ? (
-                          <span style={{ color: '#888', fontSize: 11 }}>{dayBookings.length} booked</span>
+                          <span style={{ color: 'var(--app-text-secondary)', fontSize: 11 }}>{dayBookings.length} booked</span>
                         ) : null}
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {dayBookings.length === 0 ? (
-                          <span style={{ color: '#555', fontSize: 12 }}>No sessions</span>
+                          <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>No sessions</span>
                         ) : (
                           dayBookings.slice(0, 3).map((booking) => (
                             <div
@@ -348,7 +348,7 @@ export default function PortalBookingsClient({
                           ))
                         )}
                         {dayBookings.length > 3 ? (
-                          <span style={{ color: '#D4AF37', fontSize: 11 }}>+{dayBookings.length - 3} more</span>
+                          <span style={{ color: 'var(--app-gold)', fontSize: 11 }}>+{dayBookings.length - 3} more</span>
                         ) : null}
                       </div>
                     </div>
@@ -360,21 +360,21 @@ export default function PortalBookingsClient({
         </section>
       ) : null}
 
-      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-        <div style={{ color: '#D4AF37', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>Upcoming & Active</div>
+      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <div style={{ color: 'var(--app-gold)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>Upcoming & Active</div>
         {grouped.upcoming.length === 0 ? (
-          <p style={{ color: '#888', fontSize: 14 }}>No upcoming sessions or requests right now.</p>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: 14 }}>No upcoming sessions or requests right now.</p>
         ) : (
           grouped.upcoming.map((booking) => (
             <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '16px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>{booking.item_name}</div>
-                  <div style={{ color: '#888', fontSize: 14, marginTop: 4 }}>
+                  <div style={{ color: 'var(--app-text)', fontWeight: 600, fontSize: 16 }}>{booking.item_name}</div>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 14, marginTop: 4 }}>
                     {new Date(`${booking.booking_date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {booking.booking_time.slice(0, 5)}
                   </div>
-                  <div style={{ color: '#666', fontSize: 13, marginTop: 4 }}>
-                    Payment: {booking.payment_status ?? 'unpaid'}{booking.notes ? ` · ${booking.notes}` : ''}
+                  <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>
+                    Payment: {booking.payment_status ?? 'unpaid'}{booking.notes ? `  -  ${booking.notes}` : ''}
                   </div>
                 </div>
                 <span style={{ ...badgeColors(booking.status), textTransform: 'capitalize', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
@@ -401,22 +401,22 @@ export default function PortalBookingsClient({
                       setSlots([])
                       setError('')
                     }}
-                    style={{ borderRadius: 10, border: '1px solid rgba(212,175,55,0.35)', background: 'transparent', color: '#D4AF37', padding: '10px 14px', cursor: 'pointer' }}
+                    style={{ borderRadius: 10, border: '1px solid rgba(212,175,55,0.35)', background: 'transparent', color: 'var(--app-gold)', padding: '10px 14px', cursor: 'pointer' }}
                   >
                     {reschedulingId === booking.id ? 'Close Reschedule' : 'Reschedule'}
                   </button>
                 </div>
               ) : (
-                <div style={{ color: '#777', fontSize: 13, marginTop: 12 }}>
+                <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 12 }}>
                   Changes are available until 24 hours before your scheduled time.
                 </div>
               )}
 
               {reschedulingId === booking.id ? (
-                <div style={{ marginTop: 16, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: 16 }}>
+                <div style={{ marginTop: 16, borderRadius: 14, background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.08)', padding: 16 }}>
                   <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                     <div>
-                      <label style={{ display: 'block', color: '#888', fontSize: 12, marginBottom: 8 }}>New Date</label>
+                      <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 8 }}>New Date</label>
                       <input
                         type="date"
                         value={selectedDate}
@@ -427,11 +427,11 @@ export default function PortalBookingsClient({
                             void loadSlots(booking, nextDate, selectedWindow)
                           }
                         }}
-                        style={{ width: '100%', boxSizing: 'border-box', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', color: '#fff' }}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', color: 'var(--app-text)' }}
                       />
                     </div>
                     <div>
-                      <label style={{ display: 'block', color: '#888', fontSize: 12, marginBottom: 8 }}>Time Of Day</label>
+                      <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 8 }}>Time Of Day</label>
                       <select
                         value={selectedWindow}
                         onChange={(event) => {
@@ -441,7 +441,7 @@ export default function PortalBookingsClient({
                             void loadSlots(booking, selectedDate, nextWindow)
                           }
                         }}
-                        style={{ width: '100%', boxSizing: 'border-box', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', color: '#fff' }}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', color: 'var(--app-text)' }}
                       >
                         <option value="morning">Morning</option>
                         <option value="afternoon">Afternoon</option>
@@ -451,9 +451,9 @@ export default function PortalBookingsClient({
                   </div>
 
                   <div style={{ marginTop: 14 }}>
-                    <div style={{ color: '#888', fontSize: 12, marginBottom: 10 }}>Available Times</div>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 10 }}>Available Times</div>
                     {slotsLoading ? (
-                      <div style={{ color: '#aaa', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 className="h-4 w-4 animate-spin" /> Loading available times...</div>
+                      <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 className="h-4 w-4 animate-spin" /> Loading available times...</div>
                     ) : (
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {slots.map((slot) => (
@@ -464,8 +464,8 @@ export default function PortalBookingsClient({
                             style={{
                               borderRadius: 10,
                               border: selectedTime === slot.value ? '1px solid rgba(212,175,55,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                              background: selectedTime === slot.value ? 'rgba(212,175,55,0.12)' : 'transparent',
-                              color: selectedTime === slot.value ? '#f6dfa1' : '#ddd',
+                              background: selectedTime === slot.value ? 'var(--app-gold-soft)' : 'transparent',
+                              color: selectedTime === slot.value ? '#f6dfa1' : 'var(--app-text-secondary)',
                               padding: '10px 12px',
                               cursor: 'pointer',
                             }}
@@ -473,7 +473,7 @@ export default function PortalBookingsClient({
                             {slot.label}
                           </button>
                         ))}
-                        {slots.length === 0 && !slotsLoading ? <div style={{ color: '#777', fontSize: 13 }}>Choose a date to load available times.</div> : null}
+                        {slots.length === 0 && !slotsLoading ? <div style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>Choose a date to load available times.</div> : null}
                       </div>
                     )}
                   </div>
@@ -483,7 +483,7 @@ export default function PortalBookingsClient({
                       type="button"
                       onClick={() => handleReschedule(booking)}
                       disabled={activeBookingId === booking.id}
-                      style={{ borderRadius: 10, border: 'none', background: '#D4AF37', color: '#111', padding: '10px 16px', fontWeight: 700, cursor: 'pointer', opacity: activeBookingId === booking.id ? 0.6 : 1 }}
+                      style={{ borderRadius: 10, border: 'none', background: 'var(--app-gold)', color: '#111', padding: '10px 16px', fontWeight: 700, cursor: 'pointer', opacity: activeBookingId === booking.id ? 0.6 : 1 }}
                     >
                       {activeBookingId === booking.id ? 'Saving...' : 'Submit Reschedule Request'}
                     </button>
@@ -495,16 +495,16 @@ export default function PortalBookingsClient({
         )}
       </section>
 
-      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
-        <div style={{ color: '#D4AF37', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>History</div>
+      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
+        <div style={{ color: 'var(--app-gold)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>History</div>
         {grouped.history.length === 0 ? (
-          <p style={{ color: '#888', fontSize: 14 }}>Your completed, cancelled, and missed session history will appear here.</p>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: 14 }}>Your completed, cancelled, and missed session history will appear here.</p>
         ) : (
           grouped.history.map((booking) => (
             <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '14px 0', display: 'flex', justifyContent: 'space-between', gap: 16 }}>
               <div>
-                <div style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>{booking.item_name}</div>
-                <div style={{ color: '#777', fontSize: 13, marginTop: 4 }}>
+                <div style={{ color: 'var(--app-text)', fontWeight: 600, fontSize: 15 }}>{booking.item_name}</div>
+                <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>
                   {new Date(`${booking.booking_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {booking.booking_time.slice(0, 5)}
                 </div>
               </div>

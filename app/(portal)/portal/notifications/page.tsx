@@ -1,4 +1,4 @@
-﻿import Link from 'next/link'
+import Link from 'next/link'
 import { db } from '@/lib/db'
 import { getPortalBookings, getPortalClientOrRedirect, getPortalForms, getPortalProtocol } from '@/lib/client-portal'
 
@@ -66,24 +66,24 @@ export default async function PortalNotificationsPage() {
 
   return (
     <div style={{ maxWidth: '860px', margin: '0 auto' }}>
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-        <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>Notifications</h1>
-        <p style={{ color: '#777', fontSize: 14, marginBottom: 0 }}>
+      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <h1 style={{ color: 'var(--app-text)', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>Notifications</h1>
+        <p style={{ color: 'var(--app-text-muted)', fontSize: 14, marginBottom: 0 }}>
           A timeline of your own booking, protocol, and form activity inside FORGE.
         </p>
       </section>
 
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
+      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
         {items.length === 0 ? (
-          <p style={{ color: '#888', fontSize: 14 }}>No notifications yet.</p>
+          <p style={{ color: 'var(--app-text-secondary)', fontSize: 14 }}>No notifications yet.</p>
         ) : (
           items.map((item, index) => (
             <div key={`${item.title}-${index}`} style={{ borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)', padding: index === 0 ? '0 0 16px' : '16px 0 16px' }}>
-              <div style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>{item.title}</div>
-              <div style={{ color: '#aaa', fontSize: 14, marginTop: 6 }}>{item.body}</div>
+              <div style={{ color: 'var(--app-text)', fontWeight: 600, fontSize: 15 }}>{item.title}</div>
+              <div style={{ color: 'var(--app-text-secondary)', fontSize: 14, marginTop: 6 }}>{item.body}</div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                <span style={{ color: '#666', fontSize: 12 }}>{new Date(item.timestamp).toLocaleString('en-US')}</span>
-                {item.href ? <Link href={item.href} style={{ color: '#D4AF37', fontSize: 12, textDecoration: 'none' }}>Open &rarr;</Link> : null}
+                <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>{new Date(item.timestamp).toLocaleString('en-US')}</span>
+                {item.href ? <Link href={item.href} style={{ color: 'var(--app-gold)', fontSize: 12, textDecoration: 'none' }}>Open &rarr;</Link> : null}
               </div>
             </div>
           ))

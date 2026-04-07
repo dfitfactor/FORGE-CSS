@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -75,16 +75,16 @@ export default function PortalAuthClient() {
     <div style={{ maxWidth: '400px', margin: '60px auto', padding: '0 16px' }}>
       <div
         style={{
-          backgroundColor: '#111111',
+          backgroundColor: 'var(--app-surface)',
           border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '16px',
           padding: '40px',
         }}
       >
-        <h1 style={{ color: '#D4AF37', fontSize: '24px', marginBottom: '8px', fontWeight: 'bold' }}>
+        <h1 style={{ color: 'var(--app-gold)', fontSize: '24px', marginBottom: '8px', fontWeight: 'bold' }}>
           Client Portal
         </h1>
-        <p style={{ color: '#666', fontSize: '14px', marginBottom: '32px' }}>
+        <p style={{ color: 'var(--app-text-muted)', fontSize: '14px', marginBottom: '32px' }}>
           Sign in with your email and date of birth, or request a magic link.
         </p>
 
@@ -107,15 +107,15 @@ export default function PortalAuthClient() {
         {sent ? (
           <div
             style={{
-              backgroundColor: 'rgba(212,175,55,0.1)',
+              backgroundColor: 'var(--app-gold-soft)',
               border: '1px solid rgba(212,175,55,0.3)',
               borderRadius: '8px',
               padding: '20px',
               textAlign: 'center',
             }}
           >
-            <p style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>Check your email</p>
-            <p style={{ color: '#888', fontSize: '14px' }}>
+            <p style={{ color: 'var(--app-gold)', fontWeight: 'bold', marginBottom: '8px' }}>Check your email</p>
+            <p style={{ color: 'var(--app-text-secondary)', fontSize: '14px' }}>
               We sent a login link to {email}. It expires in 30 minutes.
             </p>
           </div>
@@ -125,7 +125,7 @@ export default function PortalAuthClient() {
               <label
                 style={{
                   display: 'block',
-                  color: '#888',
+                  color: 'var(--app-text-secondary)',
                   fontSize: '12px',
                   marginBottom: '8px',
                   textTransform: 'uppercase',
@@ -142,11 +142,11 @@ export default function PortalAuthClient() {
                 required
                 style={{
                   width: '100%',
-                  backgroundColor: '#1a1a1a',
+                  backgroundColor: 'var(--app-surface-muted)',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   padding: '12px 16px',
-                  color: '#ffffff',
+                  color: 'var(--app-text)',
                   fontSize: '14px',
                   outline: 'none',
                   boxSizing: 'border-box',
@@ -158,7 +158,7 @@ export default function PortalAuthClient() {
               <label
                 style={{
                   display: 'block',
-                  color: '#888',
+                  color: 'var(--app-text-secondary)',
                   fontSize: '12px',
                   marginBottom: '8px',
                   textTransform: 'uppercase',
@@ -173,11 +173,11 @@ export default function PortalAuthClient() {
                 onChange={(e) => setDateOfBirth(e.target.value)}
                 style={{
                   width: '100%',
-                  backgroundColor: '#1a1a1a',
+                  backgroundColor: 'var(--app-surface-muted)',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   padding: '12px 16px',
-                  color: '#ffffff',
+                  color: 'var(--app-text)',
                   fontSize: '14px',
                   outline: 'none',
                   boxSizing: 'border-box',
@@ -195,7 +195,7 @@ export default function PortalAuthClient() {
               disabled={signingIn}
               style={{
                 width: '100%',
-                backgroundColor: '#D4AF37',
+                backgroundColor: 'var(--app-gold)',
                 color: '#000000',
                 border: 'none',
                 borderRadius: '8px',
@@ -217,7 +217,7 @@ export default function PortalAuthClient() {
               style={{
                 width: '100%',
                 backgroundColor: 'transparent',
-                color: '#D4AF37',
+                color: 'var(--app-gold)',
                 border: '1px solid rgba(212,175,55,0.35)',
                 borderRadius: '8px',
                 padding: '14px',
