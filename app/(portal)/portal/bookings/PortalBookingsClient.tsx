@@ -1,7 +1,7 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, List, Loader2 } from 'lucide-react'
 
 type Booking = {
   id: string
@@ -19,6 +19,8 @@ type Slot = {
   label: string
 }
 
+type ViewMode = 'list' | 'calendar'
+
 function badgeColors(status: string) {
   if (status === 'confirmed') return { background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.35)' }
   if (status === 'completed') return { background: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.35)' }
@@ -33,12 +35,45 @@ function canModifyBooking(booking: Booking) {
   return hoursUntil >= 24
 }
 
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0)
+}
+
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1)
+}
+
+function startOfCalendar(date: Date) {
+  const monthStart = startOfMonth(date)
+  return new Date(monthStart.getFullYear(), monthStart.getMonth(), monthStart.getDate() - monthStart.getDay())
+}
+
+function endOfCalendar(date: Date) {
+  const monthEnd = endOfMonth(date)
+  return new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + (6 - monthEnd.getDay()))
+}
+
+function sameDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+}
+
+function toBookingDate(booking: Booking) {
+  return new Date(`${booking.booking_date}T12:00:00`)
+}
+
 export default function PortalBookingsClient({
   initialBookings,
 }: {
   initialBookings: Booking[]
 }) {
   const [bookings, setBookings] = useState(initialBookings)
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -48,6 +83,7 @@ export default function PortalBookingsClient({
   const [slots, setSlots] = useState<Slot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [reschedulingId, setReschedulingId] = useState<string | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
 
   const grouped = useMemo(() => {
     return {
@@ -55,6 +91,21 @@ export default function PortalBookingsClient({
       history: bookings.filter((booking) => ['completed', 'cancelled', 'no_show'].includes(booking.status)),
     }
   }, [bookings])
+
+  const calendarDays = useMemo(() => {
+    const days: Date[] = []
+    const cursor = startOfCalendar(selectedMonth)
+    const calendarEnd = endOfCalendar(selectedMonth)
+    while (cursor <= calendarEnd) {
+      days.push(new Date(cursor))
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return days
+  }, [selectedMonth])
+
+  const bookingsByDay = useMemo(() => {
+    return calendarDays.map((day) => bookings.filter((booking) => sameDay(toBookingDate(booking), day)))
+  }, [bookings, calendarDays])
 
   async function refreshBookings() {
     const res = await fetch('/api/portal/bookings', { cache: 'no-store' })
@@ -146,13 +197,170 @@ export default function PortalBookingsClient({
       {error ? <div style={{ marginBottom: 16, borderRadius: 12, border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.12)', color: '#fca5a5', padding: '14px 16px', fontSize: 14 }}>{error}</div> : null}
 
       <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-        <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Sessions</h1>
-        <p style={{ color: '#777', fontSize: 14, marginBottom: 0 }}>
-          View your booked sessions, upcoming requests, and make changes more than 24 hours in advance.
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Sessions</h1>
+            <p style={{ color: '#777', fontSize: 14, marginBottom: 0 }}>
+              View your booked sessions, upcoming requests, and make changes more than 24 hours in advance.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              style={{
+                borderRadius: 10,
+                border: viewMode === 'list' ? '1px solid rgba(212,175,55,0.45)' : '1px solid rgba(255,255,255,0.1)',
+                background: viewMode === 'list' ? 'rgba(212,175,55,0.12)' : 'transparent',
+                color: viewMode === 'list' ? '#D4AF37' : '#ddd',
+                padding: '10px 14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+              }}
+            >
+              <List size={16} />
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              style={{
+                borderRadius: 10,
+                border: viewMode === 'calendar' ? '1px solid rgba(212,175,55,0.45)' : '1px solid rgba(255,255,255,0.1)',
+                background: viewMode === 'calendar' ? 'rgba(212,175,55,0.12)' : 'transparent',
+                color: viewMode === 'calendar' ? '#D4AF37' : '#ddd',
+                padding: '10px 14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+              }}
+            >
+              <CalendarDays size={16} />
+              Calendar
+            </button>
+          </div>
+        </div>
       </section>
 
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+      {viewMode === 'calendar' ? (
+        <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+            <div>
+              <div style={{ color: '#D4AF37', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Calendar</div>
+              <div style={{ color: '#fff', fontSize: 20, fontWeight: 600 }}>
+                {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedMonth((current) => addMonths(current, -1))}
+                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#ddd', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+              >
+                <ChevronLeft size={16} />
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(startOfMonth(new Date()))}
+                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#ddd', padding: '10px 12px', cursor: 'pointer' }}
+              >
+                Current Month
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMonth((current) => addMonths(current, 1))}
+                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#ddd', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+              >
+                Next
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: 760, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <div key={day} style={{ padding: '12px 10px', textAlign: 'center', color: '#777', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+                {calendarDays.map((day, index) => {
+                  const dayBookings = bookingsByDay[index]
+                  const inMonth = day.getMonth() === selectedMonth.getMonth()
+                  const isToday = sameDay(day, new Date())
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      style={{
+                        minHeight: 140,
+                        padding: 10,
+                        borderRight: index % 7 === 6 ? 'none' : '1px solid rgba(255,255,255,0.06)',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)',
+                        background: isToday ? 'rgba(212,175,55,0.08)' : 'transparent',
+                        opacity: inMonth ? 1 : 0.45,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{
+                          color: isToday ? '#D4AF37' : '#fff',
+                          fontSize: 14,
+                          fontWeight: 700,
+                          width: 28,
+                          height: 28,
+                          borderRadius: 999,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: isToday ? 'rgba(212,175,55,0.12)' : 'transparent',
+                        }}>
+                          {day.getDate()}
+                        </span>
+                        {dayBookings.length > 0 ? (
+                          <span style={{ color: '#888', fontSize: 11 }}>{dayBookings.length} booked</span>
+                        ) : null}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {dayBookings.length === 0 ? (
+                          <span style={{ color: '#555', fontSize: 12 }}>No sessions</span>
+                        ) : (
+                          dayBookings.slice(0, 3).map((booking) => (
+                            <div
+                              key={booking.id}
+                              style={{
+                                ...badgeColors(booking.status),
+                                borderRadius: 10,
+                                padding: '8px 9px',
+                                fontSize: 11,
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, marginBottom: 2 }}>{booking.booking_time.slice(0, 5)}</div>
+                              <div style={{ color: 'inherit', opacity: 0.95, lineHeight: 1.35 }}>{booking.item_name}</div>
+                            </div>
+                          ))
+                        )}
+                        {dayBookings.length > 3 ? (
+                          <span style={{ color: '#D4AF37', fontSize: 11 }}>+{dayBookings.length - 3} more</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
         <div style={{ color: '#D4AF37', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>Upcoming & Active</div>
         {grouped.upcoming.length === 0 ? (
           <p style={{ color: '#888', fontSize: 14 }}>No upcoming sessions or requests right now.</p>
@@ -287,7 +495,7 @@ export default function PortalBookingsClient({
         )}
       </section>
 
-      <section style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
+      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: '#111111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
         <div style={{ color: '#D4AF37', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>History</div>
         {grouped.history.length === 0 ? (
           <p style={{ color: '#888', fontSize: 14 }}>Your completed, cancelled, and missed session history will appear here.</p>

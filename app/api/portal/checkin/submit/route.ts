@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { getClientSession } from '@/lib/client-auth'
 import { db } from '@/lib/db'
@@ -53,10 +53,7 @@ export async function POST(request: NextRequest) {
 
     const recoveryScore = ({
       'Good - felt ready for next session': 9,
-      'Good - felt ready for next session': 9,
       'Moderate - some lingering soreness but manageable': 6,
-      'Moderate - some lingering soreness but manageable': 6,
-      'Slow - persistent soreness or fatigue affected training': 3,
       'Slow - persistent soreness or fatigue affected training': 3,
     } as Record<string, number>)[recoveryKey] ?? 5
 
