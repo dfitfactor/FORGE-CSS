@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail
 } from 'lucide-react'
+import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
 
 type AccountState = {
   full_name: string
@@ -441,6 +442,8 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+
+        <BusinessHoursCard canEdit={form.role === 'admin'} />
 
         <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
           <div className="flex items-center justify-between gap-4">

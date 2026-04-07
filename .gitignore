@@ -10,6 +10,7 @@ node_modules
 out
 build
 dist
+.env.vercel
 .DS_Store
 *.pem
 npm-debug.log*

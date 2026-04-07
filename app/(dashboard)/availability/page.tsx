@@ -805,7 +805,7 @@ export default function AvailabilityPage() {
             <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-forge-text-primary">Booking Settings</h2>
-                <p className="text-sm text-forge-text-muted">Adjust booking buffers and minimum notice for new requests.</p>
+                <p className="text-sm text-forge-text-muted">Adjust booking buffers and minimum notice for new requests. Master business hours are managed in Settings.</p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
