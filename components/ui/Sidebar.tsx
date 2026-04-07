@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Calendar, Clock3, LayoutDashboard, LayoutGrid, Users, Sparkles, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -58,26 +59,30 @@ export function Sidebar() {
       className="min-h-screen bg-forge-surface-2 border-r border-forge-border flex flex-col overflow-hidden transition-all duration-200"
       style={{ width: w, minWidth: w, maxWidth: w, flex: `0 0 ${w}px` }}
     >
-      {/* Logo */}
-      <div className={`border-b border-forge-border flex items-center ${collapsed ? 'px-3 py-5 justify-center' : 'px-6 py-5'}`}>
-        {!mounted || !collapsed ? (
-          <div className="flex items-center gap-3">
+      <div className={`border-b border-forge-border ${collapsed ? 'px-3 py-5' : 'px-6 py-5'}`}>
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
+          {!mounted || !collapsed ? (
+            <>
+              <div className="w-9 h-9 rounded-lg bg-forge-purple flex items-center justify-center glow-purple flex-shrink-0">
+                <img src="/forge-logo.png" alt="FORGË" className="w-5 h-5 object-contain" />
+              </div>
+              <div>
+                <div className="font-bold text-forge-text-primary tracking-wide">FORG<span className="text-forge-gold">Ë</span></div>
+                <div className="text-[10px] text-forge-text-muted uppercase tracking-widest leading-none">Client Support System</div>
+              </div>
+            </>
+          ) : (
             <div className="w-9 h-9 rounded-lg bg-forge-purple flex items-center justify-center glow-purple flex-shrink-0">
               <img src="/forge-logo.png" alt="FORGË" className="w-5 h-5 object-contain" />
             </div>
-            <div>
-              <div className="font-bold text-forge-text-primary tracking-wide">FORG<span className="text-forge-gold">Ë</span></div>
-              <div className="text-[10px] text-forge-text-muted uppercase tracking-widest leading-none">Client Support System</div>
-            </div>
-          </div>
-        ) : (
-          <div className="w-9 h-9 rounded-lg bg-forge-purple flex items-center justify-center glow-purple flex-shrink-0">
-            <img src="/forge-logo.png" alt="FORGË" className="w-5 h-5 object-contain" />
-          </div>
-        )}
+          )}
+        </div>
+
+        <div className={`mt-4 ${collapsed ? 'flex justify-center' : ''}`}>
+          <ThemeToggle compact={collapsed} />
+        </div>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon
@@ -113,7 +118,6 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Collapse toggle */}
       <div className={`px-2 pb-2 ${collapsed ? 'flex justify-center' : ''}`}>
         <button onClick={toggle} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-forge-text-muted hover:text-forge-text-primary hover:bg-forge-surface-3 transition-all ${collapsed ? 'justify-center w-auto' : 'w-full'}`}>
@@ -121,13 +125,12 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* User footer */}
       <div className={`border-t border-forge-border pt-4 pb-4 ${collapsed ? 'px-2' : 'px-3'}`}>
         {collapsed ? (
           <div className="flex flex-col items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-forge-purple flex items-center justify-center text-xs font-bold text-forge-gold">C</div>
             <button type="button" onClick={() => void handleLogout()} disabled={loggingOut} title="Log out" className="p-1 text-forge-text-muted hover:text-state-recovery transition-colors disabled:opacity-50">
-                <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         ) : (

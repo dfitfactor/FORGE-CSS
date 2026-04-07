@@ -1,4 +1,5 @@
-﻿import Link from 'next/link'
+import Link from 'next/link'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navLinks = [
   { href: '/portal/dashboard', label: 'Dashboard' },
@@ -19,16 +20,18 @@ export default function PortalLayout({
         <div
           style={{
             minHeight: '100vh',
-            backgroundColor: '#0a0a0a',
-            color: '#ffffff',
+            backgroundColor: 'var(--app-bg)',
+            color: 'var(--app-text)',
             fontFamily: 'Arial, sans-serif',
+            transition: 'background-color 0.2s ease, color 0.2s ease',
           }}
         >
           <header
             style={{
-              backgroundColor: '#111111',
-              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              backgroundColor: 'var(--app-surface)',
+              borderBottom: '1px solid var(--app-border)',
               padding: '16px 24px',
+              boxShadow: 'var(--app-shadow)',
             }}
           >
             <div
@@ -51,7 +54,7 @@ export default function PortalLayout({
               >
                 <span
                   style={{
-                    color: '#D4AF37',
+                    color: 'var(--app-gold)',
                     fontWeight: 'bold',
                     fontSize: '20px',
                     letterSpacing: '2px',
@@ -61,7 +64,7 @@ export default function PortalLayout({
                 </span>
                 <span
                   style={{
-                    color: '#666',
+                    color: 'var(--app-text-muted)',
                     fontSize: '12px',
                     letterSpacing: '1px',
                   }}
@@ -69,16 +72,23 @@ export default function PortalLayout({
                   CLIENT PORTAL
                 </span>
               </Link>
-              <Link
-                href="/api/portal/auth/signout"
-                style={{
-                  color: '#666',
-                  fontSize: '13px',
-                  textDecoration: 'none',
-                }}
-              >
-                Sign Out
-              </Link>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ThemeToggle />
+                <Link
+                  href="/api/portal/auth/signout"
+                  style={{
+                    color: 'var(--app-text-secondary)',
+                    fontSize: '13px',
+                    textDecoration: 'none',
+                    border: '1px solid var(--app-border)',
+                    borderRadius: '999px',
+                    padding: '8px 12px',
+                  }}
+                >
+                  Sign Out
+                </Link>
+              </div>
             </div>
 
             <nav style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
@@ -88,9 +98,10 @@ export default function PortalLayout({
                   href={link.href}
                   style={{
                     textDecoration: 'none',
-                    color: '#aaa',
+                    color: 'var(--app-text-secondary)',
                     fontSize: '13px',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    border: '1px solid var(--app-border)',
+                    backgroundColor: 'var(--app-surface-muted)',
                     borderRadius: '999px',
                     padding: '8px 12px',
                   }}

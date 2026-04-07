@@ -3,23 +3,93 @@
 @tailwind utilities;
 
 :root {
-  --forge-purple: #4B1D8E;
-  --forge-gold: #D4AF37;
-  --forge-surface: #0F0A1E;
+  --forge-purple: 75 29 142;
+  --forge-gold: 212 175 55;
+  --forge-purple-dark: 45 15 92;
+  --forge-purple-mid: 107 47 181;
+  --forge-purple-light: 139 79 212;
+  --forge-gold-light: 232 200 74;
+  --forge-gold-dark: 184 150 15;
+  --forge-surface: 248 245 252;
+  --forge-surface-2: 255 255 255;
+  --forge-surface-3: 237 231 246;
+  --forge-border: 215 205 232;
+  --forge-text-primary: 28 18 46;
+  --forge-text-secondary: 90 72 125;
+  --forge-text-muted: 121 103 156;
+  --forge-body-background:
+    radial-gradient(ellipse at 10% 20%, rgba(75, 29, 142, 0.08) 0%, transparent 45%),
+    radial-gradient(ellipse at 90% 80%, rgba(212, 175, 55, 0.08) 0%, transparent 40%),
+    linear-gradient(180deg, #f9f5ff 0%, #f1ebfb 100%);
+  --app-bg: #f5effc;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f4eefc;
+  --app-border: rgba(75, 29, 142, 0.14);
+  --app-border-strong: rgba(75, 29, 142, 0.24);
+  --app-text: #1c122e;
+  --app-text-secondary: #5a487d;
+  --app-text-muted: #7a679b;
+  --app-gold: #d4af37;
+  --app-gold-soft: rgba(212, 175, 55, 0.12);
+  --app-danger-soft: rgba(239, 68, 68, 0.12);
+  --app-danger-border: rgba(239, 68, 68, 0.3);
+  --app-shadow: 0 20px 60px rgba(29, 11, 54, 0.08);
+}
+
+html[data-theme='dark'] {
+  --forge-purple: 75 29 142;
+  --forge-gold: 212 175 55;
+  --forge-purple-dark: 45 15 92;
+  --forge-purple-mid: 107 47 181;
+  --forge-purple-light: 139 79 212;
+  --forge-gold-light: 232 200 74;
+  --forge-gold-dark: 184 150 15;
+  --forge-surface: 15 10 30;
+  --forge-surface-2: 26 16 48;
+  --forge-surface-3: 37 24 69;
+  --forge-border: 61 42 110;
+  --forge-text-primary: 240 235 248;
+  --forge-text-secondary: 160 142 192;
+  --forge-text-muted: 107 90 142;
+  --forge-body-background:
+    radial-gradient(ellipse at 10% 20%, rgba(75, 29, 142, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 80%, rgba(75, 29, 142, 0.05) 0%, transparent 50%),
+    linear-gradient(180deg, #120b22 0%, #0f0a1e 100%);
+  --app-bg: #0a0a0a;
+  --app-surface: #111111;
+  --app-surface-muted: #161616;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-strong: rgba(255, 255, 255, 0.16);
+  --app-text: #ffffff;
+  --app-text-secondary: #a3a3a3;
+  --app-text-muted: #666666;
+  --app-gold: #d4af37;
+  --app-gold-soft: rgba(212, 175, 55, 0.12);
+  --app-danger-soft: rgba(239, 68, 68, 0.12);
+  --app-danger-border: rgba(239, 68, 68, 0.3);
+  --app-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+html {
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 @layer base {
   * {
     @apply border-forge-border;
   }
-  
+
   body {
     @apply bg-forge-surface text-forge-text-primary;
-    background-image: 
-      radial-gradient(ellipse at 10% 20%, rgba(75, 29, 142, 0.08) 0%, transparent 50%),
-      radial-gradient(ellipse at 90% 80%, rgba(75, 29, 142, 0.05) 0%, transparent 50%);
+    background-image: var(--forge-body-background);
+    background-attachment: fixed;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
-  
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -38,8 +108,9 @@
 @layer components {
   .forge-card {
     @apply bg-forge-surface-2 border border-forge-border rounded-xl p-6;
+    box-shadow: var(--app-shadow);
   }
-  
+
   .forge-card-hover {
     @apply forge-card hover:border-forge-purple-light transition-colors duration-200 cursor-pointer;
   }
@@ -132,7 +203,7 @@
   }
 
   .gradient-gold {
-    background: linear-gradient(135deg, #D4AF37, #E8C84A);
+    background: linear-gradient(135deg, rgb(var(--forge-gold)), rgb(var(--forge-gold-light)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
