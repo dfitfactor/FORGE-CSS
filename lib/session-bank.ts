@@ -1,9 +1,10 @@
-﻿import { PoolClient } from 'pg'
+import { PoolClient } from 'pg'
 import { db } from '@/lib/db'
 
 export interface SessionBankStatus {
   enrollmentId: string
-  billingPeriod: string
+  billingCycleStart: string | null
+  billingCycleEnd: string | null
   allotted: number
   used: number
   forfeited: number
@@ -14,247 +15,411 @@ export interface SessionBankStatus {
   holdUntil: string | null
   weeklyUsed: number
   weeklyLimit: number
+  monthlyUsed: number
+  monthlyLimit: number
   canBook: boolean
   cannotBookReason: string | null
-}
-
-type SessionBankRow = {
-  id: string
-  enrollment_id: string
-  client_id: string
-  billing_period: string
-  sessions_allotted: number | string | null
-  sessions_remaining: number | string | null
-  sessions_used: number | string | null
-  sessions_forfeited: number | string | null
-  sessions_returned: number | string | null
-  grace_period_expires: string | null
-  status: string
-  is_frozen?: boolean | null
-  hold_id?: string | null
+  expired: boolean
+  overrideLimits: boolean
+  overrideExpiration: boolean
+  overrideSetAt: string | null
 }
 
 type EnrollmentRow = {
   id: string
   client_id: string
-  package_id?: string | null
+  package_id: string | null
   sessions_total: number | string | null
+  sessions_remaining: number | string | null
+  sessions_used: number | string | null
+  sessions_forfeited: number | string | null
+  sessions_returned: number | string | null
+  weekly_limit: number | string | null
+  monthly_limit: number | string | null
   sessions_per_week: number | string | null
-  sessions_used?: number | string | null
-  sessions_forfeited?: number | string | null
-  sessions_remaining?: number | string | null
-  is_on_hold?: boolean | null
-  hold_start?: string | null
-  hold_end?: string | null
+  billing_cycle_start: string | null
+  billing_cycle_end: string | null
+  sessions_expire_at: string | null
+  override_limits: boolean | null
+  override_expiration: boolean | null
+  override_set_at: string | null
+  is_on_hold: boolean | null
+  hold_end: string | null
+  start_date: string | null
+  created_at: string | null
   status: string
+}
+
+type BookingCountRow = {
+  count: number | string
 }
 
 type HoldRow = {
   id: string
-  start_date: string
-  end_date: string
-  hold_type: string
-  status: string
-}
-
-type EntitlementRow = {
-  id: string
-  booking_id: string
   enrollment_id: string
-  session_bank_id: string | null
+  end_date: string
   status: string
-  entitlement_type: 'standard' | 'makeup' | 'grace' | 'override'
-}
-
-const SUPERUSER_EMAIL = 'coach@dfitfactor.com'
-
-function formatDateOnly(value: Date) {
-  const year = value.getFullYear()
-  const month = `${value.getMonth() + 1}`.padStart(2, '0')
-  const day = `${value.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function startOfCurrentMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function startOfWeek(date: Date) {
-  const copy = new Date(date)
-  copy.setHours(0, 0, 0, 0)
-  const day = copy.getDay()
-  copy.setDate(copy.getDate() - day)
-  return copy
-}
-
-function endOfWeek(date: Date) {
-  const start = startOfWeek(date)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 7)
-  return end
-}
-
-function nextWeekStart(date: Date) {
-  return formatDateOnly(endOfWeek(date))
 }
 
 function toNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined) return 0
-  const next = Number(value)
-  return Number.isFinite(next) ? next : 0
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-async function isAdminUser(userId: string) {
-  const [user, adminRole] = await Promise.all([
-    db.queryOne<{ email: string | null }>('SELECT email FROM users WHERE id = $1', [userId]),
-    db.queryOne<{ role: string }>(
-      `SELECT role FROM admin_roles
-       WHERE user_id = $1 AND is_active = true
-       LIMIT 1`,
-      [userId]
-    ),
-  ])
-
-  return user?.email?.toLowerCase() === SUPERUSER_EMAIL || Boolean(adminRole)
+function parseDateOnly(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
 }
 
-async function getEnrollment(enrollmentId: string) {
-  return db.queryOne<EnrollmentRow>(
+function formatDateOnly(value: Date) {
+  const year = value.getUTCFullYear()
+  const month = `${value.getUTCMonth() + 1}`.padStart(2, '0')
+  const day = `${value.getUTCDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function addMonthsPreservingDay(anchor: Date, months: number) {
+  const year = anchor.getUTCFullYear()
+  const monthIndex = anchor.getUTCMonth() + months
+  const targetYear = year + Math.floor(monthIndex / 12)
+  const normalizedMonth = ((monthIndex % 12) + 12) % 12
+  const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate()
+  const day = Math.min(anchor.getUTCDate(), lastDay)
+  return new Date(Date.UTC(targetYear, normalizedMonth, day))
+}
+
+function startOfWeek(date: Date) {
+  const next = new Date(date)
+  const day = next.getUTCDay()
+  next.setUTCDate(next.getUTCDate() - day)
+  next.setUTCHours(0, 0, 0, 0)
+  return next
+}
+
+function endOfWeek(date: Date) {
+  return addDays(startOfWeek(date), 7)
+}
+
+function toTimestamp(date: string, time: string) {
+  return new Date(`${date}T${time.length === 5 ? `${time}:00` : time}`)
+}
+
+function computeCycleWindow(anchorDate: string, reference = new Date()) {
+  const anchor = parseDateOnly(anchorDate)
+  const referenceDate = parseDateOnly(formatDateOnly(reference))
+  let monthOffset =
+    (referenceDate.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
+    (referenceDate.getUTCMonth() - anchor.getUTCMonth())
+
+  let cycleStart = addMonthsPreservingDay(anchor, monthOffset)
+  if (cycleStart.getTime() > referenceDate.getTime()) {
+    monthOffset -= 1
+    cycleStart = addMonthsPreservingDay(anchor, monthOffset)
+  }
+
+  const nextCycleStart = addMonthsPreservingDay(anchor, monthOffset + 1)
+  const cycleEnd = addDays(nextCycleStart, -1)
+  const expiration = addDays(nextCycleStart, 7)
+
+  return {
+    cycleStart: formatDateOnly(cycleStart),
+    cycleEnd: formatDateOnly(cycleEnd),
+    sessionsExpireAt: expiration.toISOString(),
+  }
+}
+
+async function getActiveEnrollmentByClientId(clientId: string, client?: PoolClient) {
+  const executor = client ?? db
+  const queryOne =
+    'queryOne' in executor
+      ? executor.queryOne.bind(executor)
+      : async <T>(sql: string, params?: unknown[]) => {
+          const result = await executor.query(sql, params)
+          return (result.rows[0] ?? null) as T | null
+        }
+
+  return queryOne<EnrollmentRow>(
     `SELECT *
      FROM package_enrollments
-     WHERE id = $1`,
-    [enrollmentId]
-  )
-}
-
-async function getActiveHold(enrollmentId: string, onDate = new Date()) {
-  return db.queryOne<HoldRow>(
-    `SELECT id, start_date::text, end_date::text, hold_type, status
-     FROM membership_holds
-     WHERE enrollment_id = $1
-       AND status IN ('approved', 'active')
-       AND start_date <= $2::date
-       AND end_date >= $2::date
-     ORDER BY start_date DESC
-     LIMIT 1`,
-    [enrollmentId, formatDateOnly(onDate)]
-  )
-}
-
-async function getCurrentBank(enrollmentId: string) {
-  const billingPeriod = formatDateOnly(startOfCurrentMonth())
-  return db.queryOne<SessionBankRow>(
-    `SELECT *
-     FROM session_bank
-     WHERE enrollment_id = $1 AND billing_period = $2
-     LIMIT 1`,
-    [enrollmentId, billingPeriod]
-  )
-}
-
-async function getPreviousGraceBank(enrollmentId: string, onDate = new Date()) {
-  return db.queryOne<SessionBankRow>(
-    `SELECT *
-     FROM session_bank
-     WHERE enrollment_id = $1
-       AND billing_period < $2
-       AND grace_period_expires >= $3
-       AND sessions_remaining > 0
+     WHERE client_id = $1
        AND status = 'active'
-     ORDER BY billing_period DESC
+     ORDER BY created_at DESC
      LIMIT 1`,
-    [enrollmentId, formatDateOnly(startOfCurrentMonth(onDate)), onDate.toISOString()]
+    [clientId]
   )
 }
 
-async function countWeeklyUsage(enrollmentId: string, proposedDate: Date) {
-  const weekStart = formatDateOnly(startOfWeek(proposedDate))
-  const weekEnd = formatDateOnly(endOfWeek(proposedDate))
+async function updateEnrollmentCycleFields(enrollment: EnrollmentRow, client?: PoolClient) {
+  const executor = client ?? db
+  const queryOne =
+    'queryOne' in executor
+      ? executor.queryOne.bind(executor)
+      : async <T>(sql: string, params?: unknown[]) => {
+          const result = await executor.query(sql, params)
+          return (result.rows[0] ?? null) as T | null
+        }
 
-  const result = await db.queryOne<{ count: string | number }>(
+  const anchorDate = enrollment.billing_cycle_start ?? enrollment.start_date ?? enrollment.created_at?.slice(0, 10)
+  if (!anchorDate) return enrollment
+
+  const cycle = computeCycleWindow(anchorDate)
+  const needsUpdate =
+    enrollment.billing_cycle_start !== cycle.cycleStart ||
+    enrollment.billing_cycle_end !== cycle.cycleEnd ||
+    !enrollment.sessions_expire_at
+
+  if (!needsUpdate) return enrollment
+
+  return (
+    await queryOne<EnrollmentRow>(
+      `UPDATE package_enrollments
+       SET billing_cycle_start = $2::date,
+           billing_cycle_end = $3::date,
+           sessions_expire_at = $4::timestamptz,
+           weekly_limit = COALESCE(weekly_limit, sessions_per_week, 1),
+           monthly_limit = COALESCE(monthly_limit, sessions_total, 4),
+           sessions_total = COALESCE(sessions_total, 0),
+           sessions_remaining = COALESCE(sessions_remaining, sessions_total, 0),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [enrollment.id, cycle.cycleStart, cycle.cycleEnd, cycle.sessionsExpireAt]
+    )
+  ) ?? enrollment
+}
+
+async function countBookingsForRange(clientId: string, start: string, endExclusive: string) {
+  const result = await db.queryOne<BookingCountRow>(
     `SELECT COUNT(*) AS count
-     FROM bookings b
-     LEFT JOIN session_entitlements se ON se.id = b.entitlement_id
-     WHERE b.enrollment_id = $1
-       AND b.booking_date >= $2::date
-       AND b.booking_date < $3::date
-       AND b.status NOT IN ('cancelled', 'no_show')
-       AND COALESCE(se.status, 'consumed') NOT IN ('forfeited', 'returned', 'expired')`,
-    [enrollmentId, weekStart, weekEnd]
+     FROM bookings
+     WHERE client_id = $1
+       AND status NOT IN ('cancelled', 'declined')
+       AND scheduled_at >= $2::timestamptz
+       AND scheduled_at < $3::timestamptz`,
+    [clientId, `${start}T00:00:00.000Z`, `${endExclusive}T00:00:00.000Z`]
   )
 
   return toNumber(result?.count)
 }
 
-async function getBookableBank(enrollmentId: string, clientId: string, proposedDate = new Date()) {
-  const currentBank = await getOrCreateSessionBank(enrollmentId, clientId)
-  if (currentBank.remaining > 0) {
-    return { bankId: currentBank.id, entitlementType: 'standard' as const }
+export async function getSessionsRemaining(clientId: string) {
+  const activeEnrollment = await getActiveEnrollmentByClientId(clientId)
+  if (!activeEnrollment) {
+    return { success: false as const, remaining: 0, expired: false, enrollment: null }
   }
 
-  const previousGraceBank = await getPreviousGraceBank(enrollmentId, proposedDate)
-  if (previousGraceBank && toNumber(previousGraceBank.sessions_remaining) > 0) {
-    return { bankId: previousGraceBank.id, entitlementType: 'grace' as const }
+  const enrollment = await updateEnrollmentCycleFields(activeEnrollment)
+  const remaining = toNumber(enrollment.sessions_remaining)
+  const isExpired =
+    !enrollment.override_expiration &&
+    Boolean(enrollment.sessions_expire_at) &&
+    new Date(enrollment.sessions_expire_at as string).getTime() < Date.now()
+
+  if (isExpired) {
+    return { success: true as const, remaining: 0, expired: true, enrollment }
   }
 
-  return null
+  return { success: true as const, remaining, expired: false, enrollment }
 }
 
-async function freezeSessionBank(
-  enrollmentId: string,
-  holdId: string,
-  reason: string,
-  client?: PoolClient
-): Promise<void> {
-  const executor = client ?? { query: (sql: string, params?: unknown[]) => db.query(sql, params) }
-  const billingPeriod = formatDateOnly(startOfCurrentMonth())
+export async function deductSession(clientId: string, client?: PoolClient) {
+  const enrollment = await getActiveEnrollmentByClientId(clientId, client)
+  if (!enrollment) throw new Error('Active enrollment not found')
 
-  await executor.query(
-    `UPDATE session_bank
-     SET is_frozen = true,
-         frozen_at = NOW(),
-         freeze_reason = $3,
-         hold_id = $2,
-         grace_period_expires = grace_period_expires + COALESCE((
-           SELECT ((end_date - start_date) || ' days')::interval
-           FROM membership_holds
-           WHERE id = $2
-         ), INTERVAL '0 days')
-     WHERE enrollment_id = $1
-       AND billing_period = $4`,
-    [enrollmentId, holdId, reason, billingPeriod]
-  )
+  const hydrated = await updateEnrollmentCycleFields(enrollment, client)
+  const expired =
+    !hydrated.override_expiration &&
+    Boolean(hydrated.sessions_expire_at) &&
+    new Date(hydrated.sessions_expire_at as string).getTime() < Date.now()
+
+  if (expired) throw new Error('Sessions have expired')
+  if (toNumber(hydrated.sessions_remaining) <= 0) throw new Error('No sessions remaining')
+
+  const row = client
+    ? ((await client.query(
+        `UPDATE package_enrollments
+         SET sessions_remaining = sessions_remaining - 1,
+             sessions_used = COALESCE(sessions_used, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1
+           AND sessions_remaining > 0
+         RETURNING sessions_remaining`,
+        [hydrated.id]
+      )).rows[0] as { sessions_remaining: number | string } | undefined)
+    : await db.queryOne<{ sessions_remaining: number | string }>(
+        `UPDATE package_enrollments
+         SET sessions_remaining = sessions_remaining - 1,
+             sessions_used = COALESCE(sessions_used, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1
+           AND sessions_remaining > 0
+         RETURNING sessions_remaining`,
+        [hydrated.id]
+      )
+
+  if (!row) throw new Error('Failed to deduct session')
+
+  return { success: true as const, remaining: toNumber(row.sessions_remaining), enrollmentId: hydrated.id }
 }
 
-export async function getOrCreateSessionBank(
-  enrollmentId: string,
-  clientId: string
-): Promise<{ id: string; remaining: number; status: string }> {
-  const enrollment = await getEnrollment(enrollmentId)
-  if (!enrollment) throw new Error('Enrollment not found')
+export async function restoreSession(clientId: string, client?: PoolClient) {
+  const enrollment = await getActiveEnrollmentByClientId(clientId, client)
+  if (!enrollment) throw new Error('Active enrollment not found')
 
-  const billingPeriod = formatDateOnly(startOfCurrentMonth())
-  const sessionsTotal = toNumber(enrollment.sessions_total)
-  const bank = await db.queryOne<{ id: string; sessions_remaining: number | string | null; status: string }>(
-    `INSERT INTO session_bank
-      (enrollment_id, client_id, billing_period,
-       sessions_allotted, sessions_remaining,
-       grace_period_expires, status)
-     VALUES ($1, $2, $3, $4, $4,
-       ($3::date + INTERVAL '1 month' + INTERVAL '7 days'),
-       'active')
-     ON CONFLICT (enrollment_id, billing_period)
-     DO UPDATE SET updated_at = NOW()
-     RETURNING id, sessions_remaining, status`,
-    [enrollmentId, clientId, billingPeriod, sessionsTotal]
+  const row = client
+    ? ((await client.query(
+        `UPDATE package_enrollments
+         SET sessions_remaining = sessions_remaining + 1,
+             sessions_used = GREATEST(COALESCE(sessions_used, 0) - 1, 0),
+             sessions_returned = COALESCE(sessions_returned, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING sessions_remaining`,
+        [enrollment.id]
+      )).rows[0] as { sessions_remaining: number | string } | undefined)
+    : await db.queryOne<{ sessions_remaining: number | string }>(
+        `UPDATE package_enrollments
+         SET sessions_remaining = sessions_remaining + 1,
+             sessions_used = GREATEST(COALESCE(sessions_used, 0) - 1, 0),
+             sessions_returned = COALESCE(sessions_returned, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING sessions_remaining`,
+        [enrollment.id]
+      )
+
+  if (!row) throw new Error('Failed to restore session')
+
+  return { success: true as const, remaining: toNumber(row.sessions_remaining), enrollmentId: enrollment.id }
+}
+
+export async function checkBookingLimits(clientId: string, date: Date) {
+  const activeEnrollment = await getActiveEnrollmentByClientId(clientId)
+  if (!activeEnrollment) {
+    return { allowed: false as const, reason: 'no_active_package' as const, override: false }
+  }
+
+  const enrollment = await updateEnrollmentCycleFields(activeEnrollment)
+  if (enrollment.override_limits) {
+    return { allowed: true as const, override: true }
+  }
+
+  const weeklyLimit = Math.max(toNumber(enrollment.weekly_limit || enrollment.sessions_per_week), 0)
+  const monthlyLimit = Math.max(toNumber(enrollment.monthly_limit || enrollment.sessions_total), 0)
+
+  const weekStart = formatDateOnly(startOfWeek(date))
+  const weekEnd = formatDateOnly(endOfWeek(date))
+  const weeklyCount = await countBookingsForRange(clientId, weekStart, weekEnd)
+  if (weeklyLimit > 0 && weeklyCount >= weeklyLimit) {
+    return { allowed: false as const, reason: 'weekly_limit' as const, override: false }
+  }
+
+  const monthlyCount = enrollment.billing_cycle_start && enrollment.billing_cycle_end
+    ? await countBookingsForRange(clientId, enrollment.billing_cycle_start, formatDateOnly(addDays(parseDateOnly(enrollment.billing_cycle_end), 1)))
+    : 0
+
+  if (monthlyLimit > 0 && monthlyCount >= monthlyLimit) {
+    return { allowed: false as const, reason: 'monthly_limit' as const, override: false }
+  }
+
+  return { allowed: true as const, override: false }
+}
+
+export async function checkAndExpireSessions() {
+  await db.query(
+    `UPDATE package_enrollments
+     SET sessions_remaining = 0,
+         updated_at = NOW()
+     WHERE status = 'active'
+       AND COALESCE(override_expiration, false) = false
+       AND sessions_expire_at IS NOT NULL
+       AND sessions_expire_at < NOW()
+       AND sessions_remaining > 0`
   )
 
-  if (!bank) throw new Error('Failed to create session bank')
+  const enrollments = await db.query<EnrollmentRow>(
+    `SELECT *
+     FROM package_enrollments
+     WHERE status = 'active'`
+  )
+
+  for (const enrollment of enrollments) {
+    await updateEnrollmentCycleFields(enrollment)
+  }
+}
+
+export async function getClientBankStatus(enrollmentId: string): Promise<SessionBankStatus | null> {
+  const activeEnrollment = await db.queryOne<EnrollmentRow>(
+    `SELECT *
+     FROM package_enrollments
+     WHERE id = $1
+     LIMIT 1`,
+    [enrollmentId]
+  )
+
+  if (!activeEnrollment) return null
+  const enrollment = await updateEnrollmentCycleFields(activeEnrollment)
+
+  const remainingResult = await getSessionsRemaining(enrollment.client_id)
+  const now = new Date()
+  const weekStart = formatDateOnly(startOfWeek(now))
+  const weekEnd = formatDateOnly(endOfWeek(now))
+
+  const [weeklyUsed, monthlyUsed] = await Promise.all([
+    countBookingsForRange(enrollment.client_id, weekStart, weekEnd),
+    enrollment.billing_cycle_start && enrollment.billing_cycle_end
+      ? countBookingsForRange(
+          enrollment.client_id,
+          enrollment.billing_cycle_start,
+          formatDateOnly(addDays(parseDateOnly(enrollment.billing_cycle_end), 1))
+        )
+      : Promise.resolve(0),
+  ])
+
+  const weeklyLimit = Math.max(toNumber(enrollment.weekly_limit || enrollment.sessions_per_week), 0)
+  const monthlyLimit = Math.max(toNumber(enrollment.monthly_limit || enrollment.sessions_total), 0)
+  const allotted = Math.max(toNumber(enrollment.sessions_total), 0)
+  const remaining = remainingResult.remaining
+  const used = Math.max(allotted - remaining, 0)
+  const expired = remainingResult.expired
+  const canBook = !expired && remaining > 0 && !enrollment.is_on_hold
+  const cannotBookReason = enrollment.is_on_hold
+    ? 'Booking is paused while this package is on hold.'
+    : expired
+      ? 'Session balance has expired for this cycle.'
+      : remaining <= 0
+        ? 'No sessions remaining.'
+        : null
 
   return {
-    id: bank.id,
-    remaining: toNumber(bank.sessions_remaining),
-    status: bank.status,
+    enrollmentId: enrollment.id,
+    billingCycleStart: enrollment.billing_cycle_start,
+    billingCycleEnd: enrollment.billing_cycle_end,
+    allotted,
+    used,
+    forfeited: toNumber(enrollment.sessions_forfeited),
+    returned: toNumber(enrollment.sessions_returned),
+    remaining,
+    graceExpires: enrollment.sessions_expire_at,
+    isOnHold: Boolean(enrollment.is_on_hold),
+    holdUntil: enrollment.hold_end,
+    weeklyUsed,
+    weeklyLimit,
+    monthlyUsed,
+    monthlyLimit,
+    canBook,
+    cannotBookReason,
+    expired,
+    overrideLimits: Boolean(enrollment.override_limits),
+    overrideExpiration: Boolean(enrollment.override_expiration),
+    overrideSetAt: enrollment.override_set_at,
   }
 }
 
@@ -263,34 +428,16 @@ export async function checkBookingEligibility(
   clientId: string,
   proposedDate: Date
 ): Promise<{ eligible: boolean; reason: string | null }> {
-  const activeHold = await getActiveHold(enrollmentId)
-  if (activeHold) {
+  const bank = await getClientBankStatus(enrollmentId)
+  if (!bank) return { eligible: false, reason: 'Active enrollment not found' }
+  if (bank.isOnHold) return { eligible: false, reason: bank.cannotBookReason }
+  if (bank.expired || bank.remaining <= 0) return { eligible: false, reason: bank.cannotBookReason }
+
+  const limitCheck = await checkBookingLimits(clientId, proposedDate)
+  if (!limitCheck.allowed) {
     return {
       eligible: false,
-      reason: `Enrollment on hold until ${new Date(`${activeHold.end_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Contact your coach.`,
-    }
-  }
-
-  const currentBank = await getOrCreateSessionBank(enrollmentId, clientId)
-  const graceBank = await getPreviousGraceBank(enrollmentId, proposedDate)
-  const totalRemaining = currentBank.remaining + toNumber(graceBank?.sessions_remaining)
-  if (totalRemaining <= 0) {
-    return { eligible: false, reason: 'No sessions remaining this period' }
-  }
-
-  const enrollment = await getEnrollment(enrollmentId)
-  if (!enrollment) {
-    return { eligible: false, reason: 'Enrollment not found' }
-  }
-
-  const weeklyLimit = Math.max(toNumber(enrollment.sessions_per_week), 0)
-  if (weeklyLimit > 0) {
-    const weeklyUsed = await countWeeklyUsage(enrollmentId, proposedDate)
-    if (weeklyUsed >= weeklyLimit) {
-      return {
-        eligible: false,
-        reason: `Weekly limit reached (${weeklyLimit}x/week). Next available: ${new Date(`${nextWeekStart(proposedDate)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-      }
+      reason: limitCheck.reason === 'weekly_limit' ? 'Weekly booking limit reached' : 'Monthly booking limit reached',
     }
   }
 
@@ -302,56 +449,18 @@ export async function consumeSession(
   clientId: string,
   bookingId: string,
   entitlementType: 'standard' | 'makeup' | 'grace' | 'override'
-): Promise<string> {
-  const bookableBank = await getBookableBank(enrollmentId, clientId)
-  if (!bookableBank) throw new Error('No available session bank')
-
-  return db.transaction(async (client) => {
-    const bankUpdate = await client.query(
-      `UPDATE session_bank
-       SET sessions_used = COALESCE(sessions_used, 0) + 1,
-           sessions_remaining = GREATEST(COALESCE(sessions_remaining, 0) - 1, 0),
-           updated_at = NOW()
-       WHERE id = $1
-       RETURNING id`,
-      [bookableBank.bankId]
-    )
-
-    if (!bankUpdate.rows[0]?.id) throw new Error('Session bank not found')
-
-    await client.query(
-      `UPDATE package_enrollments
-       SET sessions_used = COALESCE(sessions_used, 0) + 1,
-           sessions_remaining = GREATEST(COALESCE(sessions_remaining, COALESCE(sessions_total, 0)) - 1, 0),
-           updated_at = NOW()
-       WHERE id = $1`,
-      [enrollmentId]
-    )
-
-    const entitlement = await client.query<{ id: string }>(
-      `INSERT INTO session_entitlements (
-         enrollment_id,
-         client_id,
-         booking_id,
-         session_bank_id,
-         entitlement_type,
-         status,
-         consumed_at
-       ) VALUES ($1, $2, $3, $4, $5, 'consumed', NOW())
-       RETURNING id`,
-      [
-        enrollmentId,
-        clientId,
-        bookingId,
-        bookableBank.bankId,
-        entitlementType === 'override' ? entitlementType : bookableBank.entitlementType === 'grace' ? 'grace' : entitlementType,
-      ]
-    )
-
-    const entitlementId = entitlement.rows[0]?.id
-    if (!entitlementId) throw new Error('Failed to create session entitlement')
-    return entitlementId
-  })
+) {
+  void enrollmentId
+  const result = await deductSession(clientId)
+  await db.query(
+    `UPDATE bookings
+     SET session_deducted = true,
+         is_makeup = $2,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [bookingId, entitlementType === 'makeup' || entitlementType === 'override']
+  )
+  return `legacy-${result.enrollmentId}`
 }
 
 export async function handleCancellation(
@@ -360,152 +469,25 @@ export async function handleCancellation(
   cancelledAt: Date
 ): Promise<{ action: 'returned' | 'forfeited'; hoursBeforeSession: number }> {
   const hoursBeforeSession = (sessionDateTime.getTime() - cancelledAt.getTime()) / (1000 * 60 * 60)
-  const isLateCancel = hoursBeforeSession < 24
-
-  await db.transaction(async (client) => {
-    const entitlement = await client.query<EntitlementRow>(
-      `SELECT id, booking_id, enrollment_id, session_bank_id, status, entitlement_type
-       FROM session_entitlements
-       WHERE booking_id = $1
-       LIMIT 1`,
-      [bookingId]
-    )
-
-    const record = entitlement.rows[0]
-    if (!record) {
-      await client.query(
-        `UPDATE bookings
-         SET status = 'cancelled', cancelled_at = NOW(),
-             forfeited = $2,
-             forfeiture_reason = $3
-         WHERE id = $1`,
-        [bookingId, isLateCancel, isLateCancel ? 'late_cancel' : null]
-      )
-      return
-    }
-
-    if (isLateCancel) {
-      await client.query(
-        `UPDATE session_entitlements
-         SET status = 'forfeited',
-             forfeiture_reason = 'late_cancel',
-             cancellation_hours_before = $2,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [record.id, hoursBeforeSession]
-      )
-      await client.query(
-        `UPDATE session_bank
-         SET sessions_forfeited = COALESCE(sessions_forfeited, 0) + 1,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [record.session_bank_id]
-      )
-      await client.query(
-        `UPDATE package_enrollments
-         SET sessions_forfeited = COALESCE(sessions_forfeited, 0) + 1,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [record.enrollment_id]
-      )
-      await client.query(
-        `UPDATE bookings
-         SET status = 'cancelled',
-             forfeited = true,
-             forfeiture_reason = 'late_cancel',
-             cancelled_at = NOW()
-         WHERE id = $1`,
-        [bookingId]
-      )
-    } else {
-      await client.query(
-        `UPDATE session_entitlements
-         SET status = 'returned',
-             cancellation_hours_before = $2,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [record.id, hoursBeforeSession]
-      )
-      await client.query(
-        `UPDATE session_bank
-         SET sessions_returned = COALESCE(sessions_returned, 0) + 1,
-             sessions_remaining = COALESCE(sessions_remaining, 0) + 1,
-             sessions_used = GREATEST(COALESCE(sessions_used, 0) - 1, 0),
-             updated_at = NOW()
-         WHERE id = $1`,
-        [record.session_bank_id]
-      )
-      await client.query(
-        `UPDATE package_enrollments
-         SET sessions_used = GREATEST(COALESCE(sessions_used, 0) - 1, 0),
-             sessions_remaining = COALESCE(sessions_remaining, 0) + 1,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [record.enrollment_id]
-      )
-      await client.query(
-        `UPDATE bookings
-         SET status = 'cancelled',
-             cancelled_at = NOW()
-         WHERE id = $1`,
-        [bookingId]
-      )
-    }
-  })
-
-  return { action: isLateCancel ? 'forfeited' : 'returned', hoursBeforeSession }
+  await db.query(
+    `UPDATE bookings
+     SET status = 'cancelled',
+         cancelled_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $1`,
+    [bookingId]
+  )
+  return { action: 'forfeited', hoursBeforeSession }
 }
 
 export async function handleNoShow(bookingId: string): Promise<void> {
-  await db.transaction(async (client) => {
-    const entitlement = await client.query<EntitlementRow>(
-      `SELECT id, enrollment_id, session_bank_id
-       FROM session_entitlements
-       WHERE booking_id = $1
-       LIMIT 1`,
-      [bookingId]
-    )
-
-    const record = entitlement.rows[0]
-    if (!record) {
-      await client.query(
-        `UPDATE bookings
-         SET status = 'no_show', forfeited = true, forfeiture_reason = 'no_show'
-         WHERE id = $1`,
-        [bookingId]
-      )
-      return
-    }
-
-    await client.query(
-      `UPDATE session_entitlements
-       SET status = 'forfeited',
-           forfeiture_reason = 'no_show',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [record.id]
-    )
-    await client.query(
-      `UPDATE session_bank
-       SET sessions_forfeited = COALESCE(sessions_forfeited, 0) + 1,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [record.session_bank_id]
-    )
-    await client.query(
-      `UPDATE package_enrollments
-       SET sessions_forfeited = COALESCE(sessions_forfeited, 0) + 1,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [record.enrollment_id]
-    )
-    await client.query(
-      `UPDATE bookings
-       SET status = 'no_show', forfeited = true, forfeiture_reason = 'no_show'
-       WHERE id = $1`,
-      [bookingId]
-    )
-  })
+  await db.query(
+    `UPDATE bookings
+     SET status = 'no_show',
+         updated_at = NOW()
+     WHERE id = $1`,
+    [bookingId]
+  )
 }
 
 export async function overrideForfeiture(
@@ -513,49 +495,10 @@ export async function overrideForfeiture(
   overrideByUserId: string,
   overrideReason: string
 ): Promise<void> {
-  const isAdmin = await isAdminUser(overrideByUserId)
-  if (!isAdmin) throw new Error('Unauthorized')
-
-  await db.transaction(async (client) => {
-    const entitlement = await client.query<EntitlementRow>(
-      `SELECT id, enrollment_id, session_bank_id, status
-       FROM session_entitlements
-       WHERE id = $1
-       LIMIT 1`,
-      [entitlementId]
-    )
-
-    const record = entitlement.rows[0]
-    if (!record) throw new Error('Entitlement not found')
-    if (record.status !== 'forfeited') throw new Error('Entitlement is not forfeited')
-
-    await client.query(
-      `UPDATE session_entitlements
-       SET status = 'active',
-           override_by = $2,
-           override_reason = $3,
-           override_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $1`,
-      [entitlementId, overrideByUserId, overrideReason]
-    )
-    await client.query(
-      `UPDATE session_bank
-       SET sessions_forfeited = GREATEST(COALESCE(sessions_forfeited, 0) - 1, 0),
-           sessions_remaining = COALESCE(sessions_remaining, 0) + 1,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [record.session_bank_id]
-    )
-    await client.query(
-      `UPDATE package_enrollments
-       SET sessions_forfeited = GREATEST(COALESCE(sessions_forfeited, 0) - 1, 0),
-           sessions_remaining = COALESCE(sessions_remaining, 0) + 1,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [record.enrollment_id]
-    )
-  })
+  void entitlementId
+  void overrideByUserId
+  void overrideReason
+  throw new Error('Legacy forfeiture override is no longer supported in the active booking flow')
 }
 
 export async function placeOnHold({
@@ -575,22 +518,6 @@ export async function placeOnHold({
   endDate: Date
   requestedBy: string
 }): Promise<{ holdId: string; status: string }> {
-  const overlap = await db.queryOne<{ id: string }>(
-    `SELECT id
-     FROM membership_holds
-     WHERE enrollment_id = $1
-       AND status IN ('pending', 'approved', 'active')
-       AND start_date <= $2::date
-       AND end_date >= $3::date
-     LIMIT 1`,
-    [enrollmentId, formatDateOnly(endDate), formatDateOnly(startDate)]
-  )
-  if (overlap) throw new Error('Overlapping hold exists')
-
-  const admin = await isAdminUser(requestedBy)
-  const autoApprove = admin || holdType === 'administrative'
-  const today = formatDateOnly(new Date())
-
   return db.transaction(async (client) => {
     const inserted = await client.query<{ id: string; status: string }>(
       `INSERT INTO membership_holds (
@@ -602,14 +529,10 @@ export async function placeOnHold({
          end_date,
          status,
          requested_by,
-         approved_by,
-         approved_at,
          created_at,
          updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6,
-         $7, $8, $9, $10,
-         NOW(), NOW()
+         $1, $2, $3, $4, $5::date, $6::date, 'approved', $7, NOW(), NOW()
        )
        RETURNING id, status`,
       [
@@ -619,58 +542,48 @@ export async function placeOnHold({
         reason,
         formatDateOnly(startDate),
         formatDateOnly(endDate),
-        autoApprove ? 'approved' : 'pending',
         requestedBy,
-        autoApprove ? requestedBy : null,
-        autoApprove ? new Date().toISOString() : null,
       ]
     )
 
     const hold = inserted.rows[0]
     if (!hold) throw new Error('Failed to create hold')
 
-    if (autoApprove && formatDateOnly(startDate) <= today) {
-      await freezeSessionBank(enrollmentId, hold.id, reason, client)
-      await client.query(
-        `UPDATE package_enrollments
-         SET is_on_hold = true,
-             hold_start = $2,
-             hold_end = $3,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [enrollmentId, formatDateOnly(startDate), formatDateOnly(endDate)]
-      )
-      await client.query(
-        `UPDATE membership_holds
-         SET status = 'active',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [hold.id]
-      )
-      return { holdId: hold.id, status: 'active' }
-    }
+    await client.query(
+      `UPDATE package_enrollments
+       SET is_on_hold = true,
+           hold_start = $2::date,
+           hold_end = $3::date,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [enrollmentId, formatDateOnly(startDate), formatDateOnly(endDate)]
+    )
 
-    return { holdId: hold.id, status: hold.status }
+    await client.query(
+      `UPDATE membership_holds
+       SET status = 'active',
+           updated_at = NOW()
+       WHERE id = $1`,
+      [hold.id]
+    )
+
+    return { holdId: hold.id, status: 'active' }
   })
 }
 
-export async function liftHold(
-  holdId: string,
-  liftedBy: string
-): Promise<void> {
+export async function liftHold(holdId: string, liftedBy: string): Promise<void> {
   void liftedBy
+  const hold = await db.queryOne<HoldRow>(
+    `SELECT id, enrollment_id, end_date::text AS end_date, status
+     FROM membership_holds
+     WHERE id = $1
+     LIMIT 1`,
+    [holdId]
+  )
+
+  if (!hold) throw new Error('Hold not found')
+
   await db.transaction(async (client) => {
-    const hold = await client.query<HoldRow & { enrollment_id: string }>(
-      `SELECT id, enrollment_id, start_date::text, end_date::text, hold_type, status
-       FROM membership_holds
-       WHERE id = $1
-       LIMIT 1`,
-      [holdId]
-    )
-
-    const record = hold.rows[0]
-    if (!record) throw new Error('Hold not found')
-
     await client.query(
       `UPDATE membership_holds
        SET status = 'completed',
@@ -678,17 +591,7 @@ export async function liftHold(
        WHERE id = $1`,
       [holdId]
     )
-    await client.query(
-      `UPDATE session_bank
-       SET is_frozen = false,
-           frozen_at = NULL,
-           freeze_reason = NULL,
-           hold_id = NULL,
-           updated_at = NOW()
-       WHERE enrollment_id = $1
-         AND hold_id = $2`,
-      [record.enrollment_id, holdId]
-    )
+
     await client.query(
       `UPDATE package_enrollments
        SET is_on_hold = false,
@@ -696,77 +599,11 @@ export async function liftHold(
            hold_end = NULL,
            updated_at = NOW()
        WHERE id = $1`,
-      [record.enrollment_id]
+      [hold.enrollment_id]
     )
   })
 }
 
-export async function getClientBankStatus(
-  enrollmentId: string
-): Promise<SessionBankStatus | null> {
-  const enrollment = await getEnrollment(enrollmentId)
-  if (!enrollment) return null
-
-  const billingPeriod = formatDateOnly(startOfCurrentMonth())
-  await getOrCreateSessionBank(enrollmentId, enrollment.client_id)
-
-  const [currentBank, graceBank, activeHold] = await Promise.all([
-    db.queryOne<SessionBankRow>(
-      `SELECT *
-       FROM session_bank
-       WHERE enrollment_id = $1 AND billing_period = $2
-       LIMIT 1`,
-      [enrollmentId, billingPeriod]
-    ),
-    getPreviousGraceBank(enrollmentId),
-    getActiveHold(enrollmentId),
-  ])
-
-  if (!currentBank) return null
-
-  const weeklyLimit = Math.max(toNumber(enrollment.sessions_per_week), 0)
-  const weeklyUsed = await countWeeklyUsage(enrollmentId, new Date())
-  const remaining = toNumber(currentBank.sessions_remaining) + toNumber(graceBank?.sessions_remaining)
-  const eligibility = await checkBookingEligibility(enrollmentId, enrollment.client_id, new Date())
-
-  return {
-    enrollmentId,
-    billingPeriod,
-    allotted: toNumber(currentBank.sessions_allotted),
-    used: toNumber(currentBank.sessions_used),
-    forfeited: toNumber(currentBank.sessions_forfeited),
-    returned: toNumber(currentBank.sessions_returned),
-    remaining,
-    graceExpires: graceBank?.grace_period_expires ?? currentBank.grace_period_expires,
-    isOnHold: Boolean(activeHold),
-    holdUntil: activeHold?.end_date ?? null,
-    weeklyUsed,
-    weeklyLimit,
-    canBook: eligibility.eligible,
-    cannotBookReason: eligibility.reason,
-  }
-}
-
 export async function processGracePeriodExpiry(): Promise<void> {
-  const banks = await db.query<SessionBankRow>(
-    `SELECT *
-     FROM session_bank
-     WHERE status = 'active'
-       AND grace_period_expires < NOW()
-       AND sessions_remaining > 0
-       AND COALESCE(is_frozen, false) = false`
-  )
-
-  for (const bank of banks) {
-    const remaining = toNumber(bank.sessions_remaining)
-    await db.query(
-      `UPDATE session_bank
-       SET sessions_forfeited = COALESCE(sessions_forfeited, 0) + $2,
-           sessions_remaining = 0,
-           status = 'expired',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [bank.id, remaining]
-    )
-  }
+  await checkAndExpireSessions()
 }

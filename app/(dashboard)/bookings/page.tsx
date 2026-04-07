@@ -1,107 +1,19 @@
 ﻿'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ChevronDown, Copy, ExternalLink, Loader2, XCircle } from 'lucide-react'
-import { formatDurationLabel } from '@/lib/booking'
 
 type Booking = {
   id: string
   client_name: string
-  client_email: string
-  client_phone: string | null
   booking_date: string
   booking_time: string
-  duration_minutes: number | null
-  status: 'pending' | 'approved' | 'confirmed' | 'rescheduled' | 'cancelled' | 'completed' | 'no_show'
-  payment_status: 'unpaid' | 'paid' | 'waived'
-  attended: boolean | null
-  notes: string | null
-  service_name: string | null
+  status: string
   package_name: string | null
-  google_calendar_event_id?: string | null
+  service_name: string | null
 }
 
-type BookingHistoryEntry = {
-  id: string
-  action: string
-  payload: Record<string, unknown> | null
-  created_at: string
-}
-
-const STATUS_OPTIONS = ['all', 'pending', 'approved', 'confirmed', 'rescheduled', 'completed', 'cancelled', 'no_show'] as const
-
-const STATUS_BADGES: Record<string, string> = {
-  pending: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-  approved: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
-  confirmed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-  rescheduled: 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300',
-  completed: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
-  cancelled: 'border-red-500/30 bg-red-500/10 text-red-300',
-  no_show: 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary',
-}
-
-const PAYMENT_BADGES: Record<string, string> = {
-  unpaid: 'border-red-500/30 bg-red-500/10 text-red-300',
-  paid: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-  waived: 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary',
-}
-
-function normalizeDateOnly(value: string) {
-  return value.includes('T') ? value.slice(0, 10) : value
-}
-
-function normalizeTimeOnly(value: string) {
-  return value.length >= 5 ? value.slice(0, 5) : value
-}
-
-function parseBookingDateTime(booking: Pick<Booking, 'booking_date' | 'booking_time'>) {
-  const normalizedDate = normalizeDateOnly(booking.booking_date)
-  const normalizedTime = normalizeTimeOnly(booking.booking_time)
-  const timestamp = new Date(`${normalizedDate}T${normalizedTime}:00`)
-  return Number.isNaN(timestamp.getTime()) ? null : timestamp
-}
-
-function startOfWeek(date: Date) {
-  const copy = new Date(date)
-  const day = copy.getDay()
-  copy.setDate(copy.getDate() - day)
-  copy.setHours(0, 0, 0, 0)
-  return copy
-}
-
-function endOfWeek(date: Date) {
-  const start = startOfWeek(date)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 7)
-  return end
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 1)
-}
-
-function shiftMonth(date: Date, offset: number) {
-  return new Date(date.getFullYear(), date.getMonth() + offset, 1)
-}
-
-function formatMonthLabel(date: Date) {
-  return Number.isNaN(date.getTime())
-    ? 'Unknown Month'
-    : date.toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
-      })
-}
-
-function formatBookingDate(date: string, time: string) {
-  const timestamp = parseBookingDateTime({ booking_date: date, booking_time: time })
-  if (!timestamp) return `${normalizeDateOnly(date)} · ${normalizeTimeOnly(time)}`
-  return timestamp.toLocaleString('en-US', {
+function formatDateTime(booking: Booking) {
+  return new Date(`${booking.booking_date}T${booking.booking_time.slice(0, 5)}:00`).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -110,252 +22,20 @@ function formatBookingDate(date: string, time: string) {
   })
 }
 
-function availableActions(status: Booking['status']) {
-  const actions: Array<{ label: string; value: Booking['status'] }> = []
-
-  if (status === 'pending') {
-    actions.push(
-      { label: 'Approve', value: 'approved' },
-      { label: 'Mark Rescheduled', value: 'rescheduled' },
-      { label: 'Cancel', value: 'cancelled' }
-    )
-  }
-
-  if (status === 'approved') {
-    actions.push(
-      { label: 'Mark Confirmed', value: 'confirmed' },
-      { label: 'Mark Rescheduled', value: 'rescheduled' },
-      { label: 'Cancel', value: 'cancelled' }
-    )
-  }
-
-  if (status === 'confirmed') {
-    actions.push(
-      { label: 'Mark Complete', value: 'completed' },
-      { label: 'Mark Rescheduled', value: 'rescheduled' },
-      { label: 'Mark No Show', value: 'no_show' },
-      { label: 'Cancel', value: 'cancelled' }
-    )
-  }
-
-  if (status === 'rescheduled') {
-    actions.push(
-      { label: 'Mark Confirmed', value: 'confirmed' },
-      { label: 'Cancel', value: 'cancelled' }
-    )
-  }
-
-  if (status === 'no_show') {
-    actions.push(
-      { label: 'Mark Confirmed', value: 'confirmed' },
-      { label: 'Cancel', value: 'cancelled' }
-    )
-  }
-
-  if (status === 'cancelled') {
-    actions.push({ label: 'Approve', value: 'approved' })
-  }
-
-  return actions
-}
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
-      <div className="text-3xl font-semibold text-forge-text-primary">{value}</div>
-      <div className="mt-2 font-mono text-xs uppercase tracking-widest text-forge-text-muted">{label}</div>
-    </div>
-  )
-}
-
-function DetailDrawer({
-  booking,
-  open,
-  updating,
-  history,
-  historyLoading,
-  form,
-  onClose,
-  onChange,
-  onSave,
-  onCopy,
-}: {
-  booking: Booking | null
-  open: boolean
-  updating: boolean
-  history: BookingHistoryEntry[]
-  historyLoading: boolean
-  form: { booking_date: string; booking_time: string; payment_status: Booking['payment_status']; notes: string }
-  onClose: () => void
-  onChange: (field: 'booking_date' | 'booking_time' | 'payment_status' | 'notes', value: string) => void
-  onSave: () => void
-  onCopy: (value: string, label: string) => void
-}) {
-  if (!open || !booking) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
-      <button className="flex-1" onClick={onClose} aria-label="Close booking details" />
-      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-forge-border bg-forge-surface-2 p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-forge-text-primary">Booking Details</h2>
-            <p className="mt-2 text-lg font-semibold text-forge-text-primary">{booking.client_name}</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-forge-text-muted hover:bg-forge-surface-3/70 hover:text-forge-text-primary">
-            <XCircle size={18} />
-          </button>
-        </div>
-
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Session</div>
-            <div className="mt-2 text-base font-medium text-forge-text-primary">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
-            <div className="mt-2 text-sm text-forge-text-muted">{formatDurationLabel(booking.duration_minutes)}</div>
-            {booking.google_calendar_event_id ? (
-              <div className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300">
-                Calendar linked
-              </div>
-            ) : null}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Contact</div>
-              <div className="mt-3 space-y-3 text-sm text-forge-text-secondary">
-                <div>
-                  <div className="text-forge-text-primary">{booking.client_email}</div>
-                  <button onClick={() => onCopy(booking.client_email, 'Email')} className="mt-1 text-xs text-forge-gold hover:text-forge-text-primary">Copy email</button>
-                </div>
-                <div>
-                  <div className="text-forge-text-primary">{booking.client_phone || 'No phone on file'}</div>
-                  {booking.client_phone ? <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 text-xs text-forge-gold hover:text-forge-text-primary">Copy phone</button> : null}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Status</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>{booking.status.replace('_', ' ')}</span>
-                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>{booking.payment_status}</span>
-              </div>
-              <div className="mt-3 text-sm text-forge-text-muted">
-                {booking.attended === null ? 'Attendance not set' : booking.attended ? 'Marked attended' : 'Marked not attended'}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Reschedule & Notes</div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="forge-label">Booking Date</label>
-                <input type="date" value={form.booking_date} onChange={(event) => onChange('booking_date', event.target.value)} className="forge-input" />
-              </div>
-              <div>
-                <label className="forge-label">Booking Time</label>
-                <input type="time" value={form.booking_time} onChange={(event) => onChange('booking_time', event.target.value)} className="forge-input" />
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className="forge-label">Payment Status</label>
-              <select value={form.payment_status} onChange={(event) => onChange('payment_status', event.target.value)} className="forge-input">
-                <option value="unpaid">Unpaid</option>
-                <option value="paid">Paid</option>
-                <option value="waived">Waived</option>
-              </select>
-            </div>
-            <div className="mt-4">
-              <label className="forge-label">Notes</label>
-              <textarea value={form.notes} onChange={(event) => onChange('notes', event.target.value)} className="forge-input min-h-[120px]" />
-            </div>
-            <button onClick={onSave} disabled={updating} className="forge-btn-gold mt-5 w-full disabled:opacity-50">
-              {updating ? 'Saving...' : 'Save Booking Updates'}
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Recent Changes</div>
-            <div className="mt-4 space-y-3">
-              {historyLoading ? (
-                <div className="text-sm text-forge-text-muted">Loading history...</div>
-              ) : history.length > 0 ? (
-                history.map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-3 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-forge-text-primary">{entry.action.replace('.', ' ')}</div>
-                      <div className="text-xs text-forge-text-muted">{new Date(entry.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
-                    </div>
-                    {entry.payload && Object.keys(entry.payload).length > 0 ? (
-                      <div className="mt-2 text-xs text-forge-text-muted">
-                        {Object.entries(entry.payload).map(([key, value]) => `${key}: ${String(value ?? '')}`).join(' · ')}
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm text-forge-text-muted">No booking changes logged yet.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
-  const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
-  const [hasInitializedMonth, setHasInitializedMonth] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [updating, setUpdating] = useState<string | null>(null)
-  const [detailBooking, setDetailBooking] = useState<Booking | null>(null)
-  const [detailHistory, setDetailHistory] = useState<BookingHistoryEntry[]>([])
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailForm, setDetailForm] = useState({
-    booking_date: '',
-    booking_time: '',
-    payment_status: 'unpaid' as Booking['payment_status'],
-    notes: '',
-  })
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]>('all')
-  const [search, setSearch] = useState('')
+  const [savingId, setSavingId] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [message, setMessage] = useState('')
 
   async function loadBookings() {
     setLoading(true)
-    setError('')
     try {
       const res = await fetch('/api/bookings', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to load bookings')
-      const nextBookings = Array.isArray(data.bookings) ? data.bookings : []
-      setBookings(nextBookings)
-
-      if (!hasInitializedMonth) {
-        const currentMonthStart = startOfMonth(new Date())
-        const currentMonthEnd = endOfMonth(currentMonthStart)
-        const hasCurrentMonthBookings = nextBookings.some((booking: Booking) => {
-          const timestamp = parseBookingDateTime(booking)
-          return timestamp ? timestamp >= currentMonthStart && timestamp < currentMonthEnd : false
-        })
-
-        if (!hasCurrentMonthBookings && nextBookings.length > 0) {
-          const latestBooking = [...nextBookings]
-            .map((booking) => ({ booking, timestamp: parseBookingDateTime(booking) }))
-            .filter((entry): entry is { booking: Booking; timestamp: Date } => Boolean(entry.timestamp))
-            .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0]
-
-          if (latestBooking) {
-            setSelectedMonth(startOfMonth(latestBooking.timestamp))
-          }
-        }
-
-        setHasInitializedMonth(true)
-      }
+      setBookings(Array.isArray(data.bookings) ? data.bookings : [])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load bookings')
     } finally {
@@ -367,380 +47,101 @@ export default function BookingsPage() {
     void loadBookings()
   }, [])
 
-  async function openBookingDetails(booking: Booking) {
-    setDetailBooking(booking)
-    setDetailForm({
-      booking_date: normalizeDateOnly(booking.booking_date),
-      booking_time: normalizeTimeOnly(booking.booking_time),
-      payment_status: booking.payment_status,
-      notes: booking.notes ?? '',
-    })
-    setDetailLoading(true)
-    try {
-      const res = await fetch(`/api/bookings/${booking.id}`, { cache: 'no-store' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load booking details')
-      if (data.booking) {
-        setDetailBooking(data.booking)
-        setDetailForm({
-          booking_date: normalizeDateOnly(data.booking.booking_date),
-          booking_time: normalizeTimeOnly(data.booking.booking_time),
-          payment_status: data.booking.payment_status,
-          notes: data.booking.notes ?? '',
-        })
-      }
-      setDetailHistory(Array.isArray(data.history) ? data.history : [])
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load booking details')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
+  const pending = useMemo(() => bookings.filter((booking) => booking.status === 'pending_confirmation'), [bookings])
+  const other = useMemo(() => bookings.filter((booking) => booking.status !== 'pending_confirmation'), [bookings])
 
-  async function updateBookingStatus(bookingId: string, status: Booking['status']) {
-    setUpdating(bookingId)
+  async function handleAction(bookingId: string, action: 'confirm' | 'decline') {
+    setSavingId(bookingId)
     setError('')
-    setSuccess('')
+    setMessage('')
     try {
-      const res = await fetch(`/api/bookings/${bookingId}`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/portal/book/${action}`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ bookingId }),
       })
       const data = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setBookings((prev) => prev.map((booking) => (
-          booking.id === bookingId ? { ...booking, status } : booking
-        )))
-        if (detailBooking?.id === bookingId) {
-          setDetailBooking((current) => current ? { ...current, status } : current)
-        }
-        if (data.message) {
-          window.alert(data.message)
-        }
-        setSuccess(`Booking ${status.replace('_', ' ')} successfully.`)
-        await loadBookings()
-      } else {
-        window.alert(data.error || 'Action failed')
-      }
-    } catch {
-      window.alert('Network error — please try again')
-    } finally {
-      setUpdating(null)
-    }
-  }
-
-  async function copyBookingLink() {
-    try {
-      await navigator.clipboard.writeText('https://forge-css.vercel.app/book')
-      setCopied(true)
-      setSuccess('Booking page link copied.')
-      window.setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setError('Unable to copy booking page link')
-    }
-  }
-
-  async function copyValue(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value)
-      setSuccess(`${label} copied.`)
-    } catch {
-      setError(`Unable to copy ${label.toLowerCase()}`)
-    }
-  }
-
-  async function saveBookingDetails() {
-    if (!detailBooking) return
-    setUpdating(detailBooking.id)
-    setError('')
-    setSuccess('')
-    try {
-      const res = await fetch(`/api/bookings/${detailBooking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          booking_date: detailForm.booking_date,
-          booking_time: detailForm.booking_time,
-          payment_status: detailForm.payment_status,
-          notes: detailForm.notes.trim() || null,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to update booking details')
-
+      if (!res.ok) throw new Error(data.error ?? `Failed to ${action} booking`)
+      setMessage(action === 'confirm' ? 'Booking confirmed.' : 'Booking declined and session restored.')
       await loadBookings()
-      if (detailBooking) {
-        void openBookingDetails({ ...detailBooking, booking_date: detailForm.booking_date, booking_time: detailForm.booking_time, payment_status: detailForm.payment_status, notes: detailForm.notes.trim() || null })
-      }
-      setDetailBooking((current) => current ? {
-        ...current,
-        booking_date: detailForm.booking_date,
-        booking_time: detailForm.booking_time,
-        payment_status: detailForm.payment_status,
-        notes: detailForm.notes.trim() || null,
-      } : null)
-      setSuccess('Booking details updated.')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update booking details')
+      setError(err instanceof Error ? err.message : `Failed to ${action} booking`)
     } finally {
-      setUpdating(null)
+      setSavingId(null)
     }
   }
-
-  const monthBookings = useMemo(() => {
-    const monthStart = startOfMonth(selectedMonth)
-    const monthEnd = endOfMonth(selectedMonth)
-
-    return bookings.filter((booking) => {
-      const timestamp = parseBookingDateTime(booking)
-      return timestamp ? timestamp >= monthStart && timestamp < monthEnd : false
-    })
-  }, [bookings, selectedMonth])
-
-  const filteredBookings = useMemo(() => {
-    return monthBookings.filter((booking) => {
-      if (statusFilter !== 'all' && booking.status !== statusFilter) return false
-      if (!search.trim()) return true
-      const query = search.trim().toLowerCase()
-      return booking.client_name.toLowerCase().includes(query) || booking.client_email.toLowerCase().includes(query)
-    })
-  }, [monthBookings, search, statusFilter])
-
-  const stats = useMemo(() => {
-    const now = new Date()
-    const todayKey = now.toISOString().slice(0, 10)
-    const weekStart = startOfWeek(now)
-    const weekEnd = endOfWeek(now)
-    const monthStart = startOfMonth(selectedMonth)
-    const monthEnd = endOfMonth(selectedMonth)
-
-    const withDates = bookings
-      .map((booking) => ({
-        ...booking,
-        timestamp: parseBookingDateTime(booking),
-      }))
-      .filter((booking): booking is Booking & { timestamp: Date } => Boolean(booking.timestamp))
-
-    return {
-      today: withDates.filter((booking) => normalizeDateOnly(booking.booking_date) === todayKey).length,
-      week: withDates.filter((booking) => booking.timestamp >= weekStart && booking.timestamp < weekEnd).length,
-      openRequests: withDates.filter((booking) => (booking.status === 'pending' || booking.status === 'approved' || booking.status === 'rescheduled') && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
-      completedMonth: withDates.filter((booking) => booking.status === 'completed' && booking.timestamp >= monthStart && booking.timestamp < monthEnd).length,
-    }
-  }, [bookings, selectedMonth])
-
-  const latestBookingMonth = useMemo(() => {
-    const latestBooking = [...bookings]
-      .map((booking) => ({ booking, timestamp: parseBookingDateTime(booking) }))
-      .filter((entry): entry is { booking: Booking; timestamp: Date } => Boolean(entry.timestamp))
-      .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0]
-
-    return latestBooking ? startOfMonth(latestBooking.timestamp) : null
-  }, [bookings])
 
   return (
     <div className="min-h-screen bg-forge-surface p-6 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-forge-text-primary">Bookings</h1>
-          <p className="mt-1 text-sm text-forge-text-muted">Manage booking requests, confirmations, and attendance.</p>
+          <p className="mt-1 text-sm text-forge-text-muted">Review pending client session requests and active booking history.</p>
         </div>
 
-        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {message ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{message}</div> : null}
+        {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
+
+        <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Viewing Month</div>
-              <div className="mt-2 text-lg font-semibold text-forge-text-primary">{formatMonthLabel(selectedMonth)}</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}
-                className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
-              >
-                Previous Month
-              </button>
-              <button
-                onClick={() => setSelectedMonth(startOfMonth(new Date()))}
-                className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
-              >
-                Current Month
-              </button>
-              <button
-                onClick={() => setSelectedMonth((current) => shiftMonth(current, 1))}
-                className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
-              >
-                Next Month
-              </button>
+              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Pending Confirmation</div>
+              <div className="mt-2 text-2xl font-semibold text-forge-text-primary">{pending.length}</div>
             </div>
           </div>
-        </div>
 
-        {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
-        {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{success}</div> : null}
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Today's Bookings" value={stats.today} />
-          <StatCard label="This Week" value={stats.week} />
-          <StatCard label={`Open Requests In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.openRequests} />
-          <StatCard label={`Completed In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.completedMonth} />
-        </div>
-
-        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  onClick={() => setStatusFilter(option)}
-                  className={`rounded-xl px-3 py-2 text-sm capitalize transition-colors ${statusFilter === option ? 'bg-forge-gold text-forge-purple-dark' : 'bg-forge-surface-3/80 text-forge-text-primary/60 hover:text-forge-text-primary'}`}
-                >
-                  {option === 'all' ? 'All' : option.replace('_', ' ')}
-                </button>
+          {loading ? (
+            <div className="text-sm text-forge-text-muted">Loading bookings...</div>
+          ) : pending.length === 0 ? (
+            <div className="text-sm text-forge-text-muted">No pending session requests.</div>
+          ) : (
+            <div className="space-y-3">
+              {pending.map((booking) => (
+                <div key={booking.id} className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="text-base font-semibold text-forge-text-primary">{booking.client_name}</div>
+                      <div className="mt-1 text-sm text-forge-text-secondary">{formatDateTime(booking)}</div>
+                      <div className="mt-1 text-sm text-forge-text-muted">{booking.package_name ?? booking.service_name ?? 'Session'}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => void handleAction(booking.id, 'confirm')} disabled={savingId === booking.id} className="forge-btn-gold disabled:opacity-50">
+                        {savingId === booking.id ? 'Saving...' : 'Confirm'}
+                      </button>
+                      <button onClick={() => void handleAction(booking.id, 'decline')} disabled={savingId === booking.id} className="rounded-xl border border-red-500/30 px-4 py-2 text-sm text-red-300 disabled:opacity-50">
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by client name or email"
-              className="forge-input w-full max-w-sm"
-            />
-          </div>
-        </div>
+          )}
+        </section>
 
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-forge-text-muted/70" />
+        <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
+          <div className="mb-4 text-xs uppercase tracking-widest text-forge-text-muted">All Other Bookings</div>
+          <div className="space-y-3">
+            {other.map((booking) => (
+              <div key={booking.id} className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-forge-text-primary">{booking.client_name}</div>
+                    <div className="mt-1 text-sm text-forge-text-secondary">{formatDateTime(booking)}</div>
+                    <div className="mt-1 text-sm text-forge-text-muted">{booking.package_name ?? booking.service_name ?? 'Session'}</div>
+                  </div>
+                  <div className="rounded-full border border-forge-border bg-forge-surface px-3 py-1 text-xs uppercase tracking-wide text-forge-text-secondary">
+                    {booking.status.replace(/_/g, ' ')}
+                  </div>
+                </div>
+                {booking.status === 'declined' ? <div className="mt-3 text-sm text-emerald-300">Session restored to client bank.</div> : null}
+              </div>
+            ))}
+            {!loading && other.length === 0 ? <div className="text-sm text-forge-text-muted">No other bookings yet.</div> : null}
           </div>
-        ) : filteredBookings.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-forge-border bg-forge-surface-2 p-12 text-center">
-            <XCircle className="mx-auto h-10 w-10 text-forge-text-muted/70" />
-            <h2 className="mt-4 text-lg font-semibold text-forge-text-primary">No bookings for {formatMonthLabel(selectedMonth)}</h2>
-            <p className="mt-2 text-sm text-forge-text-muted">
-              {bookings.length > 0
-                ? 'Bookings exist in other months. Jump to the latest booking month or choose another month above.'
-                : 'Try another month or share the public booking page to start collecting requests.'}
-            </p>
-            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              {bookings.length > 0 && latestBookingMonth ? (
-                <button
-                  onClick={() => setSelectedMonth(latestBookingMonth)}
-                  className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
-                >
-                  Jump To Latest Booking
-                </button>
-              ) : null}
-              <button onClick={() => void copyBookingLink()} className="forge-btn-gold inline-flex items-center gap-2">
-                <Copy size={15} />
-                {copied ? 'Copied booking link' : 'Copy booking page link'}
-              </button>
-              <Link href="/book" target="_blank" className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary">
-                <ExternalLink size={15} />
-                View booking page
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-forge-border/70 bg-forge-surface-2">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-forge-surface-3/70 text-left text-xs uppercase tracking-widest text-forge-text-muted">
-                  <tr>
-                    <th className="px-4 py-3">Client</th>
-                    <th className="px-4 py-3">Service / Package</th>
-                    <th className="px-4 py-3">Date &amp; Time</th>
-                    <th className="px-4 py-3">Duration</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Payment</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBookings.map((booking) => (
-                    <tr key={booking.id} className="border-t border-forge-border/60 align-top text-forge-text-secondary">
-                      <td className="px-4 py-4">
-                        <div className="font-medium text-forge-text-primary">{booking.client_name}</div>
-                        <div className="mt-1 text-xs text-forge-text-muted">{booking.client_email}</div>
-                      </td>
-                      <td className="px-4 py-4 text-forge-text-primary/60">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</td>
-                      <td className="px-4 py-4 text-forge-text-primary/60">{formatBookingDate(booking.booking_date, booking.booking_time)}</td>
-                      <td className="px-4 py-4 text-forge-text-primary/60">{formatDurationLabel(booking.duration_minutes)}</td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>
-                          {booking.status.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>
-                          {booking.payment_status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => void openBookingDetails(booking)}
-                            className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-3 py-2 text-xs text-forge-text-secondary hover:text-forge-text-primary"
-                          >
-                            View
-                          </button>
-                          <details className="group relative inline-block text-left">
-                            <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-forge-border px-3 py-2 text-xs text-forge-text-secondary hover:text-forge-text-primary">
-                              Actions
-                              <ChevronDown size={14} className="transition group-open:rotate-180" />
-                            </summary>
-                            <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-forge-border bg-forge-surface-2 p-2 shadow-2xl">
-                              {availableActions(booking.status).length > 0 ? (
-                                availableActions(booking.status).map((action) => {
-                                  const isUpdating = updating === booking.id
-                                  return (
-                                    <button
-                                      key={action.value}
-                                      onClick={() => void updateBookingStatus(booking.id, action.value)}
-                                      disabled={updating === booking.id}
-                                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:opacity-50"
-                                    >
-                                      {isUpdating ? (
-                                        <Loader2 size={14} className="animate-spin" />
-                                      ) : action.value === 'completed' ? (
-                                        <CheckCircle2 size={14} />
-                                      ) : (
-                                        <span className="h-2 w-2 rounded-full bg-forge-gold" />
-                                      )}
-                                      {isUpdating ? 'Updating...' : action.label}
-                                    </button>
-                                  )
-                                })
-                              ) : (
-                                <div className="px-3 py-2 text-xs text-forge-text-muted">No actions available</div>
-                              )}
-                            </div>
-                          </details>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        </section>
       </div>
-
-      <DetailDrawer
-        booking={detailBooking}
-        open={Boolean(detailBooking)}
-        updating={updating === detailBooking?.id}
-        history={detailHistory}
-        historyLoading={detailLoading}
-        form={detailForm}
-        onClose={() => { setDetailBooking(null); setDetailHistory([]) }}
-        onChange={(field, value) => setDetailForm((current) => ({ ...current, [field]: value }))}
-        onSave={() => void saveBookingDetails()}
-        onCopy={(value, label) => void copyValue(value, label)}
-      />
     </div>
   )
 }
-
-
 

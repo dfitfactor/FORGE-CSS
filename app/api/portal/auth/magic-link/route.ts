@@ -6,7 +6,7 @@ import crypto from 'crypto'
 export async function POST(request: NextRequest) {
   try {
     console.log('[magic-link] RESEND_API_KEY set:', !!process.env.RESEND_API_KEY)
-    console.log('[magic-link] FROM:', process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev')
+    console.log('[magic-link] FROM:', process.env.RESEND_FROM_EMAIL || 'onboarding@dfitfactor.com')
 
     const { email } = await request.json()
     if (!email) {
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     console.log('[magic-link] magic link:', magicLink)
 
     const fromAddress = process.env.RESEND_FROM_EMAIL ||
-      'FORGE <onboarding@resend.dev>'
+      'FORGE <onboarding@dfitfactor.com>'
 
     const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -110,3 +110,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

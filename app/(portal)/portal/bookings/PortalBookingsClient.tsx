@@ -1,520 +1,140 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, List, Loader2 } from 'lucide-react'
 
 type Booking = {
   id: string
   booking_date: string
   booking_time: string
-  duration_minutes: number | null
+  scheduled_at?: string | null
   status: string
-  payment_status: string | null
-  notes: string | null
   item_name: string
 }
 
-type Slot = {
-  value: string
-  label: string
+const ORDER = ['pending_confirmation', 'confirmed', 'completed', 'cancelled', 'declined', 'no_show']
+
+function formatDateTime(booking: Booking) {
+  const timestamp = new Date(`${booking.booking_date}T${booking.booking_time.slice(0, 5)}:00`)
+  return timestamp.toLocaleString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
-type ViewMode = 'list' | 'calendar'
-
-function badgeColors(status: string) {
-  if (status === 'confirmed') return { background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.35)' }
-  if (status === 'completed') return { background: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.35)' }
-  if (status === 'cancelled' || status === 'no_show') return { background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.35)' }
-  if (status === 'approved' || status === 'rescheduled') return { background: 'var(--app-gold-soft)', color: 'var(--app-gold)', border: '1px solid rgba(212,175,55,0.35)' }
-  return { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.35)' }
-}
-
-function canModifyBooking(booking: Booking) {
-  if (!['pending', 'approved', 'confirmed', 'rescheduled'].includes(booking.status)) return false
+function canCancel(booking: Booking) {
+  if (booking.status !== 'confirmed') return false
   const hoursUntil = (new Date(`${booking.booking_date}T${booking.booking_time.slice(0, 5)}:00`).getTime() - Date.now()) / (1000 * 60 * 60)
   return hoursUntil >= 24
 }
 
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0)
-}
-
-function addMonths(date: Date, months: number) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1)
-}
-
-function startOfCalendar(date: Date) {
-  const monthStart = startOfMonth(date)
-  return new Date(monthStart.getFullYear(), monthStart.getMonth(), monthStart.getDate() - monthStart.getDay())
-}
-
-function endOfCalendar(date: Date) {
-  const monthEnd = endOfMonth(date)
-  return new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + (6 - monthEnd.getDay()))
-}
-
-function sameDay(left: Date, right: Date) {
-  return left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-}
-
-function toBookingDate(booking: Booking) {
-  return new Date(`${booking.booking_date}T12:00:00`)
-}
-
-export default function PortalBookingsClient({
-  initialBookings,
-}: {
-  initialBookings: Booking[]
-}) {
+export default function PortalBookingsClient({ initialBookings }: { initialBookings: Booking[] }) {
   const [bookings, setBookings] = useState(initialBookings)
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [activeBookingId, setActiveBookingId] = useState<string | null>(null)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [selectedDate, setSelectedDate] = useState('')
-  const [selectedWindow, setSelectedWindow] = useState<'morning' | 'afternoon' | 'evening'>('morning')
-  const [selectedTime, setSelectedTime] = useState('')
-  const [slots, setSlots] = useState<Slot[]>([])
-  const [slotsLoading, setSlotsLoading] = useState(false)
-  const [reschedulingId, setReschedulingId] = useState<string | null>(null)
-  const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
 
-  const grouped = useMemo(() => {
-    return {
-      upcoming: bookings.filter((booking) => ['pending', 'approved', 'confirmed', 'rescheduled'].includes(booking.status)),
-      history: bookings.filter((booking) => ['completed', 'cancelled', 'no_show'].includes(booking.status)),
-    }
+  const groups = useMemo(() => {
+    return ORDER.map((status) => ({
+      status,
+      bookings: bookings.filter((booking) => booking.status === status),
+    })).filter((group) => group.bookings.length > 0)
   }, [bookings])
 
-  const calendarDays = useMemo(() => {
-    const days: Date[] = []
-    const cursor = startOfCalendar(selectedMonth)
-    const calendarEnd = endOfCalendar(selectedMonth)
-    while (cursor <= calendarEnd) {
-      days.push(new Date(cursor))
-      cursor.setDate(cursor.getDate() + 1)
-    }
-    return days
-  }, [selectedMonth])
-
-  const bookingsByDay = useMemo(() => {
-    return calendarDays.map((day) => bookings.filter((booking) => sameDay(toBookingDate(booking), day)))
-  }, [bookings, calendarDays])
-
-  async function refreshBookings() {
-    const res = await fetch('/api/portal/bookings', { cache: 'no-store' })
-    const data = await res.json().catch(() => ({}))
-    if (res.ok && Array.isArray(data.bookings)) {
-      setBookings(data.bookings)
-    }
-  }
-
-  async function handleCancel(bookingId: string) {
-    setActiveBookingId(bookingId)
-    setMessage('')
+  async function cancelBooking() {
+    if (!selectedBooking) return
+    setSaving(true)
     setError('')
+    setMessage('')
+
     try {
-      const res = await fetch(`/api/portal/bookings/${bookingId}`, {
-        method: 'PATCH',
+      const res = await fetch('/api/portal/book/cancel', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel' }),
+        body: JSON.stringify({ bookingId: selectedBooking.id }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? 'Failed to cancel booking')
-      setMessage(data.message ?? 'Booking cancelled.')
-      await refreshBookings()
+
+      setBookings((current) => current.map((booking) => booking.id === selectedBooking.id ? { ...booking, status: 'cancelled' } : booking))
+      setSelectedBooking(null)
+      setMessage('Session cancelled. Your session was forfeited per policy.')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to cancel booking')
     } finally {
-      setActiveBookingId(null)
-    }
-  }
-
-  async function loadSlots(booking: Booking, nextDate: string, nextWindow: 'morning' | 'afternoon' | 'evening') {
-    setSlotsLoading(true)
-    setError('')
-    try {
-      const duration = booking.duration_minutes ?? 60
-      const res = await fetch(`/api/public/availability?date=${encodeURIComponent(nextDate)}&duration=${duration}&period=${nextWindow}`, { cache: 'no-store' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load availability')
-      setSlots(Array.isArray(data.slots) ? data.slots : [])
-      setSelectedTime('')
-      if (!Array.isArray(data.slots) || data.slots.length === 0) {
-        setError(data.reason ?? 'No open times in this window.')
-      }
-    } catch (err: unknown) {
-      setSlots([])
-      setError(err instanceof Error ? err.message : 'Failed to load availability')
-    } finally {
-      setSlotsLoading(false)
-    }
-  }
-
-  async function handleReschedule(booking: Booking) {
-    if (!selectedDate || !selectedTime) {
-      setError('Choose a new date and available time first.')
-      return
-    }
-
-    setActiveBookingId(booking.id)
-    setMessage('')
-    setError('')
-    try {
-      const res = await fetch(`/api/portal/bookings/${booking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reschedule',
-          bookingDate: selectedDate,
-          bookingTime: selectedTime,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Failed to reschedule booking')
-      setMessage(data.message ?? 'Reschedule request saved.')
-      setReschedulingId(null)
-      setSelectedDate('')
-      setSelectedTime('')
-      setSlots([])
-      await refreshBookings()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to reschedule booking')
-    } finally {
-      setActiveBookingId(null)
+      setSaving(false)
     }
   }
 
   return (
     <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <h1 style={{ color: 'var(--app-text)', fontSize: 24, fontWeight: 700, marginBottom: 8 }}>My Bookings</h1>
+        <p style={{ color: 'var(--app-text-secondary)', fontSize: 14, margin: 0 }}>
+          Track your pending confirmations, upcoming confirmed sessions, and booking history.
+        </p>
+      </section>
+
       {message ? <div style={{ marginBottom: 16, borderRadius: 12, border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.12)', color: '#6ee7b7', padding: '14px 16px', fontSize: 14 }}>{message}</div> : null}
       {error ? <div style={{ marginBottom: 16, borderRadius: 12, border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.12)', color: '#fca5a5', padding: '14px 16px', fontSize: 14 }}>{error}</div> : null}
 
-      <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ color: 'var(--app-text)', fontSize: 24, fontWeight: 700, marginBottom: 6 }}>My Sessions</h1>
-            <p style={{ color: 'var(--app-text-muted)', fontSize: 14, marginBottom: 0 }}>
-              View your booked sessions, upcoming requests, and make changes more than 24 hours in advance.
-            </p>
+      <section style={{ display: 'grid', gap: 16 }}>
+        {groups.length === 0 ? (
+          <div style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, color: 'var(--app-text-secondary)' }}>
+            No bookings yet.
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              style={{
-                borderRadius: 10,
-                border: viewMode === 'list' ? '1px solid rgba(212,175,55,0.45)' : '1px solid rgba(255,255,255,0.1)',
-                background: viewMode === 'list' ? 'var(--app-gold-soft)' : 'transparent',
-                color: viewMode === 'list' ? 'var(--app-gold)' : 'var(--app-text-secondary)',
-                padding: '10px 14px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                cursor: 'pointer',
-              }}
-            >
-              <List size={16} />
-              List
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('calendar')}
-              style={{
-                borderRadius: 10,
-                border: viewMode === 'calendar' ? '1px solid rgba(212,175,55,0.45)' : '1px solid rgba(255,255,255,0.1)',
-                background: viewMode === 'calendar' ? 'var(--app-gold-soft)' : 'transparent',
-                color: viewMode === 'calendar' ? 'var(--app-gold)' : 'var(--app-text-secondary)',
-                padding: '10px 14px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                cursor: 'pointer',
-              }}
-            >
-              <CalendarDays size={16} />
-              Calendar
-            </button>
+        ) : groups.map((group) => (
+          <div key={group.status} style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 20 }}>
+            <div style={{ color: 'var(--app-gold)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 14 }}>
+              {group.status.replace(/_/g, ' ')}
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {group.bookings.map((booking) => (
+                <div key={booking.id} style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', background: 'var(--app-surface-muted)', padding: 16 }}>
+                  <div style={{ color: 'var(--app-text)', fontSize: 16, fontWeight: 600 }}>{booking.item_name}</div>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 14, marginTop: 6 }}>{formatDateTime(booking)}</div>
+                  {booking.status === 'declined' ? <div style={{ color: '#6ee7b7', fontSize: 13, marginTop: 10 }}>Session restored to your bank.</div> : null}
+                  {canCancel(booking) ? (
+                    <button type="button" onClick={() => setSelectedBooking(booking)} style={{ marginTop: 12, borderRadius: 10, border: '1px solid rgba(239,68,68,0.35)', background: 'transparent', color: '#fca5a5', padding: '10px 14px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  ) : booking.status === 'confirmed' ? (
+                    <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 10 }}>Cancellation window passed</div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {selectedBooking ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ width: '100%', maxWidth: 520, borderRadius: 16, background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', padding: 24 }}>
+            <h2 style={{ color: 'var(--app-text)', fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Cancel Session</h2>
+            <div style={{ color: 'var(--app-text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
+              <div>{selectedBooking.item_name}</div>
+              <div>{formatDateTime(selectedBooking)}</div>
+            </div>
+            <div style={{ marginTop: 16, borderRadius: 12, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', padding: '12px 14px', fontSize: 13 }}>
+              Cancelling will forfeit this session.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+              <button type="button" onClick={() => setSelectedBooking(null)} style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 14px', cursor: 'pointer' }}>
+                Close
+              </button>
+              <button type="button" onClick={() => void cancelBooking()} disabled={saving} style={{ borderRadius: 10, border: 'none', background: 'var(--app-gold)', color: '#111', padding: '10px 16px', fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.65 : 1 }}>
+                {saving ? 'Cancelling...' : 'Confirm Cancellation'}
+              </button>
+            </div>
           </div>
         </div>
-      </section>
-
-      {viewMode === 'calendar' ? (
-        <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-            <div>
-              <div style={{ color: 'var(--app-gold)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Calendar</div>
-              <div style={{ color: 'var(--app-text)', fontSize: 20, fontWeight: 600 }}>
-                {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setSelectedMonth((current) => addMonths(current, -1))}
-                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-              >
-                <ChevronLeft size={16} />
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedMonth(startOfMonth(new Date()))}
-                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 12px', cursor: 'pointer' }}
-              >
-                Current Month
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedMonth((current) => addMonths(current, 1))}
-                style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--app-text-secondary)', padding: '10px 12px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-              >
-                Next
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: 760, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--app-surface-muted)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'var(--app-surface-muted)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                  <div key={day} style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--app-text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    {day}
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-                {calendarDays.map((day, index) => {
-                  const dayBookings = bookingsByDay[index]
-                  const inMonth = day.getMonth() === selectedMonth.getMonth()
-                  const isToday = sameDay(day, new Date())
-                  return (
-                    <div
-                      key={day.toISOString()}
-                      style={{
-                        minHeight: 140,
-                        padding: 10,
-                        borderRight: index % 7 === 6 ? 'none' : '1px solid rgba(255,255,255,0.06)',
-                        borderBottom: '1px solid rgba(255,255,255,0.06)',
-                        background: isToday ? 'rgba(212,175,55,0.08)' : 'transparent',
-                        opacity: inMonth ? 1 : 0.45,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <span style={{
-                          color: isToday ? 'var(--app-gold)' : 'var(--app-text)',
-                          fontSize: 14,
-                          fontWeight: 700,
-                          width: 28,
-                          height: 28,
-                          borderRadius: 999,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: isToday ? 'var(--app-gold-soft)' : 'transparent',
-                        }}>
-                          {day.getDate()}
-                        </span>
-                        {dayBookings.length > 0 ? (
-                          <span style={{ color: 'var(--app-text-secondary)', fontSize: 11 }}>{dayBookings.length} booked</span>
-                        ) : null}
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {dayBookings.length === 0 ? (
-                          <span style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>No sessions</span>
-                        ) : (
-                          dayBookings.slice(0, 3).map((booking) => (
-                            <div
-                              key={booking.id}
-                              style={{
-                                ...badgeColors(booking.status),
-                                borderRadius: 10,
-                                padding: '8px 9px',
-                                fontSize: 11,
-                              }}
-                            >
-                              <div style={{ fontWeight: 700, marginBottom: 2 }}>{booking.booking_time.slice(0, 5)}</div>
-                              <div style={{ color: 'inherit', opacity: 0.95, lineHeight: 1.35 }}>{booking.item_name}</div>
-                            </div>
-                          ))
-                        )}
-                        {dayBookings.length > 3 ? (
-                          <span style={{ color: 'var(--app-gold)', fontSize: 11 }}>+{dayBookings.length - 3} more</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </section>
       ) : null}
-
-      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-        <div style={{ color: 'var(--app-gold)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>Upcoming & Active</div>
-        {grouped.upcoming.length === 0 ? (
-          <p style={{ color: 'var(--app-text-secondary)', fontSize: 14 }}>No upcoming sessions or requests right now.</p>
-        ) : (
-          grouped.upcoming.map((booking) => (
-            <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '16px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ color: 'var(--app-text)', fontWeight: 600, fontSize: 16 }}>{booking.item_name}</div>
-                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 14, marginTop: 4 }}>
-                    {new Date(`${booking.booking_date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {booking.booking_time.slice(0, 5)}
-                  </div>
-                  <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>
-                    Payment: {booking.payment_status ?? 'unpaid'}{booking.notes ? `  -  ${booking.notes}` : ''}
-                  </div>
-                </div>
-                <span style={{ ...badgeColors(booking.status), textTransform: 'capitalize', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                  {booking.status.replace('_', ' ')}
-                </span>
-              </div>
-
-              {canModifyBooking(booking) ? (
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                  <button
-                    type="button"
-                    onClick={() => handleCancel(booking.id)}
-                    disabled={activeBookingId === booking.id}
-                    style={{ borderRadius: 10, border: '1px solid rgba(239,68,68,0.35)', background: 'transparent', color: '#fca5a5', padding: '10px 14px', cursor: 'pointer', opacity: activeBookingId === booking.id ? 0.6 : 1 }}
-                  >
-                    {activeBookingId === booking.id ? 'Updating...' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReschedulingId(reschedulingId === booking.id ? null : booking.id)
-                      setSelectedDate('')
-                      setSelectedTime('')
-                      setSlots([])
-                      setError('')
-                    }}
-                    style={{ borderRadius: 10, border: '1px solid rgba(212,175,55,0.35)', background: 'transparent', color: 'var(--app-gold)', padding: '10px 14px', cursor: 'pointer' }}
-                  >
-                    {reschedulingId === booking.id ? 'Close Reschedule' : 'Reschedule'}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 12 }}>
-                  Changes are available until 24 hours before your scheduled time.
-                </div>
-              )}
-
-              {reschedulingId === booking.id ? (
-                <div style={{ marginTop: 16, borderRadius: 14, background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.08)', padding: 16 }}>
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                    <div>
-                      <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 8 }}>New Date</label>
-                      <input
-                        type="date"
-                        value={selectedDate}
-                        onChange={(event) => {
-                          const nextDate = event.target.value
-                          setSelectedDate(nextDate)
-                          if (nextDate) {
-                            void loadSlots(booking, nextDate, selectedWindow)
-                          }
-                        }}
-                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', color: 'var(--app-text)' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 8 }}>Time Of Day</label>
-                      <select
-                        value={selectedWindow}
-                        onChange={(event) => {
-                          const nextWindow = event.target.value as 'morning' | 'afternoon' | 'evening'
-                          setSelectedWindow(nextWindow)
-                          if (selectedDate) {
-                            void loadSlots(booking, selectedDate, nextWindow)
-                          }
-                        }}
-                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--app-surface-muted)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', color: 'var(--app-text)' }}
-                      >
-                        <option value="morning">Morning</option>
-                        <option value="afternoon">Afternoon</option>
-                        <option value="evening">Evening</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 10 }}>Available Times</div>
-                    {slotsLoading ? (
-                      <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 className="h-4 w-4 animate-spin" /> Loading available times...</div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {slots.map((slot) => (
-                          <button
-                            key={slot.value}
-                            type="button"
-                            onClick={() => setSelectedTime(slot.value)}
-                            style={{
-                              borderRadius: 10,
-                              border: selectedTime === slot.value ? '1px solid rgba(212,175,55,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                              background: selectedTime === slot.value ? 'var(--app-gold-soft)' : 'transparent',
-                              color: selectedTime === slot.value ? '#f6dfa1' : 'var(--app-text-secondary)',
-                              padding: '10px 12px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            {slot.label}
-                          </button>
-                        ))}
-                        {slots.length === 0 && !slotsLoading ? <div style={{ color: 'var(--app-text-muted)', fontSize: 13 }}>Choose a date to load available times.</div> : null}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: 16 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleReschedule(booking)}
-                      disabled={activeBookingId === booking.id}
-                      style={{ borderRadius: 10, border: 'none', background: 'var(--app-gold)', color: '#111', padding: '10px 16px', fontWeight: 700, cursor: 'pointer', opacity: activeBookingId === booking.id ? 0.6 : 1 }}
-                    >
-                      {activeBookingId === booking.id ? 'Saving...' : 'Submit Reschedule Request'}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ))
-        )}
-      </section>
-
-      <section style={{ display: viewMode === 'list' ? 'block' : 'none', background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
-        <div style={{ color: 'var(--app-gold)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>History</div>
-        {grouped.history.length === 0 ? (
-          <p style={{ color: 'var(--app-text-secondary)', fontSize: 14 }}>Your completed, cancelled, and missed session history will appear here.</p>
-        ) : (
-          grouped.history.map((booking) => (
-            <div key={booking.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '14px 0', display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-              <div>
-                <div style={{ color: 'var(--app-text)', fontWeight: 600, fontSize: 15 }}>{booking.item_name}</div>
-                <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>
-                  {new Date(`${booking.booking_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {booking.booking_time.slice(0, 5)}
-                </div>
-              </div>
-              <span style={{ ...badgeColors(booking.status), textTransform: 'capitalize', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                {booking.status.replace('_', ' ')}
-              </span>
-            </div>
-          ))
-        )}
-      </section>
     </div>
   )
 }
+

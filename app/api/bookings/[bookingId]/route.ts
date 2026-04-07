@@ -241,7 +241,7 @@ export async function PATCH(
           await deleteCalendarEvent(booking.google_calendar_event_id)
         }
 
-        const eventId = await createCalendarEvent({
+        const calendarEvent = await createCalendarEvent({
           summary: `${booking.item_name ?? 'Booking'} - ${booking.client_name}`,
           description: `Client: ${booking.client_name}\nEmail: ${booking.client_email}\nPhone: ${booking.client_phone ?? ''}`,
           date: booking.booking_date,
@@ -251,12 +251,12 @@ export async function PATCH(
           attendeeName: booking.client_name,
         })
 
-        if (eventId && columns.has('google_calendar_event_id')) {
+        if (calendarEvent.id && columns.has('google_calendar_event_id')) {
           await db.query(
             `UPDATE bookings
              SET google_calendar_event_id = $2, updated_at = NOW()
              WHERE id = $1`,
-            [params.bookingId, eventId]
+            [params.bookingId, calendarEvent.id]
           )
         }
       } catch (calendarError) {
@@ -441,3 +441,4 @@ export async function PATCH(
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to update booking' }, { status: 500 })
   }
 }
+

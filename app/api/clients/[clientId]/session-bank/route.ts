@@ -18,7 +18,7 @@ export async function GET(
 
   try {
     const enrollment = await db.queryOne<Enrollment>(
-      `SELECT *
+      `SELECT id, client_id, status
        FROM package_enrollments
        WHERE client_id = $1 AND status = 'active'
        ORDER BY created_at DESC
@@ -27,40 +27,13 @@ export async function GET(
     )
 
     if (!enrollment) {
-      return NextResponse.json({ bank: null, enrollment: null, forfeitedEntitlements: [], activeHoldId: null })
+      return NextResponse.json({ bank: null, enrollment: null })
     }
 
-    const [bank, forfeitedEntitlements, activeHold] = await Promise.all([
-      getClientBankStatus(enrollment.id),
-      db.query(
-        `SELECT se.id, se.booking_id, se.forfeiture_reason, se.updated_at,
-                b.booking_date::text, b.booking_time, s.name AS service_name
-         FROM session_entitlements se
-         LEFT JOIN bookings b ON b.id = se.booking_id
-         LEFT JOIN services s ON s.id = b.service_id
-         WHERE se.enrollment_id = $1
-           AND se.status = 'forfeited'
-         ORDER BY se.updated_at DESC`,
-        [enrollment.id]
-      ),
-      db.queryOne<{ id: string }>(
-        `SELECT id
-         FROM membership_holds
-         WHERE enrollment_id = $1
-           AND status = 'active'
-         ORDER BY start_date DESC
-         LIMIT 1`,
-        [enrollment.id]
-      ),
-    ])
-
-    return NextResponse.json({
-      bank,
-      enrollment,
-      forfeitedEntitlements,
-      activeHoldId: activeHold?.id ?? null,
-    })
+    const bank = await getClientBankStatus(enrollment.id)
+    return NextResponse.json({ bank, enrollment })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to load session bank' }, { status: 500 })
   }
 }
+

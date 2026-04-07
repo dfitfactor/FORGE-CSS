@@ -97,7 +97,10 @@ export async function createCalendarEvent({
     }),
   })
 
-  return event.data.id
+  return {
+    id: event.data.id ?? null,
+    htmlLink: event.data.htmlLink ?? null,
+  }
 }
 
 export async function updateCalendarEvent(
