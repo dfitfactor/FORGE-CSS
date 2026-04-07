@@ -76,39 +76,39 @@ function BookingDetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
       <button className="flex-1" onClick={onClose} aria-label="Close booking details" />
-      <div className="h-full w-full max-w-lg overflow-y-auto border-l border-white/10 bg-[#111111] p-6">
+      <div className="h-full w-full max-w-lg overflow-y-auto border-l border-forge-border bg-forge-surface-2 p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-white">Booking Details</h2>
-            <p className="mt-2 text-lg font-semibold text-white">{booking.client_name}</p>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-forge-text-primary">Booking Details</h2>
+            <p className="mt-2 text-lg font-semibold text-forge-text-primary">{booking.client_name}</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+          <button onClick={onClose} className="rounded-lg p-2 text-forge-text-muted hover:bg-forge-surface-3/70 hover:text-forge-text-primary">
             <X size={18} />
           </button>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-widest text-white/35">Session</div>
-            <div className="mt-2 text-base font-medium text-white">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
-            <div className="mt-2 text-sm text-white/45">{booking.booking_date} at {booking.booking_time}</div>
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Session</div>
+            <div className="mt-2 text-base font-medium text-forge-text-primary">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
+            <div className="mt-2 text-sm text-forge-text-muted">{booking.booking_date} at {booking.booking_time}</div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-widest text-white/35">Contact</div>
-            <div className="mt-3 space-y-3 text-sm text-white/70">
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Contact</div>
+            <div className="mt-3 space-y-3 text-sm text-forge-text-secondary">
               <div>
-                <div className="text-white">{booking.client_email || 'No email on file'}</div>
+                <div className="text-forge-text-primary">{booking.client_email || 'No email on file'}</div>
                 {booking.client_email ? (
-                  <button onClick={() => onCopy(booking.client_email ?? '', 'Email')} className="mt-1 inline-flex items-center gap-1 text-xs text-[#D4AF37] hover:text-white">
+                  <button onClick={() => onCopy(booking.client_email ?? '', 'Email')} className="mt-1 inline-flex items-center gap-1 text-xs text-forge-gold hover:text-forge-text-primary">
                     <Copy size={12} /> Copy email
                   </button>
                 ) : null}
               </div>
               <div>
-                <div className="text-white">{booking.client_phone || 'No phone on file'}</div>
+                <div className="text-forge-text-primary">{booking.client_phone || 'No phone on file'}</div>
                 {booking.client_phone ? (
-                  <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 inline-flex items-center gap-1 text-xs text-[#D4AF37] hover:text-white">
+                  <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 inline-flex items-center gap-1 text-xs text-forge-gold hover:text-forge-text-primary">
                     <Copy size={12} /> Copy phone
                   </button>
                 ) : null}
@@ -116,14 +116,14 @@ function BookingDetailDrawer({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-widest text-white/35">Status</div>
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Status</div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-white/70">{booking.status.replace('_', ' ')}</span>
-              {booking.payment_status ? <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-white/70">{booking.payment_status}</span> : null}
+              <span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-forge-text-secondary">{booking.status.replace('_', ' ')}</span>
+              {booking.payment_status ? <span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-forge-text-secondary">{booking.payment_status}</span> : null}
               {booking.google_calendar_event_id ? <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">Calendar linked</span> : null}
             </div>
-            {booking.notes ? <p className="mt-4 whitespace-pre-wrap text-sm text-white/55">{booking.notes}</p> : <p className="mt-4 text-sm text-white/35">No booking notes.</p>}
+            {booking.notes ? <p className="mt-4 whitespace-pre-wrap text-sm text-forge-text-secondary">{booking.notes}</p> : <p className="mt-4 text-sm text-forge-text-muted">No booking notes.</p>}
           </div>
         </div>
       </div>
@@ -538,11 +538,11 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Availability</h1>
-          <p className="mt-1 text-sm text-white/40">Set weekly schedule rules, booking settings, blocked times, and blackout dates.</p>
+          <h1 className="text-2xl font-semibold text-forge-text-primary">Availability</h1>
+          <p className="mt-1 text-sm text-forge-text-muted">Set weekly schedule rules, booking settings, blocked times, and blackout dates.</p>
         </div>
 
         {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
@@ -550,15 +550,15 @@ export default function AvailabilityPage() {
 
         {loading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+            <Loader2 className="h-6 w-6 animate-spin text-forge-text-muted/70" />
           </div>
         ) : (
           <>
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Weekly Schedule</h2>
-                  <p className="text-sm text-white/40">Enable the days you take appointments and set slot timing.</p>
+                  <h2 className="text-lg font-semibold text-forge-text-primary">Weekly Schedule</h2>
+                  <p className="text-sm text-forge-text-muted">Enable the days you take appointments and set slot timing.</p>
                 </div>
                 <button onClick={() => void saveSchedule()} disabled={saving} className="forge-btn-gold disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Schedule'}
@@ -567,13 +567,13 @@ export default function AvailabilityPage() {
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {days.map((day, index) => (
-                  <div key={DAYS[index]} className="rounded-2xl border border-white/8 bg-[#111111] p-4">
+                  <div key={DAYS[index]} className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-4">
                     <div className="mb-4 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-white">{DAYS[index]}</div>
+                      <div className="text-sm font-semibold text-forge-text-primary">{DAYS[index]}</div>
                       <button
                         type="button"
                         onClick={() => setDays((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: !item.enabled } : item))}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${day.enabled ? 'bg-[#D4AF37]' : 'bg-white/10'}`}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${day.enabled ? 'bg-forge-gold' : 'bg-forge-surface-3'}`}
                       >
                         <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${day.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
                       </button>
@@ -615,7 +615,7 @@ export default function AvailabilityPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-6 text-center text-sm text-white/35">
+                      <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface-3/60 px-3 py-6 text-center text-sm text-forge-text-muted">
                         Day disabled
                       </div>
                     )}
@@ -623,54 +623,54 @@ export default function AvailabilityPage() {
                 ))}
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+              <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div>
-                    <h3 className="text-base font-semibold text-white">Calendar View</h3>
-                    <p className="mt-1 text-sm text-white/40">Preview any week of availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
-                    <p className="mt-2 text-sm font-medium text-white/70">{formatWeekRangeLabel(selectedWeekStart)}</p>
+                    <h3 className="text-base font-semibold text-forge-text-primary">Calendar View</h3>
+                    <p className="mt-1 text-sm text-forge-text-muted">Preview any week of availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
+                    <p className="mt-2 text-sm font-medium text-forge-text-secondary">{formatWeekRangeLabel(selectedWeekStart)}</p>
                   </div>
                   <div className="flex flex-col gap-3 md:items-end">
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => setSelectedWeekStart((current) => shiftWeek(current, -1))}
-                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                        className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
                       >
                         Previous Week
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedWeekStart(startOfWeek(new Date()))}
-                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                        className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
                       >
                         Current Week
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedWeekStart((current) => shiftWeek(current, 1))}
-                        className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                        className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
                       >
                         Next Week
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <button type="button" onClick={() => toggleCalendarFilter('available')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.available ? 'border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#D4AF37]' : 'border-white/10 bg-white/5 text-white/35'}`}>Available</button>
-                      <button type="button" onClick={() => toggleCalendarFilter('blocked')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.blocked ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Blocked</button>
-                      <button type="button" onClick={() => toggleCalendarFilter('pending')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.pending ? 'border-white/20 bg-white/10 text-white/75' : 'border-white/10 bg-white/5 text-white/35'}`}>Pending / Requested</button>
-                      <button type="button" onClick={() => toggleCalendarFilter('confirmed')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.confirmed ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-white/35'}`}>Confirmed</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('available')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.available ? 'border-forge-gold/40 bg-forge-gold/10 text-forge-gold' : 'border-forge-border bg-forge-surface-3/70 text-forge-text-muted'}`}>Available</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('blocked')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.blocked ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-forge-border bg-forge-surface-3/70 text-forge-text-muted'}`}>Blocked</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('pending')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.pending ? 'border-forge-border bg-forge-surface-3 text-forge-text-primary/75' : 'border-forge-border bg-forge-surface-3/70 text-forge-text-muted'}`}>Pending / Requested</button>
+                      <button type="button" onClick={() => toggleCalendarFilter('confirmed')} className={`rounded-full border px-3 py-1 transition ${calendarFilters.confirmed ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-forge-border bg-forge-surface-3/70 text-forge-text-muted'}`}>Confirmed</button>
                     </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[920px] overflow-hidden rounded-2xl border border-white/8 bg-black/20">
-                    <div className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-white/8 bg-white/5 text-xs font-mono uppercase tracking-widest text-white/35">
+                  <div className="min-w-[920px] overflow-hidden rounded-2xl border border-forge-border/70 bg-forge-surface-3/60">
+                    <div className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-forge-border/70 bg-forge-surface-3/70 text-xs font-mono uppercase tracking-widest text-forge-text-muted">
                       <div className="px-3 py-3">Time</div>
                       {DAYS.map((label, index) => (
-                        <div key={label} className="border-l border-white/8 px-3 py-3 text-center">
+                        <div key={label} className="border-l border-forge-border/70 px-3 py-3 text-center">
                           <div>{label}</div>
-                          <div className="mt-1 text-[10px] normal-case tracking-normal text-white/30">{formatDayLabel(weekDates[index])}</div>
-                          <div className="mt-1 text-[10px] normal-case tracking-normal text-white/20">
+                          <div className="mt-1 text-[10px] normal-case tracking-normal text-forge-text-muted">{formatDayLabel(weekDates[index])}</div>
+                          <div className="mt-1 text-[10px] normal-case tracking-normal text-forge-text-muted/70">
                             {days[index].enabled ? `${days[index].start_time}-${days[index].end_time}` : 'Off'}
                           </div>
                         </div>
@@ -678,8 +678,8 @@ export default function AvailabilityPage() {
                     </div>
 
                     {calendarSlots.map((slotMinutes) => (
-                      <div key={slotMinutes} className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-white/5 last:border-0">
-                        <div className="px-3 py-3 text-xs text-white/35">{formatCalendarTime(slotMinutes)}</div>
+                      <div key={slotMinutes} className="grid grid-cols-[100px_repeat(7,minmax(0,1fr))] border-b border-forge-border/60 last:border-0">
+                        <div className="px-3 py-3 text-xs text-forge-text-muted">{formatCalendarTime(slotMinutes)}</div>
                         {days.map((day, dayIndex) => {
                           const active = isSlotAvailable(day, dayIndex, slotMinutes)
                           const slotBookings = bookingsStartingAt(dayIndex, slotMinutes).filter((booking) => (
@@ -692,9 +692,9 @@ export default function AvailabilityPage() {
                           const filteredBlockedStartingRules = calendarFilters.blocked ? blockedStartingRules : []
                           const isClickable = (calendarFilters.available && active) || filteredBlockedStartingRules.length > 0
                           return (
-                            <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-white/5 px-2 py-2">
+                            <div key={`${DAYS[dayIndex]}-${slotMinutes}`} className="border-l border-forge-border/60 px-2 py-2">
                               <div
-                                className={`min-h-[44px] rounded-lg border text-left text-xs transition ${isSelected ? 'ring-2 ring-[#D4AF37]/60 ring-offset-0' : ''} ${slotBookings.length > 0 ? 'border-white/15 bg-white/5 text-white' : blocked ? 'border-red-500/30 bg-red-500/10 text-red-300' : booked ? 'border-white/10 bg-white/[0.04] text-white/50' : active ? 'border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]' : 'border-transparent bg-white/[0.02] text-white/10'}`}
+                                className={`min-h-[44px] rounded-lg border text-left text-xs transition ${isSelected ? 'ring-2 ring-forge-gold/60 ring-offset-0' : ''} ${slotBookings.length > 0 ? 'border-forge-border bg-forge-surface-3/70 text-forge-text-primary' : blocked ? 'border-red-500/30 bg-red-500/10 text-red-300' : booked ? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary' : active ? 'border-forge-gold/40 bg-forge-gold/15 text-forge-gold' : 'border-transparent bg-forge-surface-3/40 text-forge-text-primary/10'}`}
                               >
                                 {slotBookings.length > 0 ? (
                                   <div className="space-y-1 p-1.5">
@@ -705,7 +705,7 @@ export default function AvailabilityPage() {
                                           ? 'border-sky-500/40 bg-sky-500/15 text-sky-200'
                                           : booking.status === 'rescheduled'
                                             ? 'border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-200'
-                                            : 'border-white/20 bg-white/10 text-white/75'
+                                            : 'border-forge-border bg-forge-surface-3 text-forge-text-primary/75'
                                       return (
                                         <button key={booking.id} type="button" onClick={() => setSelectedBooking(booking)} className={`block w-full rounded-md border px-2 py-1 text-left ${statusClass}`}>
                                           <div className="font-medium">{booking.client_name}</div>
@@ -724,7 +724,7 @@ export default function AvailabilityPage() {
                                     ))}
                                   </button>
                                 ) : calendarFilters.available && active ? (
-                                  <button type="button" disabled={saving} onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)} className="flex h-full w-full flex-col items-center justify-center px-2 py-2 text-center hover:bg-[#D4AF37]/20">
+                                  <button type="button" disabled={saving} onClick={() => void handleCalendarCellClick(dayIndex, slotMinutes)} className="flex h-full w-full flex-col items-center justify-center px-2 py-2 text-center hover:bg-forge-gold/20">
                                     <div className="font-medium">Available</div>
                                     <div className="text-[10px] uppercase tracking-wide opacity-70">Click to block</div>
                                   </button>
@@ -740,14 +740,14 @@ export default function AvailabilityPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+            <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Blocked Times</h2>
-                  <p className="text-sm text-white/40">Add recurring blocked windows for lunch, meetings, admin time, or anything else that changes by day.</p>
+                  <h2 className="text-lg font-semibold text-forge-text-primary">Blocked Times</h2>
+                  <p className="text-sm text-forge-text-muted">Add recurring blocked windows for lunch, meetings, admin time, or anything else that changes by day.</p>
                 </div>
                 {editingBlockedRuleId ? (
-                  <button onClick={() => { setEditingBlockedRuleId(null); setBlockedForm(INITIAL_BLOCKED_FORM); setActiveSlot(null) }} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white">
+                  <button onClick={() => { setEditingBlockedRuleId(null); setBlockedForm(INITIAL_BLOCKED_FORM); setActiveSlot(null) }} className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary">
                     Cancel Edit
                   </button>
                 ) : null}
@@ -783,29 +783,29 @@ export default function AvailabilityPage() {
               <div className="mt-5 space-y-3">
                 {blockedRules.length > 0 ? (
                   blockedRules.map((rule) => (
-                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-black/20 px-4 py-3">
-                      <div className="flex items-center gap-3 text-white/70">
+                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3">
+                      <div className="flex items-center gap-3 text-forge-text-secondary">
                         <Clock3 className="h-4 w-4 text-red-300" />
                         <span>{DAYS[Number(rule.day_of_week)]} · {rule.start_time} - {rule.end_time}</span>
-                        {rule.settings_key ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/55">{rule.settings_key}</span> : null}
+                        {rule.settings_key ? <span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-0.5 text-xs text-forge-text-secondary">{rule.settings_key}</span> : null}
                       </div>
-                      <button onClick={() => void removeRule(rule.id)} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+                      <button onClick={() => void removeRule(rule.id)} className="rounded-lg p-2 text-forge-text-muted hover:bg-forge-surface-3/70 hover:text-forge-text-primary">
                         <Trash2 size={15} />
                       </button>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center text-sm text-white/35">
+                  <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface-3/60 px-4 py-10 text-center text-sm text-forge-text-muted">
                     No blocked times added yet.
                   </div>
                 )}
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+            <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
               <div className="mb-4">
-                <h2 className="text-lg font-semibold text-white">Booking Settings</h2>
-                <p className="text-sm text-white/40">Adjust booking buffers and minimum notice for new requests.</p>
+                <h2 className="text-lg font-semibold text-forge-text-primary">Booking Settings</h2>
+                <p className="text-sm text-forge-text-muted">Adjust booking buffers and minimum notice for new requests.</p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -832,11 +832,11 @@ export default function AvailabilityPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+            <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Blackout Dates</h2>
-                  <p className="text-sm text-white/40">Block one-off days from being bookable.</p>
+                  <h2 className="text-lg font-semibold text-forge-text-primary">Blackout Dates</h2>
+                  <p className="text-sm text-forge-text-muted">Block one-off days from being bookable.</p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <input type="date" value={blackoutDate} onChange={(event) => setBlackoutDate(event.target.value)} className="forge-input" />
@@ -850,18 +850,18 @@ export default function AvailabilityPage() {
               <div className="mt-5 space-y-3">
                 {blackoutRules.length > 0 ? (
                   blackoutRules.map((rule) => (
-                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-black/20 px-4 py-3">
-                      <div className="flex items-center gap-3 text-white/70">
-                        <Clock3 className="h-4 w-4 text-[#D4AF37]" />
+                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3">
+                      <div className="flex items-center gap-3 text-forge-text-secondary">
+                        <Clock3 className="h-4 w-4 text-forge-gold" />
                         <span>{new Date(`${rule.blackout_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                       </div>
-                      <button onClick={() => void removeRule(rule.id)} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+                      <button onClick={() => void removeRule(rule.id)} className="rounded-lg p-2 text-forge-text-muted hover:bg-forge-surface-3/70 hover:text-forge-text-primary">
                         <Trash2 size={15} />
                       </button>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center text-sm text-white/35">
+                  <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface-3/60 px-4 py-10 text-center text-sm text-forge-text-muted">
                     No blackout dates added yet.
                   </div>
                 )}

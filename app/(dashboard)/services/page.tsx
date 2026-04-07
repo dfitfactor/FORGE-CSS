@@ -108,7 +108,7 @@ const PACKAGE_SECTIONS: PackageSection[] = [
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${checked ? 'bg-[#D4AF37]' : 'bg-white/10'}`}>
+    <button type="button" onClick={() => onChange(!checked)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${checked ? 'bg-forge-gold' : 'bg-forge-surface-3'}`}>
       <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
     </button>
   )
@@ -119,10 +119,10 @@ function SlideOver({ title, open, onClose, children }: { title: string; open: bo
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
       <button className="flex-1" onClick={onClose} aria-label="Close panel" />
-      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-[#111111] p-6">
+      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-forge-border bg-forge-surface-2 p-6">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-white">{title}</h2>
-          <button onClick={onClose} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-forge-text-primary">{title}</h2>
+          <button onClick={onClose} className="rounded-lg p-2 text-forge-text-muted hover:bg-forge-surface-3/70 hover:text-forge-text-primary">
             <X size={16} />
           </button>
         </div>
@@ -147,7 +147,7 @@ function FormPreview({ template }: { template: FormTemplate }) {
 
   if (fields.length === 0) {
     return (
-      <p style={{ color: '#666', fontSize: '14px' }}>
+      <p style={{ color: 'rgb(var(--forge-text-muted))', fontSize: '14px' }}>
         No fields configured for this form template.
       </p>
     )
@@ -165,13 +165,13 @@ function FormPreview({ template }: { template: FormTemplate }) {
       {(Object.entries(sections) as Array<[string, Record<string, any>[]]>).map(([section, sectionFields]) => (
         <div key={section} style={{ marginBottom: '20px' }}>
           <p style={{
-            color: '#D4AF37',
+            color: 'rgb(var(--forge-gold))',
             fontWeight: 'bold',
             fontSize: '11px',
             textTransform: 'uppercase',
             letterSpacing: '1px',
             marginBottom: '10px',
-            borderBottom: '1px solid rgba(212,175,55,0.2)',
+            borderBottom: '1px solid rgba(var(--forge-gold), 0.2)',
             paddingBottom: '6px'
           }}>
             {section}
@@ -181,14 +181,14 @@ function FormPreview({ template }: { template: FormTemplate }) {
               marginBottom: '12px',
               paddingLeft: '8px'
             }}>
-              <p style={{ color: '#ccc', marginBottom: '4px' }}>
+              <p style={{ color: 'rgb(var(--forge-text-primary))', marginBottom: '4px' }}>
                 {field.label}
                 {field.required && (
                   <span style={{ color: '#f87171', marginLeft: '4px' }}>*</span>
                 )}
                 {field.readonly && (
                   <span style={{
-                    color: '#666',
+                    color: 'rgb(var(--forge-text-muted))',
                     fontSize: '11px',
                     marginLeft: '8px'
                   }}>
@@ -196,7 +196,7 @@ function FormPreview({ template }: { template: FormTemplate }) {
                   </span>
                 )}
               </p>
-              <p style={{ color: '#555', fontSize: '12px' }}>
+              <p style={{ color: 'rgb(var(--forge-text-secondary))', fontSize: '12px' }}>
                 Type: {field.type}
                 {field.options && ` - Options: ${field.options.join(' | ')}`}
                 {field.min !== undefined && ` - Range: ${field.min}-${field.max}`}
@@ -587,24 +587,24 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[#D4AF37]">Services</h1>
-          <p className="mt-1 text-sm text-white/40">Bookable services, packages, and form templates.</p>
+          <h1 className="text-2xl font-semibold text-forge-gold">Services</h1>
+          <p className="mt-1 text-sm text-forge-text-muted">Bookable services, packages, and form templates.</p>
         </div>
 
         {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
 
-        <div className="flex gap-2 rounded-2xl border border-white/8 bg-[#111111] p-2">
+        <div className="flex gap-2 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-2">
           {(['services', 'packages', 'forms'] as Tab[]).map(item => (
-            <button key={item} onClick={() => setTab(item)} className={`rounded-xl px-4 py-2 text-sm ${tab === item ? 'bg-[#D4AF37] text-black' : 'text-white/55 hover:bg-white/5 hover:text-white'}`}>
+            <button key={item} onClick={() => setTab(item)} className={`rounded-xl px-4 py-2 text-sm ${tab === item ? 'bg-forge-gold text-forge-purple-dark' : 'text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary'}`}>
               {item.charAt(0).toUpperCase() + item.slice(1)}
             </button>
           ))}
         </div>
 
-        {loading ? <div className="rounded-2xl border border-white/8 bg-[#111111] p-10 text-center text-white/45">Loadingâ€¦</div> : null}
+        {loading ? <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">Loadingâ€¦</div> : null}
 
         {!loading && tab === 'services' ? (
           <div className="space-y-4">
@@ -622,26 +622,26 @@ export default function ServicesPage() {
                   <button
                     type="button"
                     onClick={() => toggleServiceSection(section.id)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-white/8 bg-[#111111] px-5 py-4 text-left transition hover:border-[#D4AF37]/30 hover:bg-[#141414]"
+                    className="flex w-full items-center justify-between rounded-2xl border border-forge-border/70 bg-forge-surface-2 px-5 py-4 text-left transition hover:border-forge-gold/30 hover:bg-forge-surface-3"
                   >
                     <div>
                       <div className="flex items-center gap-3">
-                        <h2 className="text-sm font-semibold text-[#D4AF37]">{section.title}</h2>
-                        <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{sectionServices.length}</span>
+                        <h2 className="text-sm font-semibold text-forge-gold">{section.title}</h2>
+                        <span className="rounded-full border border-forge-gold/20 bg-forge-gold/10 px-2 py-0.5 text-xs text-forge-gold">{sectionServices.length}</span>
                       </div>
-                      <p className="mt-1 text-sm text-white/40">{section.description}</p>
+                      <p className="mt-1 text-sm text-forge-text-muted">{section.description}</p>
                     </div>
-                    <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedServiceSections[section.id] ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={16} className={`text-forge-text-muted transition-transform ${expandedServiceSections[section.id] ? 'rotate-180' : ''}`} />
                   </button>
 
                   {expandedServiceSections[section.id] ? (
-                    <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
+                    <div className="overflow-hidden rounded-2xl border border-forge-border/70 bg-forge-surface-2">
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
-                          <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Booking Section</th><th className="px-4 py-3">Public Link</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                          <thead className="bg-forge-surface-3/70 text-left text-xs uppercase tracking-widest text-forge-text-muted"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Booking Section</th><th className="px-4 py-3">Public Link</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                           <tbody>{sectionServices.map(service => {
                             const bookingLink = buildBookingLink(service.slug)
-                            return <tr key={service.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{service.name}</div><div className="text-xs text-white/35">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{serviceSectionLabel(typeof service.section === 'string' ? service.section : (serviceSectionOverrides[String(service.id)] ?? (section.id === 'unassigned' ? null : section.id)))}</td><td className="px-4 py-3"><div className="max-w-[220px] space-y-2"><div className="truncate text-xs text-white/55">{service.is_public ? bookingLink : 'Private service'}</div>{service.is_public ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void copyBookingLink(service.slug)} className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:text-white"><Copy size={12} /> Copy</button><a href={bookingLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/70 hover:text-white"><ExternalLink size={12} /> Preview</a></div> : null}</div></td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></td></tr>
+                            return <tr key={service.id} className="border-t border-forge-border/60 text-forge-text-secondary"><td className="px-4 py-3"><div className="font-medium text-forge-text-primary">{service.name}</div><div className="text-xs text-forge-text-muted">{service.slug}</div></td><td className="px-4 py-3">{formatDurationLabel(service.duration_minutes)}</td><td className="px-4 py-3">{formatPriceFromCents(service.price_cents)}</td><td className="px-4 py-3 capitalize">{service.service_type}</td><td className="px-4 py-3 capitalize">{service.category}</td><td className="px-4 py-3">{serviceSectionLabel(typeof service.section === 'string' ? service.section : (serviceSectionOverrides[String(service.id)] ?? (section.id === 'unassigned' ? null : section.id)))}</td><td className="px-4 py-3"><div className="max-w-[220px] space-y-2"><div className="truncate text-xs text-forge-text-secondary">{service.is_public ? bookingLink : 'Private service'}</div>{service.is_public ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void copyBookingLink(service.slug)} className="inline-flex items-center gap-1 rounded-lg border border-forge-border px-2 py-1 text-[11px] text-forge-text-secondary hover:text-forge-text-primary"><Copy size={12} /> Copy</button><a href={bookingLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-forge-border px-2 py-1 text-[11px] text-forge-text-secondary hover:text-forge-text-primary"><ExternalLink size={12} /> Preview</a></div> : null}</div></td><td className="px-4 py-3"><Toggle checked={Boolean(service.is_active)} onChange={next => void toggleActive('services', service.id, next)} /></td><td className="px-4 py-3 text-right"><button onClick={() => { setServiceEditor(service); setServiceForm({ ...service, section: service.section ?? (section.id === 'unassigned' ? null : section.id), price_dollars: (service.price_cents / 100).toFixed(2), required_forms: service.required_forms ?? [] }) }} className="inline-flex items-center gap-2 rounded-lg border border-forge-border px-3 py-1.5 text-xs text-forge-text-secondary hover:text-forge-text-primary"><SquarePen size={13} /> Edit</button></td></tr>
                           })}</tbody>
                         </table>
                       </div>
@@ -664,9 +664,9 @@ export default function ServicesPage() {
               const orderedStages = stageOrder.filter((stage) => section.stages.includes(stage))
               return (
                 <section key={section.id} className="space-y-4">
-                  <div className="rounded-2xl border border-white/8 bg-[#111111] px-5 py-4">
-                    <h2 className="text-base font-semibold text-[#D4AF37]">{section.title}</h2>
-                    <p className="mt-1 text-sm text-white/40">{section.description}</p>
+                  <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 px-5 py-4">
+                    <h2 className="text-base font-semibold text-forge-gold">{section.title}</h2>
+                    <p className="mt-1 text-sm text-forge-text-muted">{section.description}</p>
                   </div>
                   {orderedStages.map((stage, sectionIndex) => (
                     <section key={stage} className="space-y-3">
@@ -674,20 +674,20 @@ export default function ServicesPage() {
                         <button
                           type="button"
                           onClick={() => toggleStage(stage)}
-                          className="flex flex-1 items-center justify-between rounded-2xl border border-white/8 bg-[#111111] px-5 py-4 text-left transition hover:border-[#D4AF37]/30 hover:bg-[#141414]"
+                          className="flex flex-1 items-center justify-between rounded-2xl border border-forge-border/70 bg-forge-surface-2 px-5 py-4 text-left transition hover:border-forge-gold/30 hover:bg-forge-surface-3"
                         >
                           <div className="flex items-center gap-3">
-                            <h2 className="text-sm font-semibold text-white">{stageLabel(stage)}</h2>
-                            <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 text-xs text-[#D4AF37]">{groupedPackages[stage]?.length ?? 0}</span>
+                            <h2 className="text-sm font-semibold text-forge-text-primary">{stageLabel(stage)}</h2>
+                            <span className="rounded-full border border-forge-gold/20 bg-forge-gold/10 px-2 py-0.5 text-xs text-forge-gold">{groupedPackages[stage]?.length ?? 0}</span>
                           </div>
-                          <ChevronDown size={16} className={`text-white/45 transition-transform ${expandedStages[stage] ? 'rotate-180' : ''}`} />
+                          <ChevronDown size={16} className={`text-forge-text-muted transition-transform ${expandedStages[stage] ? 'rotate-180' : ''}`} />
                         </button>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             disabled={sectionIndex === 0}
                             onClick={() => reorderStage(stage, 'up')}
-                            className="rounded-xl border border-white/10 bg-[#111111] p-3 text-white/55 hover:bg-[#141414] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                            className="rounded-xl border border-forge-border bg-forge-surface-2 p-3 text-forge-text-secondary hover:bg-forge-surface-3 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35"
                             aria-label={`Move ${stageLabel(stage)} up`}
                           >
                             <ArrowUp size={14} />
@@ -696,7 +696,7 @@ export default function ServicesPage() {
                             type="button"
                             disabled={sectionIndex === orderedStages.length - 1}
                             onClick={() => reorderStage(stage, 'down')}
-                            className="rounded-xl border border-white/10 bg-[#111111] p-3 text-white/55 hover:bg-[#141414] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                            className="rounded-xl border border-forge-border bg-forge-surface-2 p-3 text-forge-text-secondary hover:bg-forge-surface-3 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35"
                             aria-label={`Move ${stageLabel(stage)} down`}
                           >
                             <ArrowDown size={14} />
@@ -704,7 +704,7 @@ export default function ServicesPage() {
                         </div>
                       </div>
                       {expandedStages[stage] ? (
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">{pkg.name}</h3><p className="mt-1 text-sm text-white/45">{pkg.session_count} sessions</p><p className="mt-2 max-w-xs text-xs text-white/30">{packageIncludedServicesSummary(pkg.included_services)}</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-1 text-xs capitalize text-[#D4AF37]">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/55">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-white/35">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-white/10 p-2 text-white/55 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2), included_services: normalizeIncludedServices(pkg.included_services) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-forge-text-primary">{pkg.name}</h3><p className="mt-1 text-sm text-forge-text-muted">{pkg.session_count} sessions</p><p className="mt-2 max-w-xs text-xs text-forge-text-muted">{packageIncludedServicesSummary(pkg.included_services)}</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-xs text-forge-text-secondary">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-forge-gold/20 bg-forge-gold/10 px-2 py-1 text-xs capitalize text-forge-gold">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-xs text-forge-text-secondary">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-forge-text-muted">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-forge-border p-2 text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-forge-border p-2 text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2), included_services: normalizeIncludedServices(pkg.included_services) }) }} className="inline-flex items-center gap-2 rounded-lg border border-forge-border px-3 py-1.5 text-xs text-forge-text-secondary hover:text-forge-text-primary"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
                       ) : null}
                     </section>
                   ))}
@@ -715,11 +715,11 @@ export default function ServicesPage() {
         ) : null}
 
         {!loading && tab === 'forms' ? (
-          <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
+          <div className="overflow-hidden rounded-2xl border border-forge-border/70 bg-forge-surface-2">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Requires Signature</th><th className="px-4 py-3">Validity</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-                <tbody>{templates.map(template => <tr key={template.id} className="border-t border-white/6 text-white/70"><td className="px-4 py-3"><div className="font-medium text-white">{template.name}</div><div className="text-xs text-white/35">{template.description}</div></td><td className="px-4 py-3 capitalize">{template.form_type}</td><td className="px-4 py-3">{template.requires_signature ? 'Yes' : 'No'}</td><td className="px-4 py-3">{template.validity_days ? `${template.validity_days} days` : 'Never expires'}</td><td className="px-4 py-3"><Toggle checked={Boolean(template.is_active)} onChange={next => void toggleActive('forms', template.id, next)} /></td><td className="px-4 py-3"><div className="flex justify-end gap-2"><button onClick={() => setTemplatePreview(template)} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><Eye size={13} /> Preview Form</button><button onClick={() => { setTemplateEditor(template); setTemplateForm({ ...template, validity_days: template.validity_days ?? '', fields: JSON.stringify(template.fields, null, 2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:text-white"><SquarePen size={13} /> Edit</button></div></td></tr>)}</tbody>
+                <thead className="bg-forge-surface-3/70 text-left text-xs uppercase tracking-widest text-forge-text-muted"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Requires Signature</th><th className="px-4 py-3">Validity</th><th className="px-4 py-3">Active</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <tbody>{templates.map(template => <tr key={template.id} className="border-t border-forge-border/60 text-forge-text-secondary"><td className="px-4 py-3"><div className="font-medium text-forge-text-primary">{template.name}</div><div className="text-xs text-forge-text-muted">{template.description}</div></td><td className="px-4 py-3 capitalize">{template.form_type}</td><td className="px-4 py-3">{template.requires_signature ? 'Yes' : 'No'}</td><td className="px-4 py-3">{template.validity_days ? `${template.validity_days} days` : 'Never expires'}</td><td className="px-4 py-3"><Toggle checked={Boolean(template.is_active)} onChange={next => void toggleActive('forms', template.id, next)} /></td><td className="px-4 py-3"><div className="flex justify-end gap-2"><button onClick={() => setTemplatePreview(template)} className="inline-flex items-center gap-2 rounded-lg border border-forge-border px-3 py-1.5 text-xs text-forge-text-secondary hover:text-forge-text-primary"><Eye size={13} /> Preview Form</button><button onClick={() => { setTemplateEditor(template); setTemplateForm({ ...template, validity_days: template.validity_days ?? '', fields: JSON.stringify(template.fields, null, 2) }) }} className="inline-flex items-center gap-2 rounded-lg border border-forge-border px-3 py-1.5 text-xs text-forge-text-secondary hover:text-forge-text-primary"><SquarePen size={13} /> Edit</button></div></td></tr>)}</tbody>
               </table>
             </div>
           </div>
@@ -735,8 +735,8 @@ export default function ServicesPage() {
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Category</label><select className="forge-input" value={serviceForm.category ?? 'assessment'} onChange={e => setServiceForm((c: any) => ({ ...c, category: e.target.value }))}>{SERVICE_CATEGORIES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div><div><label className="forge-label">Service Type</label><select className="forge-input" value={serviceForm.service_type ?? 'single'} onChange={e => setServiceForm((c: any) => ({ ...c, service_type: e.target.value }))}>{SERVICE_TYPES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
           <div><label className="forge-label">Booking Section</label><select className="forge-input" value={serviceForm.section ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, section: e.target.value || null }))}><option value="">Unassigned</option>{SERVICE_SECTIONS.map(option => <option key={option.id} value={option.id}>{option.title}</option>)}</select></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Booking Type</label><select className="forge-input" value={serviceForm.booking_type ?? 'scheduled'} onChange={e => setServiceForm((c: any) => ({ ...c, booking_type: e.target.value }))}>{BOOKING_TYPES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div><div><label className="forge-label">Forge Stage</label><select className="forge-input" value={serviceForm.forge_stage ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, forge_stage: e.target.value }))}><option value="">None</option>{FORGE_STAGE_OPTIONS.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
-          <div><label className="forge-label">Required Forms</label><div className="grid grid-cols-2 gap-2 rounded-xl border border-white/8 bg-white/3 p-4">{REQUIRED_FORM_TYPES.map(option => <label key={option} className="flex items-center gap-2 text-sm text-white/65"><input type="checkbox" checked={(serviceForm.required_forms ?? []).includes(option)} onChange={() => setServiceForm((c: any) => ({ ...c, required_forms: (c.required_forms ?? []).includes(option) ? c.required_forms.filter((item: string) => item !== option) : [...(c.required_forms ?? []), option] }))} />{stageLabel(option)}</label>)}</div></div>
-          <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3"><span className="text-sm text-white/65">Is Public</span><Toggle checked={Boolean(serviceForm.is_public)} onChange={next => setServiceForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={serviceForm.sort_order ?? 0} onChange={e => setServiceForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
+          <div><label className="forge-label">Required Forms</label><div className="grid grid-cols-2 gap-2 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">{REQUIRED_FORM_TYPES.map(option => <label key={option} className="flex items-center gap-2 text-sm text-forge-text-primary/65"><input type="checkbox" checked={(serviceForm.required_forms ?? []).includes(option)} onChange={() => setServiceForm((c: any) => ({ ...c, required_forms: (c.required_forms ?? []).includes(option) ? c.required_forms.filter((item: string) => item !== option) : [...(c.required_forms ?? []), option] }))} />{stageLabel(option)}</label>)}</div></div>
+          <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Public</span><Toggle checked={Boolean(serviceForm.is_public)} onChange={next => setServiceForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={serviceForm.sort_order ?? 0} onChange={e => setServiceForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
           <button onClick={() => void save('services')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Service'}</button>
         </div>
       </SlideOver>
@@ -749,18 +749,18 @@ export default function ServicesPage() {
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Session Count</label><input className="forge-input" type="number" value={packageForm.session_count ?? 4} onChange={e => setPackageForm((c: any) => ({ ...c, session_count: e.target.value }))} /></div><div><label className="forge-label">Duration (min)</label><input className="forge-input" type="number" value={packageForm.duration_minutes ?? 60} onChange={e => setPackageForm((c: any) => ({ ...c, duration_minutes: e.target.value }))} /></div></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Price ($)</label><input className="forge-input" type="number" step="0.01" value={packageForm.price_dollars ?? '0.00'} onChange={e => setPackageForm((c: any) => ({ ...c, price_dollars: e.target.value }))} /></div><div><label className="forge-label">Billing Type</label><select className="forge-input" value={packageForm.billing_type ?? 'monthly'} onChange={e => setPackageForm((c: any) => ({ ...c, billing_type: e.target.value }))}>{BILLING_TYPES.map(option => <option key={option} value={option}>{option.toUpperCase()}</option>)}</select></div></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Billing Period</label><input className="forge-input" type="number" value={packageForm.billing_period_months ?? 1} onChange={e => setPackageForm((c: any) => ({ ...c, billing_period_months: e.target.value }))} /></div><div><label className="forge-label">Forge Stage</label><select className="forge-input" value={packageForm.forge_stage ?? 'foundations'} onChange={e => setPackageForm((c: any) => ({ ...c, forge_stage: e.target.value }))}>{FORGE_STAGE_OPTIONS.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
-          <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3"><span className="text-sm text-white/65">Is Public</span><Toggle checked={Boolean(packageForm.is_public)} onChange={next => setPackageForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={packageForm.sort_order ?? 0} onChange={e => setPackageForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
+          <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Public</span><Toggle checked={Boolean(packageForm.is_public)} onChange={next => setPackageForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={packageForm.sort_order ?? 0} onChange={e => setPackageForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
           <div>
             <label className="forge-label">Included Bookable Sessions</label>
-            <div className="space-y-3 rounded-xl border border-white/8 bg-white/3 p-4">
-              <p className="text-xs text-white/35">Attach specific services to this package so booking can reflect the monthly session allotment.</p>
+            <div className="space-y-3 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+              <p className="text-xs text-forge-text-muted">Attach specific services to this package so booking can reflect the monthly session allotment.</p>
               {services.length > 0 ? services.map((service) => {
                 const includedServices = normalizeIncludedServices(packageForm.included_services)
                 const selectedService = includedServices.find((item) => item.service_id === service.id)
                 return (
-                  <div key={service.id} className="rounded-xl border border-white/8 bg-black/20 p-3">
+                  <div key={service.id} className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-3">
                     <div className="flex items-start justify-between gap-3">
-                      <label className="flex items-start gap-3 text-sm text-white/75">
+                      <label className="flex items-start gap-3 text-sm text-forge-text-primary/75">
                         <input
                           type="checkbox"
                           checked={Boolean(selectedService)}
@@ -783,13 +783,13 @@ export default function ServicesPage() {
                           })}
                         />
                         <span>
-                          <span className="block font-medium text-white">{service.name}</span>
-                          <span className="mt-1 block text-xs text-white/35">{formatDurationLabel(service.duration_minutes)} · {stageLabel(service.category)}</span>
+                          <span className="block font-medium text-forge-text-primary">{service.name}</span>
+                          <span className="mt-1 block text-xs text-forge-text-muted">{formatDurationLabel(service.duration_minutes)} · {stageLabel(service.category)}</span>
                         </span>
                       </label>
                       {selectedService ? (
                         <div className="w-28">
-                          <label className="mb-1 block text-[11px] uppercase tracking-wide text-white/35">Per Month</label>
+                          <label className="mb-1 block text-[11px] uppercase tracking-wide text-forge-text-muted">Per Month</label>
                           <input
                             className="forge-input h-10"
                             type="number"
@@ -808,7 +808,7 @@ export default function ServicesPage() {
                     </div>
                   </div>
                 )
-              }) : <div className="text-sm text-white/40">Create at least one bookable service first.</div>}
+              }) : <div className="text-sm text-forge-text-muted">Create at least one bookable service first.</div>}
             </div>
           </div>
           <button onClick={() => void save('packages')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Package'}</button>
@@ -819,9 +819,9 @@ export default function ServicesPage() {
         <div className="space-y-4">
           <label className="forge-label">Name</label><input className="forge-input" value={templateForm.name ?? ''} onChange={e => setTemplateForm((c: any) => ({ ...c, name: e.target.value }))} />
           <label className="forge-label">Description</label><textarea className="forge-input min-h-[100px]" value={templateForm.description ?? ''} onChange={e => setTemplateForm((c: any) => ({ ...c, description: e.target.value }))} />
-          <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3"><span className="text-sm text-white/65">Requires Signature</span><Toggle checked={Boolean(templateForm.requires_signature)} onChange={next => setTemplateForm((c: any) => ({ ...c, requires_signature: next }))} /></div><div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3"><span className="text-sm text-white/65">Is Active</span><Toggle checked={Boolean(templateForm.is_active)} onChange={next => setTemplateForm((c: any) => ({ ...c, is_active: next }))} /></div></div>
+          <div className="grid grid-cols-2 gap-4"><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Requires Signature</span><Toggle checked={Boolean(templateForm.requires_signature)} onChange={next => setTemplateForm((c: any) => ({ ...c, requires_signature: next }))} /></div><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Active</span><Toggle checked={Boolean(templateForm.is_active)} onChange={next => setTemplateForm((c: any) => ({ ...c, is_active: next }))} /></div></div>
           <label className="forge-label">Validity Days</label><input className="forge-input" type="number" value={templateForm.validity_days ?? ''} onChange={e => setTemplateForm((c: any) => ({ ...c, validity_days: e.target.value }))} />
-          <label className="forge-label">Fields JSON</label><pre className="overflow-x-auto rounded-xl border border-white/8 bg-black/20 p-4 text-xs text-white/55">{templateForm.fields ?? '[]'}</pre>
+          <label className="forge-label">Fields JSON</label><pre className="overflow-x-auto rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4 text-xs text-forge-text-secondary">{templateForm.fields ?? '[]'}</pre>
           <button onClick={() => void save('forms')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Template'}</button>
         </div>
       </SlideOver>

@@ -79,7 +79,7 @@ const STAGE_COLORS: Record<string, string> = {
   optimization: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
   resilience: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
   growth: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
-  empowerment: 'text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/20',
+  empowerment: 'text-forge-gold bg-forge-gold/10 border-forge-gold/20',
 }
 
 function getGpsLabel(gps: number) {
@@ -92,27 +92,27 @@ function getGpsLabel(gps: number) {
 
 function BIEBar({ value, invert = false }: { value: number | null; invert?: boolean }) {
   if (value === null || value === undefined) {
-    return <span className="text-white/20 text-xs font-mono">-</span>
+    return <span className="text-forge-text-muted/70 text-xs font-mono">-</span>
   }
   const v = Number(value)
   if (isNaN(v)) {
-    return <span className="text-white/20 text-xs font-mono">-</span>
+    return <span className="text-forge-text-muted/70 text-xs font-mono">-</span>
   }
   const isGood = invert ? v <= 40 : v >= 65
   const isMid = invert ? v <= 60 : v >= 45
-  const color = isGood ? 'text-emerald-400' : isMid ? 'text-[#D4AF37]' : 'text-red-400'
+  const color = isGood ? 'text-emerald-400' : isMid ? 'text-forge-gold' : 'text-red-400'
   return <span className={`text-xs font-mono font-bold ${color}`}>{Math.round(v)}</span>
 }
 
 function GPSBadge({ value }: { value: number | null }) {
   if (value === null || value === undefined) {
-    return <span className="text-white/20 text-xs font-mono">-</span>
+    return <span className="text-forge-text-muted/70 text-xs font-mono">-</span>
   }
 
   const gps = Math.round(value)
   let color = 'text-red-400'
   if (gps >= 80) color = 'text-emerald-400'
-  else if (gps >= 65) color = 'text-[#D4AF37]'
+  else if (gps >= 65) color = 'text-forge-gold'
   else if (gps >= 50) color = 'text-amber-400'
   else if (gps >= 35) color = 'text-orange-400'
 
@@ -130,11 +130,11 @@ function PriorityCard({ client }: { client: Client }) {
 
   return (
     <Link href={`/clients/${client.id}`}
-      className="bg-[#111111] border border-amber-500/30 rounded-2xl p-5 hover:border-amber-500/60 transition-all group block">
+      className="bg-forge-surface-2 border border-amber-500/30 rounded-2xl p-5 hover:border-amber-500/60 transition-all group block">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <p className="text-sm font-semibold text-white group-hover:text-[#D4AF37] transition-colors">{client.full_name}</p>
-          <p className="text-xs text-white/35 capitalize mt-0.5">{client.current_stage}</p>
+          <p className="text-sm font-semibold text-forge-text-primary group-hover:text-forge-gold transition-colors">{client.full_name}</p>
+          <p className="text-xs text-forge-text-muted capitalize mt-0.5">{client.current_stage}</p>
         </div>
         <div className="flex items-center gap-1.5">
           <AlertTriangle size={13} className="text-amber-400" />
@@ -143,19 +143,19 @@ function PriorityCard({ client }: { client: Client }) {
       </div>
       <div className="space-y-1.5 mb-3">
         {reasons.map((reason, index) => (
-          <div key={index} className="flex items-center gap-2 text-xs text-white/50">
+          <div key={index} className="flex items-center gap-2 text-xs text-forge-text-secondary">
             <span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" />
             {reason}
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between pt-3 border-t border-white/6">
-        <div className="flex gap-3 text-xs text-white/30">
+      <div className="flex items-center justify-between pt-3 border-t border-forge-border/60">
+        <div className="flex gap-3 text-xs text-forge-text-muted">
           <span>BAR <BIEBar value={client.bar_score} /></span>
           <span>DBI <BIEBar value={client.dbi_score} invert /></span>
           <span>BLI <BIEBar value={client.bli_score} invert /></span>
         </div>
-        <ArrowRight size={13} className="text-white/20 group-hover:text-[#D4AF37] transition-colors" />
+        <ArrowRight size={13} className="text-forge-text-muted/70 group-hover:text-forge-gold transition-colors" />
       </div>
     </Link>
   )
@@ -239,28 +239,28 @@ export default function ClientsPage() {
     })
 
   function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <ChevronUp size={10} className="text-white/15" />
+    if (sortKey !== col) return <ChevronUp size={10} className="text-forge-text-muted/60" />
     return sortDir === 'asc'
-      ? <ChevronUp size={10} className="text-[#D4AF37]" />
-      : <ChevronDown size={10} className="text-[#D4AF37]" />
+      ? <ChevronUp size={10} className="text-forge-gold" />
+      : <ChevronDown size={10} className="text-forge-gold" />
   }
 
   function ThBtn({ col, label }: { col: SortKey; label: string }) {
     return (
       <button onClick={() => toggleSort(col)}
-        className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-white/30 hover:text-white transition-colors">
+        className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-forge-text-muted hover:text-forge-text-primary transition-colors">
         {label}<SortIcon col={col} />
       </button>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white">Clients</h1>
-            <p className="text-sm text-white/40 mt-0.5">{clients.filter(c => c.status === 'active').length} active · {clients.length} total</p>
+            <h1 className="text-xl font-bold text-forge-text-primary">Clients</h1>
+            <p className="text-sm text-forge-text-muted mt-0.5">{clients.filter(c => c.status === 'active').length} active · {clients.length} total</p>
           </div>
           <Link href="/clients/new" className="forge-btn-gold flex items-center gap-2 text-sm">
             <Plus size={15} /> New Client
@@ -282,7 +282,7 @@ export default function ClientsPage() {
         <div className="space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-48">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-forge-text-primary/25" />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -291,11 +291,11 @@ export default function ClientsPage() {
               />
             </div>
             <div className="flex items-center gap-1.5">
-              <Filter size={12} className="text-white/25" />
+              <Filter size={12} className="text-forge-text-primary/25" />
               {(['all', 'active', 'inactive'] as const).map(s => (
                 <button key={s} onClick={() => setStatusFilter(s)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all
-                    ${statusFilter === s ? 'bg-[#D4AF37] text-black' : 'bg-white/6 text-white/40 hover:text-white'}`}>
+                    ${statusFilter === s ? 'bg-forge-gold text-forge-purple-dark' : 'bg-forge-surface-3/80 text-forge-text-muted hover:text-forge-text-primary'}`}>
                   {s}
                 </button>
               ))}
@@ -305,7 +305,7 @@ export default function ClientsPage() {
             {STAGES.map(s => (
               <button key={s} onClick={() => setStageFilter(s)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium capitalize transition-all
-                  ${stageFilter === s ? 'bg-[#D4AF37] text-black' : 'bg-white/6 text-white/40 hover:text-white'}`}>
+                  ${stageFilter === s ? 'bg-forge-gold text-forge-purple-dark' : 'bg-forge-surface-3/80 text-forge-text-muted hover:text-forge-text-primary'}`}>
                 {s === 'all' ? 'All Stages' : s}
               </button>
             ))}
@@ -314,35 +314,35 @@ export default function ClientsPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Zap size={20} className="text-white/15 animate-pulse" />
+            <Zap size={20} className="text-forge-text-muted/60 animate-pulse" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-[#111111] border border-dashed border-white/8 rounded-2xl p-12 text-center">
-            <Users size={32} className="mx-auto mb-4 text-white/15" />
-            <p className="text-sm text-white/40">{search || stageFilter !== 'all' ? 'No clients match your filters' : 'No clients yet'}</p>
+          <div className="bg-forge-surface-2 border border-dashed border-forge-border/70 rounded-2xl p-12 text-center">
+            <Users size={32} className="mx-auto mb-4 text-forge-text-muted/60" />
+            <p className="text-sm text-forge-text-muted">{search || stageFilter !== 'all' ? 'No clients match your filters' : 'No clients yet'}</p>
             {!search && stageFilter === 'all' && (
-              <Link href="/clients/new" className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-[#D4AF37] text-black text-sm font-semibold rounded-xl">
+              <Link href="/clients/new" className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-forge-gold text-forge-purple-dark text-sm font-semibold rounded-xl">
                 <Plus size={14} /> Add First Client
               </Link>
             )}
           </div>
         ) : (
-          <div className="bg-[#111111] border border-white/8 rounded-2xl overflow-hidden">
+          <div className="bg-forge-surface-2 border border-forge-border/70 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-white/8 bg-white/2">
+                  <tr className="border-b border-forge-border/70 bg-forge-surface-3/50">
                     <th className="text-left px-5 py-3"><ThBtn col="full_name" label="Client" /></th>
                     <th className="text-left px-4 py-3"><ThBtn col="current_stage" label="Stage" /></th>
-                    <th className="text-left px-4 py-3 hidden md:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">DOB</span></th>
-                    <th className="text-center px-4 py-3 hidden md:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Age</span></th>
-                    <th className="text-left px-4 py-3 hidden lg:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Gender</span></th>
+                    <th className="text-left px-4 py-3 hidden md:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">DOB</span></th>
+                    <th className="text-center px-4 py-3 hidden md:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Age</span></th>
+                    <th className="text-left px-4 py-3 hidden lg:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Gender</span></th>
                     <th className="text-center px-4 py-3"><ThBtn col="bar" label="BAR" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="dbi" label="DBI" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="bli" label="BLI" /></th>
                     <th className="text-center px-4 py-3"><ThBtn col="gps" label="GPS" /></th>
                     <th className="text-left px-4 py-3 hidden md:table-cell"><ThBtn col="last_session" label="Last Session" /></th>
-                    <th className="text-left px-4 py-3 hidden lg:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-white/30">Goal</span></th>
+                    <th className="text-left px-4 py-3 hidden lg:table-cell"><span className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Goal</span></th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -350,52 +350,52 @@ export default function ClientsPage() {
                   {filtered.map((c) => (
                     <tr key={c.id}
                       onClick={() => router.push(`/clients/${c.id}`)}
-                      className={`border-b border-white/5 last:border-0 cursor-pointer hover:bg-white/3 transition-colors
+                      className={`border-b border-forge-border/60 last:border-0 cursor-pointer hover:bg-forge-surface-3/60 transition-colors
                         ${c.status !== 'active' ? 'opacity-50' : ''}`}>
                       <td className="px-5 py-3.5">
                         <div>
-                          <p className="text-sm font-semibold text-white">{c.full_name}</p>
-                          <p className="text-xs text-white/30 truncate max-w-[180px]">{c.email}</p>
+                          <p className="text-sm font-semibold text-forge-text-primary">{c.full_name}</p>
+                          <p className="text-xs text-forge-text-muted truncate max-w-[180px]">{c.email}</p>
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono uppercase capitalize
-                          ${STAGE_COLORS[c.current_stage ?? ''] ?? 'text-white/40 bg-white/5 border-white/10'}`}>
+                          ${STAGE_COLORS[c.current_stage ?? ''] ?? 'text-forge-text-muted bg-forge-surface-3/70 border-forge-border'}`}>
                           {c.current_stage ?? '-'}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 hidden md:table-cell">
-                        <span className="text-xs text-white/35 font-mono">
+                        <span className="text-xs text-forge-text-muted font-mono">
                           {c.date_of_birth ? new Date(`${c.date_of_birth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-center hidden md:table-cell"><span className="text-xs text-white/55 font-mono">{c.age ?? '-'}</span></td>
+                      <td className="px-4 py-3.5 text-center hidden md:table-cell"><span className="text-xs text-forge-text-secondary font-mono">{c.age ?? '-'}</span></td>
                       <td className="px-4 py-3.5 hidden lg:table-cell">
-                        <span className="text-xs text-white/35 capitalize">{c.gender ? c.gender.replace(/_/g, ' ') : '-'}</span>
+                        <span className="text-xs text-forge-text-muted capitalize">{c.gender ? c.gender.replace(/_/g, ' ') : '-'}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.bar_score} /></td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.dbi_score} invert /></td>
                       <td className="px-4 py-3.5 text-center"><BIEBar value={c.bli_score} invert /></td>
                       <td className="px-4 py-3.5 text-center"><GPSBadge value={c.gps} /></td>
                       <td className="px-4 py-3.5 hidden md:table-cell">
-                        <span className="text-xs text-white/35 font-mono">
+                        <span className="text-xs text-forge-text-muted font-mono">
                           {c.last_session ? new Date(c.last_session).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 hidden lg:table-cell">
-                        <span className="text-xs text-white/35 truncate max-w-[160px] block">{c.primary_goal ?? '-'}</span>
+                        <span className="text-xs text-forge-text-muted truncate max-w-[160px] block">{c.primary_goal ?? '-'}</span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <ArrowRight size={13} className="text-white/15 group-hover:text-white" />
+                        <ArrowRight size={13} className="text-forge-text-muted/60 group-hover:text-forge-text-primary" />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="px-5 py-3 border-t border-white/6 flex items-center justify-between">
-              <p className="text-xs text-white/25">{filtered.length} client{filtered.length !== 1 ? 's' : ''}</p>
-              <p className="text-xs text-white/20 font-mono">Click any row to open client</p>
+            <div className="px-5 py-3 border-t border-forge-border/60 flex items-center justify-between">
+              <p className="text-xs text-forge-text-primary/25">{filtered.length} client{filtered.length !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-forge-text-muted/70 font-mono">Click any row to open client</p>
             </div>
           </div>
         )}

@@ -38,13 +38,13 @@ const STATUS_BADGES: Record<string, string> = {
   rescheduled: 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300',
   completed: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
   cancelled: 'border-red-500/30 bg-red-500/10 text-red-300',
-  no_show: 'border-white/15 bg-white/5 text-white/55',
+  no_show: 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary',
 }
 
 const PAYMENT_BADGES: Record<string, string> = {
   unpaid: 'border-red-500/30 bg-red-500/10 text-red-300',
   paid: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-  waived: 'border-white/15 bg-white/5 text-white/55',
+  waived: 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary',
 }
 
 function normalizeDateOnly(value: string) {
@@ -161,9 +161,9 @@ function availableActions(status: Booking['status']) {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
-      <div className="text-3xl font-semibold text-white">{value}</div>
-      <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/35">{label}</div>
+    <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
+      <div className="text-3xl font-semibold text-forge-text-primary">{value}</div>
+      <div className="mt-2 font-mono text-xs uppercase tracking-widest text-forge-text-muted">{label}</div>
     </div>
   )
 }
@@ -196,22 +196,22 @@ function DetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
       <button className="flex-1" onClick={onClose} aria-label="Close booking details" />
-      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-[#111111] p-6">
+      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-forge-border bg-forge-surface-2 p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-white">Booking Details</h2>
-            <p className="mt-2 text-lg font-semibold text-white">{booking.client_name}</p>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-forge-text-primary">Booking Details</h2>
+            <p className="mt-2 text-lg font-semibold text-forge-text-primary">{booking.client_name}</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white">
+          <button onClick={onClose} className="rounded-lg p-2 text-forge-text-muted hover:bg-forge-surface-3/70 hover:text-forge-text-primary">
             <XCircle size={18} />
           </button>
         </div>
 
         <div className="space-y-5">
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-widest text-white/35">Session</div>
-            <div className="mt-2 text-base font-medium text-white">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
-            <div className="mt-2 text-sm text-white/45">{formatDurationLabel(booking.duration_minutes)}</div>
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Session</div>
+            <div className="mt-2 text-base font-medium text-forge-text-primary">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</div>
+            <div className="mt-2 text-sm text-forge-text-muted">{formatDurationLabel(booking.duration_minutes)}</div>
             {booking.google_calendar_event_id ? (
               <div className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300">
                 Calendar linked
@@ -220,33 +220,33 @@ function DetailDrawer({
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-widest text-white/35">Contact</div>
-              <div className="mt-3 space-y-3 text-sm text-white/70">
+            <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Contact</div>
+              <div className="mt-3 space-y-3 text-sm text-forge-text-secondary">
                 <div>
-                  <div className="text-white">{booking.client_email}</div>
-                  <button onClick={() => onCopy(booking.client_email, 'Email')} className="mt-1 text-xs text-[#D4AF37] hover:text-white">Copy email</button>
+                  <div className="text-forge-text-primary">{booking.client_email}</div>
+                  <button onClick={() => onCopy(booking.client_email, 'Email')} className="mt-1 text-xs text-forge-gold hover:text-forge-text-primary">Copy email</button>
                 </div>
                 <div>
-                  <div className="text-white">{booking.client_phone || 'No phone on file'}</div>
-                  {booking.client_phone ? <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 text-xs text-[#D4AF37] hover:text-white">Copy phone</button> : null}
+                  <div className="text-forge-text-primary">{booking.client_phone || 'No phone on file'}</div>
+                  {booking.client_phone ? <button onClick={() => onCopy(booking.client_phone ?? '', 'Phone')} className="mt-1 text-xs text-forge-gold hover:text-forge-text-primary">Copy phone</button> : null}
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-widest text-white/35">Status</div>
+            <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Status</div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>{booking.status.replace('_', ' ')}</span>
-                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>{booking.payment_status}</span>
+                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>{booking.status.replace('_', ' ')}</span>
+                <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>{booking.payment_status}</span>
               </div>
-              <div className="mt-3 text-sm text-white/45">
+              <div className="mt-3 text-sm text-forge-text-muted">
                 {booking.attended === null ? 'Attendance not set' : booking.attended ? 'Marked attended' : 'Marked not attended'}
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-widest text-white/35">Reschedule & Notes</div>
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Reschedule & Notes</div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <label className="forge-label">Booking Date</label>
@@ -274,27 +274,27 @@ function DetailDrawer({
             </button>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-widest text-white/35">Recent Changes</div>
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+            <div className="text-xs uppercase tracking-widest text-forge-text-muted">Recent Changes</div>
             <div className="mt-4 space-y-3">
               {historyLoading ? (
-                <div className="text-sm text-white/40">Loading history...</div>
+                <div className="text-sm text-forge-text-muted">Loading history...</div>
               ) : history.length > 0 ? (
                 history.map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
+                  <div key={entry.id} className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-3 py-3">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-white">{entry.action.replace('.', ' ')}</div>
-                      <div className="text-xs text-white/35">{new Date(entry.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+                      <div className="text-sm font-medium text-forge-text-primary">{entry.action.replace('.', ' ')}</div>
+                      <div className="text-xs text-forge-text-muted">{new Date(entry.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
                     </div>
                     {entry.payload && Object.keys(entry.payload).length > 0 ? (
-                      <div className="mt-2 text-xs text-white/45">
+                      <div className="mt-2 text-xs text-forge-text-muted">
                         {Object.entries(entry.payload).map(([key, value]) => `${key}: ${String(value ?? '')}`).join(' · ')}
                       </div>
                     ) : null}
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-white/40">No booking changes logged yet.</div>
+                <div className="text-sm text-forge-text-muted">No booking changes logged yet.</div>
               )}
             </div>
           </div>
@@ -540,35 +540,35 @@ export default function BookingsPage() {
   }, [bookings])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Bookings</h1>
-          <p className="mt-1 text-sm text-white/40">Manage booking requests, confirmations, and attendance.</p>
+          <h1 className="text-2xl font-semibold text-forge-text-primary">Bookings</h1>
+          <p className="mt-1 text-sm text-forge-text-muted">Manage booking requests, confirmations, and attendance.</p>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-[#111111] p-4">
+        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-xs uppercase tracking-widest text-white/35">Viewing Month</div>
-              <div className="mt-2 text-lg font-semibold text-white">{formatMonthLabel(selectedMonth)}</div>
+              <div className="text-xs uppercase tracking-widest text-forge-text-muted">Viewing Month</div>
+              <div className="mt-2 text-lg font-semibold text-forge-text-primary">{formatMonthLabel(selectedMonth)}</div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
               >
                 Previous Month
               </button>
               <button
                 onClick={() => setSelectedMonth(startOfMonth(new Date()))}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
               >
                 Current Month
               </button>
               <button
                 onClick={() => setSelectedMonth((current) => shiftMonth(current, 1))}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
               >
                 Next Month
               </button>
@@ -586,14 +586,14 @@ export default function BookingsPage() {
           <StatCard label={`Completed In ${selectedMonth.toLocaleDateString('en-US', { month: 'short' })}`} value={stats.completedMonth} />
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-[#111111] p-4">
+        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-2">
               {STATUS_OPTIONS.map((option) => (
                 <button
                   key={option}
                   onClick={() => setStatusFilter(option)}
-                  className={`rounded-xl px-3 py-2 text-sm capitalize transition-colors ${statusFilter === option ? 'bg-[#D4AF37] text-black' : 'bg-white/6 text-white/60 hover:text-white'}`}
+                  className={`rounded-xl px-3 py-2 text-sm capitalize transition-colors ${statusFilter === option ? 'bg-forge-gold text-forge-purple-dark' : 'bg-forge-surface-3/80 text-forge-text-primary/60 hover:text-forge-text-primary'}`}
                 >
                   {option === 'all' ? 'All' : option.replace('_', ' ')}
                 </button>
@@ -610,13 +610,13 @@ export default function BookingsPage() {
 
         {loading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+            <Loader2 className="h-6 w-6 animate-spin text-forge-text-muted/70" />
           </div>
         ) : filteredBookings.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-[#111111] p-12 text-center">
-            <XCircle className="mx-auto h-10 w-10 text-white/20" />
-            <h2 className="mt-4 text-lg font-semibold text-white">No bookings for {formatMonthLabel(selectedMonth)}</h2>
-            <p className="mt-2 text-sm text-white/40">
+          <div className="rounded-2xl border border-dashed border-forge-border bg-forge-surface-2 p-12 text-center">
+            <XCircle className="mx-auto h-10 w-10 text-forge-text-muted/70" />
+            <h2 className="mt-4 text-lg font-semibold text-forge-text-primary">No bookings for {formatMonthLabel(selectedMonth)}</h2>
+            <p className="mt-2 text-sm text-forge-text-muted">
               {bookings.length > 0
                 ? 'Bookings exist in other months. Jump to the latest booking month or choose another month above.'
                 : 'Try another month or share the public booking page to start collecting requests.'}
@@ -625,7 +625,7 @@ export default function BookingsPage() {
               {bookings.length > 0 && latestBookingMonth ? (
                 <button
                   onClick={() => setSelectedMonth(latestBookingMonth)}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white"
+                  className="rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary"
                 >
                   Jump To Latest Booking
                 </button>
@@ -634,17 +634,17 @@ export default function BookingsPage() {
                 <Copy size={15} />
                 {copied ? 'Copied booking link' : 'Copy booking page link'}
               </button>
-              <Link href="/book" target="_blank" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white">
+              <Link href="/book" target="_blank" className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:text-forge-text-primary">
                 <ExternalLink size={15} />
                 View booking page
               </Link>
             </div>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#111111]">
+          <div className="overflow-hidden rounded-2xl border border-forge-border/70 bg-forge-surface-2">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-white/5 text-left text-xs uppercase tracking-widest text-white/35">
+                <thead className="bg-forge-surface-3/70 text-left text-xs uppercase tracking-widest text-forge-text-muted">
                   <tr>
                     <th className="px-4 py-3">Client</th>
                     <th className="px-4 py-3">Service / Package</th>
@@ -657,21 +657,21 @@ export default function BookingsPage() {
                 </thead>
                 <tbody>
                   {filteredBookings.map((booking) => (
-                    <tr key={booking.id} className="border-t border-white/6 align-top text-white/70">
+                    <tr key={booking.id} className="border-t border-forge-border/60 align-top text-forge-text-secondary">
                       <td className="px-4 py-4">
-                        <div className="font-medium text-white">{booking.client_name}</div>
-                        <div className="mt-1 text-xs text-white/35">{booking.client_email}</div>
+                        <div className="font-medium text-forge-text-primary">{booking.client_name}</div>
+                        <div className="mt-1 text-xs text-forge-text-muted">{booking.client_email}</div>
                       </td>
-                      <td className="px-4 py-4 text-white/60">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</td>
-                      <td className="px-4 py-4 text-white/60">{formatBookingDate(booking.booking_date, booking.booking_time)}</td>
-                      <td className="px-4 py-4 text-white/60">{formatDurationLabel(booking.duration_minutes)}</td>
+                      <td className="px-4 py-4 text-forge-text-primary/60">{booking.service_name ?? booking.package_name ?? 'Custom booking'}</td>
+                      <td className="px-4 py-4 text-forge-text-primary/60">{formatBookingDate(booking.booking_date, booking.booking_time)}</td>
+                      <td className="px-4 py-4 text-forge-text-primary/60">{formatDurationLabel(booking.duration_minutes)}</td>
                       <td className="px-4 py-4">
-                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>
+                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${STATUS_BADGES[booking.status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>
                           {booking.status.replace('_', ' ')}
                         </span>
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-white/10 bg-white/5 text-white/55'}`}>
+                        <span className={`rounded-full border px-2 py-1 text-xs capitalize ${PAYMENT_BADGES[booking.payment_status] ?? 'border-forge-border bg-forge-surface-3/70 text-forge-text-secondary'}`}>
                           {booking.payment_status}
                         </span>
                       </td>
@@ -679,16 +679,16 @@ export default function BookingsPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => void openBookingDetails(booking)}
-                            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white"
+                            className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-3 py-2 text-xs text-forge-text-secondary hover:text-forge-text-primary"
                           >
                             View
                           </button>
                           <details className="group relative inline-block text-left">
-                            <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white">
+                            <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-forge-border px-3 py-2 text-xs text-forge-text-secondary hover:text-forge-text-primary">
                               Actions
                               <ChevronDown size={14} className="transition group-open:rotate-180" />
                             </summary>
-                            <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-white/10 bg-[#0d0d0d] p-2 shadow-2xl">
+                            <div className="absolute right-0 z-10 mt-2 min-w-[180px] rounded-xl border border-forge-border bg-forge-surface-2 p-2 shadow-2xl">
                               {availableActions(booking.status).length > 0 ? (
                                 availableActions(booking.status).map((action) => {
                                   const isUpdating = updating === booking.id
@@ -697,21 +697,21 @@ export default function BookingsPage() {
                                       key={action.value}
                                       onClick={() => void updateBookingStatus(booking.id, action.value)}
                                       disabled={updating === booking.id}
-                                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white disabled:opacity-50"
+                                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:opacity-50"
                                     >
                                       {isUpdating ? (
                                         <Loader2 size={14} className="animate-spin" />
                                       ) : action.value === 'completed' ? (
                                         <CheckCircle2 size={14} />
                                       ) : (
-                                        <span className="h-2 w-2 rounded-full bg-[#D4AF37]" />
+                                        <span className="h-2 w-2 rounded-full bg-forge-gold" />
                                       )}
                                       {isUpdating ? 'Updating...' : action.label}
                                     </button>
                                   )
                                 })
                               ) : (
-                                <div className="px-3 py-2 text-xs text-white/35">No actions available</div>
+                                <div className="px-3 py-2 text-xs text-forge-text-muted">No actions available</div>
                               )}
                             </div>
                           </details>

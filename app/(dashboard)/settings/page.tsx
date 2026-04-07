@@ -347,17 +347,17 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Settings</h1>
-          <p className="mt-1 text-sm text-white/40">
+          <h1 className="text-2xl font-semibold text-forge-text-primary">Settings</h1>
+          <p className="mt-1 text-sm text-forge-text-muted">
             Manage your account plus reusable nutrition, movement, and habit coaching templates.
           </p>
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-white/8 bg-[#111111] p-10 text-center text-white/45">
+          <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">
             <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
             Loading account settings...
           </div>
@@ -367,10 +367,10 @@ export default function SettingsPage() {
             {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{success}</div> : null}
 
             <div className="grid gap-6 md:grid-cols-2">
-              <div className="rounded-2xl border border-white/8 bg-[#111111] p-5 space-y-4">
+              <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-4">
                 <div>
-                  <p className="text-xs font-mono uppercase tracking-widest text-white/30">Account</p>
-                  <h2 className="mt-3 text-sm font-semibold text-white">Login & Profile</h2>
+                  <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Account</p>
+                  <h2 className="mt-3 text-sm font-semibold text-forge-text-primary">Login & Profile</h2>
                 </div>
 
                 <div>
@@ -405,15 +405,15 @@ export default function SettingsPage() {
                 <div>
                   <label className="forge-label">Notification Email</label>
                   <input type="email" className="forge-input" value={form.notification_email} onChange={(event) => setForm((current) => ({ ...current, notification_email: event.target.value }))} />
-                  <p className="mt-2 text-xs text-white/35">Email for new booking and check-in alerts</p>
+                  <p className="mt-2 text-xs text-forge-text-muted">Email for new booking and check-in alerts</p>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-[#111111] p-5 space-y-4">
+              <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-4">
                 <div>
-                  <p className="text-xs font-mono uppercase tracking-widest text-white/30">Security</p>
-                  <h2 className="mt-3 text-sm font-semibold text-white">Change Password</h2>
-                  <p className="mt-2 text-sm text-white/55">Leave both password fields empty if you do not want to change your password.</p>
+                  <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Security</p>
+                  <h2 className="mt-3 text-sm font-semibold text-forge-text-primary">Change Password</h2>
+                  <p className="mt-2 text-sm text-forge-text-secondary">Leave both password fields empty if you do not want to change your password.</p>
                 </div>
 
                 <div>
@@ -430,7 +430,7 @@ export default function SettingsPage() {
 
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => void handleLogout()} disabled={loggingOut}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/65 hover:text-white hover:bg-white/5 disabled:opacity-50">
+                className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-primary/65 hover:text-forge-text-primary hover:bg-forge-surface-3/70 disabled:opacity-50">
                 {loggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                 {loggingOut ? 'Logging out...' : 'Logout'}
               </button>
@@ -442,12 +442,12 @@ export default function SettingsPage() {
           </form>
         )}
 
-        <section className="rounded-2xl border border-white/8 bg-[#111111] p-5 space-y-5">
+        <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-mono uppercase tracking-widest text-white/30">Templates</p>
-              <h2 className="mt-3 text-sm font-semibold text-white">Coach Template Library</h2>
-              <p className="mt-2 text-sm text-white/55">
+              <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Templates</p>
+              <h2 className="mt-3 text-sm font-semibold text-forge-text-primary">Coach Template Library</h2>
+              <p className="mt-2 text-sm text-forge-text-secondary">
                 Build reusable movement, nutrition, and habit coaching templates your team can reuse across clients.
               </p>
             </div>
@@ -472,8 +472,8 @@ export default function SettingsPage() {
                 onClick={() => setActiveTemplateType(type.value)}
                 className={`rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                   activeTemplateType === type.value
-                    ? 'bg-[#D4AF37] text-black'
-                    : 'bg-white/6 text-white/55 hover:text-white'
+                    ? 'bg-forge-gold text-forge-purple-dark'
+                    : 'bg-forge-surface-3/80 text-forge-text-secondary hover:text-forge-text-primary'
                 }`}
               >
                 {type.label}
@@ -482,13 +482,13 @@ export default function SettingsPage() {
           </div>
 
           {showTemplateForm ? (
-            <form onSubmit={handleTemplateSave} className="rounded-2xl border border-[#D4AF37]/20 bg-black/20 p-5 space-y-4">
+            <form onSubmit={handleTemplateSave} className="rounded-2xl border border-forge-gold/20 bg-forge-surface-3/60 p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-mono uppercase tracking-widest text-white/30">
+                  <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">
                     {editingTemplateId ? 'Edit Template' : 'Create Template'}
                   </p>
-                  <p className="mt-1 text-sm text-white/55">Template text can be used later as a reusable coaching starting point.</p>
+                  <p className="mt-1 text-sm text-forge-text-secondary">Template text can be used later as a reusable coaching starting point.</p>
                 </div>
                 <button
                   type="button"
@@ -497,7 +497,7 @@ export default function SettingsPage() {
                     setEditingTemplateId(null)
                     setTemplateForm({ ...INITIAL_TEMPLATE_FORM, template_type: activeTemplateType })
                   }}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/65 hover:text-white"
+                  className="rounded-lg border border-forge-border px-3 py-2 text-xs text-forge-text-primary/65 hover:text-forge-text-primary"
                 >
                   Cancel
                 </button>
@@ -557,12 +557,12 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3">
-                <span className="text-sm text-white/65">Active Template</span>
+              <div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3">
+                <span className="text-sm text-forge-text-primary/65">Active Template</span>
                 <button
                   type="button"
                   onClick={() => setTemplateForm((current) => ({ ...current, is_active: !current.is_active }))}
-                  className="text-white/70 hover:text-white"
+                  className="text-forge-text-secondary hover:text-forge-text-primary"
                 >
                   {templateForm.is_active ? <ToggleRight className="h-6 w-6 text-emerald-400" /> : <ToggleLeft className="h-6 w-6" />}
                 </button>
@@ -578,14 +578,14 @@ export default function SettingsPage() {
           ) : null}
 
           {templatesLoading ? (
-            <div className="rounded-xl border border-white/8 bg-black/20 p-8 text-center text-white/45">
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-8 text-center text-forge-text-muted">
               <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
               Loading template library...
             </div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-10 text-center">
-              <BookTemplate className="mx-auto mb-3 h-7 w-7 text-white/20" />
-              <p className="text-sm text-white/50">No templates yet in this category.</p>
+            <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface-3/60 p-10 text-center">
+              <BookTemplate className="mx-auto mb-3 h-7 w-7 text-forge-text-muted/70" />
+              <p className="text-sm text-forge-text-secondary">No templates yet in this category.</p>
               <button type="button" onClick={() => openCreateTemplate(activeTemplateType)} className="mt-4 forge-btn-gold inline-flex items-center gap-2 text-sm">
                 <Plus className="h-4 w-4" />
                 Create First Template
@@ -594,30 +594,30 @@ export default function SettingsPage() {
           ) : (
             <div className="space-y-3">
               {filteredTemplates.map((template) => (
-                <div key={template.id} className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <div key={template.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-2 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-white">{template.name}</p>
+                        <p className="text-sm font-semibold text-forge-text-primary">{template.name}</p>
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${
                           template.is_active
                             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                            : 'border-white/10 bg-white/5 text-white/45'
+                            : 'border-forge-border bg-forge-surface-3/70 text-forge-text-muted'
                         }`}>
                           {template.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
-                      {template.description ? <p className="text-sm text-white/50">{template.description}</p> : null}
-                      <p className="text-xs text-white/30">Updated {formatDateTime(template.updated_at)} · Sort {template.sort_order}</p>
-                      <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-white/8 bg-[#111111] p-4 text-xs text-white/60">
+                      {template.description ? <p className="text-sm text-forge-text-secondary">{template.description}</p> : null}
+                      <p className="text-xs text-forge-text-muted">Updated {formatDateTime(template.updated_at)} · Sort {template.sort_order}</p>
+                      <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4 text-xs text-forge-text-primary/60">
                         {template.template_text}
                       </pre>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <button type="button" onClick={() => toggleTemplateActive(template)} className="text-white/60 hover:text-white">
+                      <button type="button" onClick={() => toggleTemplateActive(template)} className="text-forge-text-primary/60 hover:text-forge-text-primary">
                         {template.is_active ? <ToggleRight className="h-6 w-6 text-emerald-400" /> : <ToggleLeft className="h-6 w-6" />}
                       </button>
-                      <button type="button" onClick={() => openEditTemplate(template)} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white inline-flex items-center gap-2">
+                      <button type="button" onClick={() => openEditTemplate(template)} className="rounded-lg border border-forge-border px-3 py-2 text-xs text-forge-text-secondary hover:text-forge-text-primary inline-flex items-center gap-2">
                         <SquarePen className="h-3.5 w-3.5" />
                         Edit
                       </button>
@@ -638,12 +638,12 @@ export default function SettingsPage() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-white/8 bg-[#111111] p-5 space-y-5">
+        <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-mono uppercase tracking-widest text-white/30">Client Portal</p>
-              <h2 className="mt-3 text-sm font-semibold text-white">Portal Login Test</h2>
-              <p className="mt-2 text-sm text-white/55">
+              <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Client Portal</p>
+              <h2 className="mt-3 text-sm font-semibold text-forge-text-primary">Portal Login Test</h2>
+              <p className="mt-2 text-sm text-forge-text-secondary">
                 Send a one-time portal login link to a client email and confirm whether the address matches an active client record.
               </p>
             </div>
@@ -652,14 +652,14 @@ export default function SettingsPage() {
           {portalTestError ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{portalTestError}</div> : null}
           {portalTestSuccess ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{portalTestSuccess}</div> : null}
           {portalTestLink ? (
-            <div className="rounded-xl border border-[#D4AF37]/25 bg-[#D4AF37]/8 px-4 py-3 text-sm text-[#f6dfa1]">
-              <p className="font-medium text-[#D4AF37]">Fallback magic link</p>
-              <p className="mt-1 break-all text-white/75">{portalTestLink}</p>
+            <div className="rounded-xl border border-forge-gold/25 bg-forge-gold/10 px-4 py-3 text-sm text-forge-purple-dark dark:text-forge-gold-light">
+              <p className="font-medium text-forge-gold">Fallback magic link</p>
+              <p className="mt-1 break-all text-forge-text-primary/75">{portalTestLink}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(portalTestLink)}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/75 hover:text-white"
+                  className="rounded-lg border border-forge-border px-3 py-2 text-xs text-forge-text-primary/75 hover:text-forge-text-primary"
                 >
                   Copy Link
                 </button>
@@ -667,7 +667,7 @@ export default function SettingsPage() {
                   href={portalTestLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/75 hover:text-white"
+                  className="rounded-lg border border-forge-border px-3 py-2 text-xs text-forge-text-primary/75 hover:text-forge-text-primary"
                 >
                   Open Link
                 </a>
