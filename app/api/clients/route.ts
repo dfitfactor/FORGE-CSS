@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const accessFilter = session.role === 'admin' ? '' : 'WHERE c.coach_id = $1'
+    const accessFilter = session.role === 'admin' ? '' : 'WHERE (c.coach_id = $1 OR c.coach_id IS NULL)'
     const params = session.role === 'admin' ? [] : [session.id]
 
     let clients: any[] = []

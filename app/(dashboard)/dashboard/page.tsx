@@ -156,7 +156,7 @@ function dedupeRecentActivityRows(rows: RecentActivityRow[]) {
 
 async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'client') {
   try {
-    const accessFilter = role === 'admin' ? '' : 'AND c.coach_id = $1'
+    const accessFilter = role === 'admin' ? '' : 'AND (c.coach_id = $1 OR c.coach_id IS NULL)'
     const params = role === 'admin' ? [] : [userId]
     const protocolTimestampExpression = await getProtocolTimestampExpression()
 
