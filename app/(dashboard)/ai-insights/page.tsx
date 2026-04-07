@@ -192,15 +192,15 @@ export default function AIInsightsPage() {
   const coveredClientCount = new Set(insights.map(insight => insight.client_id)).size
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="flex items-center gap-3 text-2xl font-semibold text-white">
-              <Brain className="h-6 w-6 text-[#D4AF37]" />
+            <h1 className="flex items-center gap-3 text-2xl font-semibold text-forge-text-primary">
+              <Brain className="h-6 w-6 text-forge-gold" />
               AI Insights
             </h1>
-            <p className="mt-1 text-sm text-white/40">
+            <p className="mt-1 text-sm text-forge-text-muted">
               Weekly coach-facing summaries generated from adherence, journals, BIE state, and AI-enabled documents.
             </p>
           </div>
@@ -208,7 +208,7 @@ export default function AIInsightsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => void loadInsights()}
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-white/60 transition-colors hover:text-white"
+              className="flex items-center gap-2 rounded-xl border border-forge-border bg-forge-surface-3/80 px-3 py-2 text-xs text-forge-text-secondary transition-colors hover:text-forge-text-primary"
             >
               <RefreshCw size={14} />
               Refresh
@@ -239,41 +239,41 @@ export default function AIInsightsPage() {
         )}
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-white/8 bg-[#111111] p-4">
-            <div className="text-2xl font-bold text-white">{insights.length}</div>
-            <div className="mt-1 font-mono text-xs uppercase tracking-wide text-white/35">
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <div className="text-2xl font-bold text-forge-text-primary">{insights.length}</div>
+            <div className="mt-1 font-mono text-xs uppercase tracking-wide text-forge-text-muted">
               Stored Insights
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/8 bg-[#111111] p-4">
-            <div className="text-2xl font-bold text-[#D4AF37]">{highConfidenceCount}</div>
-            <div className="mt-1 font-mono text-xs uppercase tracking-wide text-white/35">
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <div className="text-2xl font-bold text-forge-gold">{highConfidenceCount}</div>
+            <div className="mt-1 font-mono text-xs uppercase tracking-wide text-forge-text-muted">
               High Confidence
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/8 bg-[#111111] p-4">
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
             <div className="text-2xl font-bold text-emerald-400">{coveredClientCount}</div>
-            <div className="mt-1 font-mono text-xs uppercase tracking-wide text-white/35">
+            <div className="mt-1 font-mono text-xs uppercase tracking-wide text-forge-text-muted">
               Clients Covered
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
           <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-[#D4AF37]" />
-            <h2 className="text-sm font-semibold text-white">Get Insight</h2>
+            <Sparkles size={16} className="text-forge-gold" />
+            <h2 className="text-sm font-semibold text-forge-text-primary">Get Insight</h2>
           </div>
-          <p className="mt-2 text-sm text-white/45">
+          <p className="mt-2 text-sm text-forge-text-muted">
             Ask for a targeted client analysis using uploaded documents, journals, check-ins, and adherence signals.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-[240px_1fr_auto]">
             <select
               value={selectedClientId}
               onChange={event => setSelectedClientId(event.target.value)}
-              className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+              className="rounded-xl border border-forge-border bg-forge-surface-3/60 px-3 py-2 text-sm text-forge-text-primary outline-none"
             >
               <option value="">Select client</option>
               {clients.map(client => (
@@ -285,7 +285,7 @@ export default function AIInsightsPage() {
             <textarea
               value={insightQuery}
               onChange={event => setInsightQuery(event.target.value)}
-              className="min-h-[84px] rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
+              className="min-h-[84px] rounded-xl border border-forge-border bg-forge-surface-3/60 px-3 py-2 text-sm text-forge-text-primary outline-none"
               placeholder="Example: Review this client's food journal and check-ins. Are they meeting protein and calorie targets, what patterns are low, and what journal themes should be addressed next?"
             />
             <button
@@ -304,13 +304,13 @@ export default function AIInsightsPage() {
 
         {loading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-white/20" />
+            <Loader2 className="h-6 w-6 animate-spin text-forge-text-muted/70" />
           </div>
         ) : insights.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/8 bg-[#111111] p-12 text-center">
-            <Brain size={32} className="mx-auto mb-4 text-white/15" />
-            <p className="text-sm text-white/40">No AI insights yet</p>
-            <p className="mt-1 text-xs text-white/25">
+          <div className="rounded-2xl border border-dashed border-forge-border/70 bg-forge-surface-2 p-12 text-center">
+            <Brain size={32} className="mx-auto mb-4 text-forge-text-muted/60" />
+            <p className="text-sm text-forge-text-muted">No AI insights yet</p>
+            <p className="mt-1 text-xs text-forge-text-muted/80">
               Generate the latest weekly summaries to populate this module.
             </p>
           </div>
@@ -319,22 +319,22 @@ export default function AIInsightsPage() {
             {insights.map(insight => {
               const isExpanded = Boolean(expandedInsightIds[insight.id])
               return (
-                <div key={insight.id} className="rounded-2xl border border-white/8 bg-[#111111] p-5">
+                <div key={insight.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-sm font-semibold text-white">{insight.title}</h2>
-                        <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-2 py-0.5 font-mono text-[10px] uppercase text-[#D4AF37]">
+                        <h2 className="text-sm font-semibold text-forge-text-primary">{insight.title}</h2>
+                        <span className="rounded-full border border-forge-gold/20 bg-forge-gold/10 px-2 py-0.5 font-mono text-[10px] uppercase text-forge-gold">
                           {insight.insight_type.replace(/_/g, ' ')}
                         </span>
                         {insight.tags.map(tag => (
-                          <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[10px] uppercase text-white/45">
+                          <span key={tag} className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-0.5 font-mono text-[10px] uppercase text-forge-text-muted">
                             {tag}
                           </span>
                         ))}
                       </div>
-                      <p className="mt-1 text-xs text-white/35">
-                        <Link href={`/clients/${insight.client_id}`} className="transition-colors hover:text-white">
+                      <p className="mt-1 text-xs text-forge-text-muted">
+                        <Link href={`/clients/${insight.client_id}`} className="transition-colors hover:text-forge-text-primary">
                           {insight.client_name}
                         </Link>
                         {' · '}
@@ -343,20 +343,20 @@ export default function AIInsightsPage() {
                     </div>
 
                     <div className="text-right">
-                      <div className="text-xs text-white/30">Confidence</div>
-                      <div className="text-sm font-bold text-white">
+                      <div className="text-xs text-forge-text-muted">Confidence</div>
+                      <div className="text-sm font-bold text-forge-text-primary">
                         {formatConfidence(insight.confidence_score)}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-4">
-                    <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-white/30">
+                  <div className="mt-4 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+                    <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-forge-text-muted">
                       Metrics
                     </p>
                     <div className="space-y-1">
                       {metricLines(insight.metrics).map((line, index) => (
-                        <p key={`${insight.id}-metric-${index}`} className="text-sm text-white/60">
+                        <p key={`${insight.id}-metric-${index}`} className="text-sm text-forge-text-secondary">
                           {line}
                         </p>
                       ))}
@@ -364,33 +364,33 @@ export default function AIInsightsPage() {
                   </div>
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                    <div className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/8 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-widest text-[#D4AF37]/70">
+                    <div className="rounded-xl border border-forge-gold/20 bg-forge-gold/10 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-forge-gold/70">
                         Decision
                       </p>
-                      <p className="mt-2 text-lg font-semibold text-white">
+                      <p className="mt-2 text-lg font-semibold text-forge-text-primary">
                         {insight.decision}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-white/8 bg-white/3 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-widest text-white/30">
+                    <div className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-forge-text-muted">
                         Constraint
                       </p>
-                      <p className="mt-2 text-sm text-white/65">
+                      <p className="mt-2 text-sm text-forge-text-secondary">
                         {insight.constraint}
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-white/30">
+                    <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-forge-text-muted">
                       Actions
                     </p>
                     <div className="space-y-2">
                       {insight.actions.slice(0, 3).map((action, index) => (
-                        <div key={`${insight.id}-action-${index}`} className="flex gap-2 text-sm text-white/65">
-                          <span className="flex-shrink-0 text-[#D4AF37]">•</span>
+                        <div key={`${insight.id}-action-${index}`} className="flex gap-2 text-sm text-forge-text-secondary">
+                          <span className="flex-shrink-0 text-forge-gold">•</span>
                           <span>{action}</span>
                         </div>
                       ))}
@@ -398,21 +398,21 @@ export default function AIInsightsPage() {
                   </div>
 
                   {insight.context && (
-                    <div className="mt-4 border-t border-white/8 pt-4">
+                    <div className="mt-4 border-t border-forge-border/70 pt-4">
                       <button
                         onClick={() => toggleInsightContext(insight.id)}
-                        className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white"
+                        className="flex items-center gap-2 text-sm text-forge-text-secondary transition-colors hover:text-forge-text-primary"
                       >
                         {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                         {isExpanded ? 'Hide Context' : 'Show Context'}
                       </button>
 
                       {isExpanded && (
-                        <div className="mt-3 rounded-xl bg-white/3 p-4">
-                          <p className="font-mono text-[11px] uppercase tracking-widest text-white/30">
+                        <div className="mt-3 rounded-xl bg-forge-surface-3/60 p-4">
+                          <p className="font-mono text-[11px] uppercase tracking-widest text-forge-text-muted">
                             Context
                           </p>
-                          <p className="mt-2 text-sm leading-relaxed text-white/60">
+                          <p className="mt-2 text-sm leading-relaxed text-forge-text-secondary">
                             {insight.context}
                           </p>
                         </div>
