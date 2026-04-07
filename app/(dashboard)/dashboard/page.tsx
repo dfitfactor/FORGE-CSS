@@ -93,6 +93,17 @@ async function getProtocolTimestampExpression() {
   return protocolColumns.has('updated_at') ? 'COALESCE(p.updated_at, p.created_at)' : 'p.created_at'
 }
 
+async function getBehavioralSnapshotConfig() {
+  const snapshotColumns = await getTableColumnSet('behavioral_snapshots')
+  const barColumn = snapshotColumns.has('bar_score') ? 'bar_score' : 'bar'
+  const dbiColumn = snapshotColumns.has('dbi_score') ? 'dbi_score' : 'dbi'
+  const bliColumn = snapshotColumns.has('bli_score') ? 'bli_score' : 'bli'
+  const gpsColumn = snapshotColumns.has('gps') ? 'gps' : null
+  const timestampColumn = snapshotColumns.has('updated_at') ? 'updated_at' : 'created_at'
+
+  return { barColumn, dbiColumn, bliColumn, gpsColumn, timestampColumn }
+}
+
 function getClientInfoScore(client: DashboardClientRow) {
   let score = 0
   if (client.email?.trim()) score += 1
@@ -159,6 +170,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
     const accessFilter = role === 'admin' ? '' : 'AND (c.coach_id = $1 OR c.coach_id IS NULL)'
     const params = role === 'admin' ? [] : [userId]
     const protocolTimestampExpression = await getProtocolTimestampExpression()
+    const snapshotConfig = await getBehavioralSnapshotConfig()
 
     const [clientRows, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue] = await Promise.all([
       db.query<DashboardClientRow>(`
@@ -171,25 +183,25 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           COALESCE(c.status, 'active') as status,
           c.primary_goal,
           c.current_stage,
-          CAST(bs.bar AS FLOAT) AS bar_score,
-          CAST(bs.dbi AS FLOAT) AS dbi_score,
-          CAST(bs.bli AS FLOAT) AS bli_score,
+          CAST(bs.bar_score AS FLOAT) AS bar_score,
+          CAST(bs.dbi_score AS FLOAT) AS dbi_score,
+          CAST(bs.bli_score AS FLOAT) AS bli_score,
           bs.snapshot_updated_at,
           COALESCE(bs.needs_attention, false) AS needs_attention
         FROM clients c
         LEFT JOIN LATERAL (
           SELECT
-            created_at::text AS snapshot_updated_at,
-            bar,
-            dbi,
-            bli,
+            ${snapshotConfig.timestampColumn}::text AS snapshot_updated_at,
+            ${snapshotConfig.barColumn} AS bar_score,
+            ${snapshotConfig.dbiColumn} AS dbi_score,
+            ${snapshotConfig.bliColumn} AS bli_score,
             (
               snapshot_date >= CURRENT_DATE - INTERVAL '7 days'
-              AND (dbi > 50 OR bar < 50)
+              AND (${snapshotConfig.dbiColumn} > 50 OR ${snapshotConfig.barColumn} < 50)
             ) AS needs_attention
           FROM behavioral_snapshots
           WHERE client_id = c.id
-          ORDER BY snapshot_date DESC, created_at DESC
+          ORDER BY snapshot_date DESC, ${snapshotConfig.timestampColumn} DESC
           LIMIT 1
         ) bs ON true
         WHERE COALESCE(c.status, 'active') != 'churned'
@@ -202,29 +214,29 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           c.id as client_id,
           c.full_name as client_name,
           CASE
-            WHEN bs.dbi >= 70 THEN 'Critical DBI'
-            WHEN bs.bar < 35 THEN 'Low BAR'
-            WHEN bs.dbi >= 50 THEN 'Elevated DBI'
+            WHEN bs.${snapshotConfig.dbiColumn} >= 70 THEN 'Critical DBI'
+            WHEN bs.${snapshotConfig.barColumn} < 35 THEN 'Low BAR'
+            WHEN bs.${snapshotConfig.dbiColumn} >= 50 THEN 'Elevated DBI'
             ELSE 'Declining BAR'
           END as alert_type,
           CASE
-            WHEN bs.dbi >= 70 OR bs.bar < 35 THEN 'critical'
+            WHEN bs.${snapshotConfig.dbiColumn} >= 70 OR bs.${snapshotConfig.barColumn} < 35 THEN 'critical'
             ELSE 'warning'
           END as severity,
-          CAST(bs.bar AS FLOAT) AS bar,
-          CAST(bs.dbi AS FLOAT) AS dbi,
+          CAST(bs.${snapshotConfig.barColumn} AS FLOAT) AS bar,
+          CAST(bs.${snapshotConfig.dbiColumn} AS FLOAT) AS dbi,
           bs.snapshot_date::text AS snapshot_date
         FROM clients c
         JOIN behavioral_snapshots bs ON bs.client_id = c.id
         WHERE bs.snapshot_date = (
             SELECT MAX(snapshot_date) FROM behavioral_snapshots WHERE client_id = c.id
           )
-          AND (bs.dbi >= 50 OR bs.bar < 50)
+          AND (bs.${snapshotConfig.dbiColumn} >= 50 OR bs.${snapshotConfig.barColumn} < 50)
           AND COALESCE(c.status, 'active') = 'active'
           ${accessFilter}
-        ORDER BY bs.dbi DESC, bs.bar ASC
+        ORDER BY bs.${snapshotConfig.dbiColumn} DESC, bs.${snapshotConfig.barColumn} ASC
         LIMIT 5
-      `, params),
+      `, params).catch(() => []),
 
       (async () => {
         try {
@@ -247,9 +259,9 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
         SELECT c.id AS client_id,
                c.full_name,
                bs.snapshot_date::text AS snapshot_date,
-               bs.bar_score,
-               bs.dbi_score,
-               bs.bli_score,
+               CAST(bs.${snapshotConfig.barColumn} AS FLOAT) AS bar_score,
+               CAST(bs.${snapshotConfig.dbiColumn} AS FLOAT) AS dbi_score,
+               CAST(bs.${snapshotConfig.bliColumn} AS FLOAT) AS bli_score,
                bs.generation_state
         FROM behavioral_snapshots bs
         JOIN clients c ON c.id = bs.client_id
@@ -299,7 +311,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           ORDER BY event_at DESC
           LIMIT 1
         ) activity ON true
-        WHERE c.status = 'active'
+        WHERE COALESCE(c.status, 'active') = 'active'
           ${accessFilter}
           AND (activity.last_activity_at IS NULL OR activity.last_activity_at < NOW() - INTERVAL '7 days')
         ORDER BY activity.last_activity_at ASC NULLS FIRST, c.full_name ASC
@@ -333,7 +345,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           ORDER BY ${protocolTimestampExpression} DESC
           LIMIT 1
         ) latest_protocol ON true
-        WHERE c.status = 'active'
+        WHERE COALESCE(c.status, 'active') = 'active'
           ${accessFilter}
           AND (
             latest_protocol.protocol_id IS NULL
