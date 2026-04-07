@@ -1,13 +1,39 @@
-﻿import { db } from '@/lib/db'
+import { db } from '@/lib/db'
+
+export type CoachSettingsColumnSupport = {
+  timezone: boolean
+  notificationEmail: boolean
+}
 
 export async function ensureCoachSettingsColumns() {
-  await db.query(`ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/New_York',
-    ADD COLUMN IF NOT EXISTS notification_email TEXT`)
+  try {
+    await db.query(`ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/New_York',
+      ADD COLUMN IF NOT EXISTS notification_email TEXT`)
 
-  await db.query(`UPDATE users
-    SET notification_email = email
-    WHERE notification_email IS NULL`)
+    await db.query(`UPDATE users
+      SET notification_email = email
+      WHERE notification_email IS NULL`)
+  } catch (err) {
+    console.warn('[coach-settings] ensureCoachSettingsColumns skipped:', err)
+  }
+}
+
+export async function getCoachSettingsColumnSupport(): Promise<CoachSettingsColumnSupport> {
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'users'
+       AND column_name IN ('timezone', 'notification_email')`
+  )
+
+  const columns = new Set(rows.map((row) => row.column_name))
+
+  return {
+    timezone: columns.has('timezone'),
+    notificationEmail: columns.has('notification_email'),
+  }
 }
 
 export async function ensureCoachTemplatesTable() {
@@ -25,6 +51,7 @@ export async function ensureCoachTemplatesTable() {
 
 export async function getCoachSettings() {
   await ensureCoachSettingsColumns()
+  const columns = await getCoachSettingsColumnSupport()
 
   const coach = await db.queryOne<{
     id: string
@@ -34,8 +61,8 @@ export async function getCoachSettings() {
   }>(
     `SELECT id,
             email,
-            notification_email,
-            timezone
+            ${columns.notificationEmail ? 'notification_email' : 'NULL::text AS notification_email'},
+            ${columns.timezone ? 'timezone' : "NULL::text AS timezone"}
      FROM users
      WHERE role IN ('coach', 'admin')
        AND is_active = true

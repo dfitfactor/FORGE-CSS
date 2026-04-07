@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSession, getSession, setSessionCookie } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { ensureCoachSettingsColumns } from '@/lib/coach-settings'
+import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib/coach-settings'
 
 const ProfileSchema = z.object({
   full_name: z.string().trim().min(2).max(255),
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
 
   try {
     await ensureCoachSettingsColumns()
+    const columns = await getCoachSettingsColumnSupport()
 
     const user = await db.queryOne<{
       id: string
@@ -35,8 +36,8 @@ export async function GET(request: NextRequest) {
               email,
               role,
               avatar_url,
-              timezone,
-              notification_email
+              ${columns.timezone ? 'timezone' : "NULL::text AS timezone"},
+              ${columns.notificationEmail ? 'notification_email' : "NULL::text AS notification_email"}
        FROM users
        WHERE id = $1
          AND is_active = true`,
@@ -72,6 +73,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await ensureCoachSettingsColumns()
+    const columns = await getCoachSettingsColumnSupport()
 
     const body = await request.json().catch(() => null)
     const parsed = ProfileSchema.safeParse(body)
@@ -107,23 +109,36 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Another account already uses this email' }, { status: 409 })
     }
 
+    const values: Array<string | null> = [
+      data.full_name.trim(),
+      normalizedEmail,
+      nextAvatarUrl,
+    ]
+
+    const updates = [
+      'full_name = $1',
+      'email = $2',
+      'avatar_url = $3',
+    ]
+
+    if (columns.timezone) {
+      values.push(data.timezone)
+      updates.push(`timezone = $${values.length}`)
+    }
+
+    if (columns.notificationEmail) {
+      values.push(normalizedNotificationEmail)
+      updates.push(`notification_email = $${values.length}`)
+    }
+
+    values.push(session.id)
+
     await db.query(
       `UPDATE users
-       SET full_name = $1,
-           email = $2,
-           avatar_url = $3,
-           timezone = $4,
-           notification_email = $5,
+       SET ${updates.join(', ')},
            updated_at = NOW()
-       WHERE id = $6`,
-      [
-        data.full_name.trim(),
-        normalizedEmail,
-        nextAvatarUrl,
-        data.timezone,
-        normalizedNotificationEmail,
-        session.id,
-      ]
+       WHERE id = $${values.length}`,
+      values
     )
 
     const refreshedToken = await createSession(session.id)
@@ -136,8 +151,8 @@ export async function PATCH(request: NextRequest) {
         full_name: data.full_name.trim(),
         email: normalizedEmail,
         avatar_url: nextAvatarUrl,
-        timezone: data.timezone,
-        notification_email: normalizedNotificationEmail,
+        timezone: columns.timezone ? data.timezone : 'America/New_York',
+        notification_email: columns.notificationEmail ? normalizedNotificationEmail : normalizedEmail,
       },
     })
   } catch (err) {
