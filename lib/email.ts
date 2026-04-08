@@ -362,3 +362,214 @@ export async function sendCoachPausedAccountEmail({
     }),
   })
 }
+
+export async function sendPaymentActionRequiredEmail({
+  clientEmail,
+  invoiceUrl,
+}: {
+  clientEmail: string
+  invoiceUrl?: string | null
+}) {
+  await sendEmail({
+    to: clientEmail,
+    subject: 'Action Required - Complete Your Payment',
+    html: baseTemplate({
+      heading: 'Payment Authentication Required',
+      intro: 'Your payment requires additional authentication before it can be completed.',
+      details: [
+        invoiceUrl
+          ? `<strong>Complete payment:</strong> <a href="${invoiceUrl}">${invoiceUrl}</a>`
+          : '<strong>Next step:</strong> Open your Stripe invoice to complete authentication.',
+      ],
+      footer: 'Your access continues while the authentication step is completed.',
+    }),
+  })
+}
+
+export async function sendCoachPaymentActionRequiredEmail({
+  coachEmail,
+  clientName,
+  invoiceUrl,
+}: {
+  coachEmail: string
+  clientName: string
+  invoiceUrl?: string | null
+}) {
+  await sendEmail({
+    to: coachEmail,
+    subject: `Client Payment Needs Authentication - ${clientName}`,
+    html: baseTemplate({
+      heading: 'Client Payment Needs Authentication',
+      intro: `${clientName}'s payment needs additional authentication.`,
+      details: [
+        invoiceUrl
+          ? `<strong>Invoice:</strong> <a href="${invoiceUrl}">${invoiceUrl}</a>`
+          : '<strong>Invoice:</strong> Hosted invoice link unavailable from Stripe.',
+      ],
+      footer: 'No action is needed from you right now.',
+    }),
+  })
+}
+
+export async function sendSubscriptionPausedByStripeEmail({
+  clientEmail,
+  billingPortalUrl,
+}: {
+  clientEmail: string
+  billingPortalUrl?: string | null
+}) {
+  await sendEmail({
+    to: clientEmail,
+    subject: 'Your FORGE Subscription Has Been Paused',
+    html: baseTemplate({
+      heading: 'Subscription Paused',
+      intro: 'Your subscription has been paused because Stripe could not complete payment retries.',
+      details: [
+        billingPortalUrl
+          ? `<strong>Update payment method:</strong> <a href="${billingPortalUrl}">${billingPortalUrl}</a>`
+          : '<strong>Next step:</strong> Contact your coach to update your payment method.',
+      ],
+      footer: 'Contact your coach if you need help reactivating your access.',
+    }),
+  })
+}
+
+export async function sendCoachSubscriptionPausedByStripeEmail({
+  coachEmail,
+  clientName,
+  packageName,
+}: {
+  coachEmail: string
+  clientName: string
+  packageName: string
+}) {
+  await sendEmail({
+    to: coachEmail,
+    subject: `Client Subscription Paused by Stripe - ${clientName}`,
+    html: baseTemplate({
+      heading: 'Subscription Paused by Stripe',
+      intro: `${clientName}'s subscription was paused by Stripe after failed payment retries.`,
+      details: [
+        `<strong>Package:</strong> ${packageName}`,
+      ],
+      footer: 'Manual follow-up is recommended.',
+    }),
+  })
+}
+
+export async function sendSubscriptionReactivatedEmail({
+  clientEmail,
+  nextRenewalDate,
+  portalUrl,
+}: {
+  clientEmail: string
+  nextRenewalDate?: string | null
+  portalUrl?: string | null
+}) {
+  await sendEmail({
+    to: clientEmail,
+    subject: 'Your FORGE Subscription Has Been Reactivated',
+    html: baseTemplate({
+      heading: 'Subscription Reactivated',
+      intro: 'Your subscription has been reactivated and your access is active again.',
+      details: [
+        '<strong>Sessions:</strong> Your session bank is available in the portal.',
+        ...(nextRenewalDate ? [`<strong>Next renewal:</strong> ${nextRenewalDate}`] : []),
+        ...(portalUrl ? [`<strong>Portal:</strong> <a href="${portalUrl}">${portalUrl}</a>`] : []),
+      ],
+    }),
+  })
+}
+
+export async function sendCoachSubscriptionReactivatedEmail({
+  coachEmail,
+  clientName,
+}: {
+  coachEmail: string
+  clientName: string
+}) {
+  await sendEmail({
+    to: coachEmail,
+    subject: `Client Subscription Reactivated - ${clientName}`,
+    html: baseTemplate({
+      heading: 'Subscription Reactivated',
+      intro: `${clientName}'s subscription has been reactivated.`,
+      footer: 'Their session bank is active again.',
+    }),
+  })
+}
+
+export async function sendSubscriptionWillNotRenewEmail({
+  clientEmail,
+  endDate,
+  sessionsRemaining,
+}: {
+  clientEmail: string
+  endDate?: string | null
+  sessionsRemaining: number
+}) {
+  await sendEmail({
+    to: clientEmail,
+    subject: 'Your FORGE Subscription Will Not Renew',
+    html: baseTemplate({
+      heading: 'Subscription Will Not Renew',
+      intro: 'Your subscription has been set not to renew at the end of the current billing period.',
+      details: [
+        ...(endDate ? [`<strong>Ends on:</strong> ${endDate}`] : []),
+        `<strong>Sessions remaining:</strong> ${sessionsRemaining}`,
+      ],
+      footer: 'Contact your coach if you would like to reactivate before the period ends.',
+    }),
+  })
+}
+
+export async function sendPaymentIntentFailedEmail({
+  clientEmail,
+  updatePaymentUrl,
+}: {
+  clientEmail: string
+  updatePaymentUrl?: string | null
+}) {
+  await sendEmail({
+    to: clientEmail,
+    subject: 'Payment Failed - Action Required',
+    html: baseTemplate({
+      heading: 'Payment Failed',
+      intro: 'Your payment could not be processed.',
+      details: [
+        updatePaymentUrl
+          ? `<strong>Update payment method:</strong> <a href="${updatePaymentUrl}">${updatePaymentUrl}</a>`
+          : '<strong>Next step:</strong> Contact your coach for help updating your payment method.',
+      ],
+      footer: 'Reach out if you need help completing payment.',
+    }),
+  })
+}
+
+export async function sendCoachPaymentIntentFailedEmail({
+  coachEmail,
+  clientLabel,
+  paymentIntentId,
+  amount,
+  failureReason,
+}: {
+  coachEmail: string
+  clientLabel: string
+  paymentIntentId: string
+  amount: string
+  failureReason?: string | null
+}) {
+  await sendEmail({
+    to: coachEmail,
+    subject: `Payment Failed - ${clientLabel}`,
+    html: baseTemplate({
+      heading: 'Payment Intent Failed',
+      intro: `A payment failed for ${clientLabel}.`,
+      details: [
+        `<strong>Payment intent:</strong> ${paymentIntentId}`,
+        `<strong>Amount:</strong> ${amount}`,
+        ...(failureReason ? [`<strong>Failure reason:</strong> ${failureReason}`] : []),
+      ],
+    }),
+  })
+}

@@ -3,16 +3,26 @@ import Stripe from 'stripe'
 import { db } from '@/lib/db'
 import {
   sendBookingConfirmation,
+  sendCoachPaymentActionRequiredEmail,
   sendCoachPaymentFailedEmail,
+  sendCoachPaymentIntentFailedEmail,
+  sendCoachSubscriptionPausedByStripeEmail,
+  sendCoachSubscriptionReactivatedEmail,
+  sendPaymentActionRequiredEmail,
   sendPaymentFailedEmail,
+  sendPaymentIntentFailedEmail,
+  sendSubscriptionPausedByStripeEmail,
   sendSubscriptionEndedEmail,
+  sendSubscriptionReactivatedEmail,
   sendSubscriptionRenewedEmail,
+  sendSubscriptionWillNotRenewEmail,
 } from '@/lib/email'
 import { getCoachSettings } from '@/lib/coach-settings'
 import { getStripe } from '@/lib/stripe'
 import {
   buildCycleDates,
   createBillingPortalUrl,
+  getAppBaseUrl,
   getEnrollmentSubscriptionContextByEnrollmentId,
   getEnrollmentSubscriptionContextByStripeSubscriptionId,
   insertReminderLog,
@@ -64,6 +74,39 @@ async function hasPaymentFailedReminder(invoiceId: string) {
   return Boolean(row?.exists)
 }
 
+function formatDateLabel(value?: string | number | Date | null) {
+  if (!value) return null
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+type SubscriptionContextResult = {
+  subscription: Stripe.Subscription
+  enrollmentId: string | null
+  enrollment: Awaited<ReturnType<typeof getEnrollmentSubscriptionContextByEnrollmentId>> | null
+}
+
+async function getSubscriptionContext(subscriptionId: string): Promise<SubscriptionContextResult | null> {
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const enrollmentId = subscription.metadata?.packageEnrollmentId ?? null
+  const enrollment = enrollmentId
+    ? await getEnrollmentSubscriptionContextByEnrollmentId(enrollmentId)
+    : await getEnrollmentSubscriptionContextByStripeSubscriptionId(subscriptionId)
+
+  return {
+    subscription,
+    enrollmentId,
+    enrollment,
+  }
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const meta = session.metadata ?? {}
   const columns = await getBookingColumns()
@@ -84,7 +127,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   if (meta.packageId) {
-    const pkg = await db.queryOne<{ name: string; duration_minutes: number }>(
+    const pkg = await db.queryOne<{
+      name: string
+      duration_minutes: number
+    }>(
       `SELECT name, duration_minutes FROM packages WHERE id = $1`,
       [meta.packageId]
     )
@@ -354,6 +400,251 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   })
 }
 
+async function handleInvoicePaid(invoice: Stripe.Invoice) {
+  try {
+    const invoiceRecord = invoice as Stripe.Invoice & { subscription?: string | { id?: string } }
+    const subscriptionId = typeof invoiceRecord.subscription === 'string' ? invoiceRecord.subscription : invoiceRecord.subscription?.id
+    if (!subscriptionId) return
+
+    const context = await getSubscriptionContext(subscriptionId)
+    if (!context?.enrollmentId) return
+
+    await db.query(
+      `UPDATE package_enrollments
+       SET subscription_status = 'active',
+           grace_period_ends_at = NULL,
+           updated_at = NOW()
+       WHERE stripe_subscription_id = $1
+         AND subscription_status != 'active'`,
+      [subscriptionId]
+    )
+  } catch (error) {
+    console.error('[webhook] invoice.paid handler failed:', error)
+  }
+}
+
+async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice) {
+  try {
+    const invoiceRecord = invoice as Stripe.Invoice & { subscription?: string | { id?: string } }
+    const subscriptionId = typeof invoiceRecord.subscription === 'string' ? invoiceRecord.subscription : invoiceRecord.subscription?.id
+    if (!subscriptionId) return
+
+    const context = await getSubscriptionContext(subscriptionId)
+    const enrollment = context?.enrollment
+    if (!context?.enrollmentId || !enrollment) return
+
+    const coachSettings = await getCoachSettings()
+    await Promise.all([
+      sendPaymentActionRequiredEmail({
+        clientEmail: enrollment.client_email,
+        invoiceUrl: invoice.hosted_invoice_url,
+      }),
+      sendCoachPaymentActionRequiredEmail({
+        coachEmail: coachSettings.coachEmail,
+        clientName: enrollment.client_name,
+        invoiceUrl: invoice.hosted_invoice_url,
+      }),
+    ])
+  } catch (error) {
+    console.error('[webhook] invoice.payment_action_required handler failed:', error)
+  }
+}
+
+async function handleSubscriptionPaused(subscription: Stripe.Subscription) {
+  try {
+    const context = await getSubscriptionContext(subscription.id)
+    const enrollment = context?.enrollment
+    if (!context?.enrollmentId || !enrollment) return
+
+    await db.query(
+      `UPDATE package_enrollments
+       SET subscription_status = 'paused',
+           updated_at = NOW()
+       WHERE stripe_subscription_id = $1`,
+      [subscription.id]
+    )
+
+    const coachSettings = await getCoachSettings()
+    const billingPortalUrl = enrollment.stripe_customer_id
+      ? await createBillingPortalUrl(enrollment.stripe_customer_id)
+      : null
+
+    await Promise.all([
+      sendCoachSubscriptionPausedByStripeEmail({
+        coachEmail: coachSettings.coachEmail,
+        clientName: enrollment.client_name,
+        packageName: enrollment.package_name,
+      }),
+      sendSubscriptionPausedByStripeEmail({
+        clientEmail: enrollment.client_email,
+        billingPortalUrl,
+      }),
+    ])
+  } catch (error) {
+    console.error('[webhook] customer.subscription.paused handler failed:', error)
+  }
+}
+
+async function handleSubscriptionResumed(subscription: Stripe.Subscription) {
+  try {
+    const context = await getSubscriptionContext(subscription.id)
+    const enrollment = context?.enrollment
+    if (!context?.enrollmentId || !enrollment) return
+
+    await db.query(
+      `UPDATE package_enrollments
+       SET subscription_status = 'active',
+           grace_period_ends_at = NULL,
+           updated_at = NOW()
+       WHERE stripe_subscription_id = $1`,
+      [subscription.id]
+    )
+
+    const coachSettings = await getCoachSettings()
+    const nextRenewalDate = formatDateLabel(enrollment.next_renewal_at)
+    const portalUrl = `${getAppBaseUrl()}/portal/dashboard`
+
+    await Promise.all([
+      sendSubscriptionReactivatedEmail({
+        clientEmail: enrollment.client_email,
+        nextRenewalDate,
+        portalUrl,
+      }),
+      sendCoachSubscriptionReactivatedEmail({
+        coachEmail: coachSettings.coachEmail,
+        clientName: enrollment.client_name,
+      }),
+    ])
+  } catch (error) {
+    console.error('[webhook] customer.subscription.resumed handler failed:', error)
+  }
+}
+
+async function handleSubscriptionUpdated(
+  subscription: Stripe.Subscription,
+  previousAttributes?: Partial<Stripe.Subscription>
+) {
+  try {
+    const context = await getSubscriptionContext(subscription.id)
+    const enrollment = context?.enrollment
+    if (!context?.enrollmentId || !enrollment) return
+
+    console.log('[webhook] customer.subscription.updated:', {
+      subscriptionId: subscription.id,
+      status: subscription.status,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    })
+
+    if (subscription.status === 'active') {
+      await db.query(
+        `UPDATE package_enrollments
+         SET subscription_status = 'active',
+             grace_period_ends_at = NULL,
+             updated_at = NOW()
+         WHERE stripe_subscription_id = $1`,
+        [subscription.id]
+      )
+    }
+
+    const cancelAtPeriodEndChanged =
+      Boolean(previousAttributes && 'cancel_at_period_end' in previousAttributes) &&
+      subscription.cancel_at_period_end === true
+
+    if (cancelAtPeriodEndChanged) {
+      await sendSubscriptionWillNotRenewEmail({
+        clientEmail: enrollment.client_email,
+        endDate: formatDateLabel(
+          subscription.cancel_at
+            ? new Date(subscription.cancel_at * 1000)
+            : null
+        ),
+        sessionsRemaining: enrollment.sessions_remaining,
+      })
+    }
+  } catch (error) {
+    console.error('[webhook] customer.subscription.updated handler failed:', error)
+  }
+}
+
+async function handleCustomerUpdated(customer: Stripe.Customer) {
+  try {
+    const enrollment = await db.queryOne<{ client_id: string; client_email: string }>(
+      `SELECT pe.client_id, c.email AS client_email
+       FROM package_enrollments pe
+       JOIN clients c ON c.id = pe.client_id
+       WHERE pe.stripe_customer_id = $1
+       ORDER BY pe.created_at DESC
+       LIMIT 1`,
+      [customer.id]
+    )
+
+    if (!enrollment) return
+
+    if (customer.email && customer.email !== enrollment.client_email) {
+      await db.query(
+        `UPDATE clients
+         SET email = $2
+         WHERE id = $1`,
+        [enrollment.client_id, customer.email]
+      )
+    }
+
+    console.log('[webhook] customer.updated:', {
+      customerId: customer.id,
+      email: customer.email,
+    })
+  } catch (error) {
+    console.error('[webhook] customer.updated handler failed:', error)
+  }
+}
+
+async function handlePaymentIntentPaymentFailed(paymentIntent: Stripe.PaymentIntent) {
+  try {
+    const clientId = paymentIntent.metadata?.clientId
+    const coachSettings = await getCoachSettings()
+
+    let clientInfo: { email: string; full_name: string; stripe_customer_id: string | null } | null = null
+
+    if (clientId) {
+      clientInfo = await db.queryOne<{ email: string; full_name: string; stripe_customer_id: string | null }>(
+        `SELECT c.email, c.full_name, pe.stripe_customer_id
+         FROM clients c
+         LEFT JOIN package_enrollments pe ON pe.client_id = c.id AND pe.status = 'active'
+         WHERE c.id = $1
+         ORDER BY pe.created_at DESC NULLS LAST
+         LIMIT 1`,
+        [clientId]
+      )
+    }
+
+    const updatePaymentUrl = clientInfo?.stripe_customer_id
+      ? await createBillingPortalUrl(clientInfo.stripe_customer_id)
+      : null
+
+    const amount = `$${((paymentIntent.amount ?? 0) / 100).toFixed(2)}`
+    const failureReason = paymentIntent.last_payment_error?.message ?? null
+    const clientLabel = clientInfo?.full_name || paymentIntent.id
+
+    await Promise.all([
+      clientInfo
+        ? sendPaymentIntentFailedEmail({
+            clientEmail: clientInfo.email,
+            updatePaymentUrl,
+          })
+        : Promise.resolve(),
+      sendCoachPaymentIntentFailedEmail({
+        coachEmail: coachSettings.coachEmail,
+        clientLabel,
+        paymentIntentId: paymentIntent.id,
+        amount,
+        failureReason,
+      }),
+    ])
+  } catch (error) {
+    console.error('[webhook] payment_intent.payment_failed handler failed:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text()
   const sig = request.headers.get('stripe-signature')
@@ -376,21 +667,45 @@ export async function POST(request: NextRequest) {
       case 'checkout.session.completed':
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session)
         break
+      case 'invoice.paid':
+        await handleInvoicePaid(event.data.object as Stripe.Invoice)
+        break
+      case 'invoice.payment_action_required':
+        await handleInvoicePaymentActionRequired(event.data.object as Stripe.Invoice)
+        break
       case 'invoice.payment_succeeded':
         await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice)
         break
       case 'invoice.payment_failed':
         await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice)
         break
+      case 'customer.subscription.paused':
+        await handleSubscriptionPaused(event.data.object as Stripe.Subscription)
+        break
+      case 'customer.subscription.resumed':
+        await handleSubscriptionResumed(event.data.object as Stripe.Subscription)
+        break
+      case 'customer.subscription.updated': {
+        const previousAttributes = (event.data as Stripe.Event.Data & {
+          previous_attributes?: Partial<Stripe.Subscription>
+        }).previous_attributes
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, previousAttributes)
+        break
+      }
       case 'customer.subscription.deleted':
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
+        break
+      case 'customer.updated':
+        await handleCustomerUpdated(event.data.object as Stripe.Customer)
+        break
+      case 'payment_intent.payment_failed':
+        await handlePaymentIntentPaymentFailed(event.data.object as Stripe.PaymentIntent)
         break
       default:
         break
     }
   } catch (err) {
     console.error('[webhook] processing failed:', err)
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
   }
 
   return NextResponse.json({ received: true })
