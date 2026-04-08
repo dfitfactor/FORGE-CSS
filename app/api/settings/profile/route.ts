@@ -134,12 +134,15 @@ export async function PATCH(request: NextRequest) {
       updates.push(`notification_email = $${values.length}`)
     }
 
+    if (columns.updatedAt) {
+      updates.push('updated_at = NOW()')
+    }
+
     values.push(session.id)
 
     await db.query(
       `UPDATE users
-       SET ${updates.join(', ')},
-           updated_at = NOW()
+       SET ${updates.join(', ')}
        WHERE id = $${values.length}`,
       values
     )
