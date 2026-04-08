@@ -3,10 +3,17 @@
 import { useEffect, useState } from 'react'
 
 type SessionBank = {
+  enrollmentId: string
   remaining: number
   allotted: number
   used: number
   graceExpires: string | null
+  subscriptionStatus: string | null
+  gracePeriodEndsAt: string | null
+  lastRenewedAt: string | null
+  nextRenewalAt: string | null
+  stripeCustomerId: string | null
+  stripeSubscriptionId: string | null
   weeklyUsed: number
   weeklyLimit: number
   monthlyUsed: number
@@ -70,6 +77,30 @@ export function SessionBankCard({ clientId }: { clientId: string }) {
     }
   }
 
+  async function updateSubscription(action: 'cancel' | 'reactivate') {
+    if (!bank?.enrollmentId) return
+
+    setSaving(true)
+    setError('')
+    setMessage('')
+
+    try {
+      const res = await fetch(`/api/stripe/subscription/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollmentId: bank.enrollmentId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? `Failed to ${action} subscription`)
+      setMessage(action === 'cancel' ? 'Subscription set to cancel at period end.' : 'Subscription reactivated.')
+      await loadData()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} subscription`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return <div className="forge-card">Loading session bank...</div>
   }
@@ -110,8 +141,35 @@ export function SessionBankCard({ clientId }: { clientId: string }) {
       <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-forge-text-secondary">
         <div>Allotted this cycle: {bank.allotted}</div>
         <div className="mt-2">Sessions expire: {bank.graceExpires ? new Date(bank.graceExpires).toLocaleDateString('en-US') : 'Not set'}</div>
+        <div className="mt-2">Subscription status: <span className="capitalize">{(bank.subscriptionStatus ?? 'active').replace(/_/g, ' ')}</span></div>
+        <div className="mt-2">Next renewal: {bank.nextRenewalAt ? new Date(bank.nextRenewalAt).toLocaleDateString('en-US') : 'Not set'}</div>
+        <div className="mt-2">Last renewed: {bank.lastRenewedAt ? new Date(bank.lastRenewedAt).toLocaleDateString('en-US') : 'Not set'}</div>
+        {bank.gracePeriodEndsAt ? <div className="mt-2 text-amber-300">Grace period ends: {new Date(bank.gracePeriodEndsAt).toLocaleString('en-US')}</div> : null}
         {bank.expired ? <div className="mt-2 text-red-300">Current session bank is expired.</div> : null}
         {bank.overrideSetAt ? <div className="mt-2 text-forge-text-muted">Override last updated {new Date(bank.overrideSetAt).toLocaleString('en-US')}</div> : null}
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {bank.stripeSubscriptionId ? (
+          <button
+            type="button"
+            disabled={saving || bank.subscriptionStatus === 'cancelled'}
+            onClick={() => void updateSubscription('cancel')}
+            className="rounded-xl border border-red-500/20 px-4 py-2 text-sm text-red-300 disabled:opacity-50"
+          >
+            Cancel Subscription
+          </button>
+        ) : null}
+        {bank.subscriptionStatus === 'paused' ? (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void updateSubscription('reactivate')}
+            className="rounded-xl border border-emerald-500/20 px-4 py-2 text-sm text-emerald-300 disabled:opacity-50"
+          >
+            Reactivate Subscription
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 px-4 py-4">

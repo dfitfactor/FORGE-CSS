@@ -8,7 +8,9 @@ export function getStripe() {
   }
 
   if (!stripeClient) {
-    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY)
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-06-20' as Stripe.LatestApiVersion,
+    })
   }
 
   return stripeClient

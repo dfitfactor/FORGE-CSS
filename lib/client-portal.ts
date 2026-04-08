@@ -56,6 +56,16 @@ export type PortalEnrollment = {
   is_on_hold: boolean | null
   hold_start: string | null
   hold_end: string | null
+  stripe_subscription_id: string | null
+  stripe_customer_id: string | null
+  subscription_status: string | null
+  grace_period_ends_at: string | null
+  last_renewed_at: string | null
+  next_renewal_at: string | null
+  billing_cycle_start: string | null
+  billing_cycle_end: string | null
+  sessions_expire_at: string | null
+  override_expiration: boolean | null
   package_name: string | null
   package_description: string | null
   billing_type: string | null
@@ -141,6 +151,16 @@ export async function getPortalEnrollment(clientId: string) {
             pe.is_on_hold,
             pe.hold_start::text AS hold_start,
             pe.hold_end::text AS hold_end,
+            pe.stripe_subscription_id,
+            pe.stripe_customer_id,
+            pe.subscription_status,
+            pe.grace_period_ends_at::text AS grace_period_ends_at,
+            pe.last_renewed_at::text AS last_renewed_at,
+            pe.next_renewal_at::text AS next_renewal_at,
+            pe.billing_cycle_start::text AS billing_cycle_start,
+            pe.billing_cycle_end::text AS billing_cycle_end,
+            pe.sessions_expire_at::text AS sessions_expire_at,
+            pe.override_expiration,
             p.name AS package_name,
             p.description AS package_description,
             p.billing_type,
@@ -229,4 +249,3 @@ export function formatMoney(amountCents: number | null | undefined) {
     maximumFractionDigits: 2,
   })}`
 }
-

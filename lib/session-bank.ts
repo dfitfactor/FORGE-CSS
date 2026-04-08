@@ -5,6 +5,12 @@ export interface SessionBankStatus {
   enrollmentId: string
   billingCycleStart: string | null
   billingCycleEnd: string | null
+  subscriptionStatus: string | null
+  gracePeriodEndsAt: string | null
+  lastRenewedAt: string | null
+  nextRenewalAt: string | null
+  stripeCustomerId: string | null
+  stripeSubscriptionId: string | null
   allotted: number
   used: number
   forfeited: number
@@ -43,6 +49,12 @@ type EnrollmentRow = {
   override_limits: boolean | null
   override_expiration: boolean | null
   override_set_at: string | null
+  subscription_status: string | null
+  grace_period_ends_at: string | null
+  last_renewed_at: string | null
+  next_renewal_at: string | null
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
   is_on_hold: boolean | null
   hold_end: string | null
   start_date: string | null
@@ -389,9 +401,12 @@ export async function getClientBankStatus(enrollmentId: string): Promise<Session
   const remaining = remainingResult.remaining
   const used = Math.max(allotted - remaining, 0)
   const expired = remainingResult.expired
-  const canBook = !expired && remaining > 0 && !enrollment.is_on_hold
+  const isPaused = enrollment.subscription_status === 'paused'
+  const canBook = !expired && remaining > 0 && !enrollment.is_on_hold && !isPaused
   const cannotBookReason = enrollment.is_on_hold
     ? 'Booking is paused while this package is on hold.'
+    : isPaused
+      ? 'Booking is unavailable while the subscription is paused.'
     : expired
       ? 'Session balance has expired for this cycle.'
       : remaining <= 0
@@ -402,6 +417,12 @@ export async function getClientBankStatus(enrollmentId: string): Promise<Session
     enrollmentId: enrollment.id,
     billingCycleStart: enrollment.billing_cycle_start,
     billingCycleEnd: enrollment.billing_cycle_end,
+    subscriptionStatus: enrollment.subscription_status,
+    gracePeriodEndsAt: enrollment.grace_period_ends_at,
+    lastRenewedAt: enrollment.last_renewed_at,
+    nextRenewalAt: enrollment.next_renewal_at,
+    stripeCustomerId: enrollment.stripe_customer_id,
+    stripeSubscriptionId: enrollment.stripe_subscription_id,
     allotted,
     used,
     forfeited: toNumber(enrollment.sessions_forfeited),
