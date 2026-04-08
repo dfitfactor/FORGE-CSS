@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { db } from '@/lib/db'
 import { z } from 'zod'
@@ -15,7 +15,7 @@ const CheckoutSchema = z.object({
   clientPhone: z.string().optional(),
   bookingDate: z.string().optional(),
   bookingTime: z.string().optional(),
-  notes: z.string().optional(),
+  notes: z.string().optional().nullable(),
 }).refine((d) => d.serviceId || d.packageId, {
   message: 'serviceId or packageId required',
 })
