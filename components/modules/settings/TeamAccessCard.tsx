@@ -128,7 +128,7 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Team Access</p>
           <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Internal Role Access</h2>
           <p className="mt-2 text-sm text-forge-text-secondary">
-            Coach Dee at coach@dfitfactor.com is the only superuser during build-out. Everyone else stays on regular internal access until subscription roles are introduced.
+            Coach Dee at coach@dfitfactor.com is the only superuser during build-out. Everyone else stays on user access until subscription roles are introduced.
           </p>
         </div>
       </div>
@@ -164,8 +164,8 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
 
           {users.map((user) => {
             const isSaving = savingUserId === user.id
-            const isSelf = user.id === currentUserId
             const isSuperuser = user.is_superuser
+            const selectedRole = isSuperuser ? 'admin' : 'regular'
 
             return (
               <div key={user.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
@@ -180,9 +180,9 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
                             : 'border-forge-border bg-forge-surface-2 text-forge-text-muted'
                         }`}
                       >
-                        {isSuperuser ? 'Superuser' : 'Regular'}
+                        {isSuperuser ? 'Admin' : 'User'}
                       </span>
-                      {isSelf ? (
+                      {user.id === currentUserId ? (
                         <span className="rounded-full border border-forge-purple/30 bg-forge-purple/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-forge-text-primary">
                           You
                         </span>
@@ -201,13 +201,13 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
                     </label>
                     <div className="flex items-center gap-2">
                       <select
-                        value={isSuperuser ? 'admin' : 'regular'}
+                        value={selectedRole}
                         onChange={(event) => void updateRole(user.id, event.target.value as AccessLevelOption)}
-                        disabled={isSaving || isSelf}
+                        disabled={isSaving}
                         className="forge-input h-11 min-w-0 flex-1 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <option value="regular">Regular</option>
-                        <option value="admin">{isSuperuser ? 'Superuser' : 'Superuser (Reserved)'}</option>
+                        <option value="admin">Admin</option>
+                        <option value="regular">User</option>
                       </select>
                       {isSaving ? <Loader2 className="h-4 w-4 animate-spin text-forge-text-muted" /> : null}
                     </div>
@@ -218,7 +218,7 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
                       </p>
                     ) : (
                       <p className="text-xs text-forge-text-muted">
-                        Only `coach@dfitfactor.com` can hold superuser access.
+                        Admin remains reserved for coach@dfitfactor.com during build-out.
                       </p>
                     )}
                   </div>

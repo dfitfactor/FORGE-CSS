@@ -1,7 +1,8 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession, requireRole } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib/coach-settings'
 
 const SUPERUSER_EMAIL = 'coach@dfitfactor.com'
 
@@ -92,6 +93,9 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    await ensureCoachSettingsColumns()
+    const columns = await getCoachSettingsColumnSupport()
+
     const body = await request.json().catch(() => null)
     const parsed = UpdateTeamMemberSchema.safeParse(body)
 
@@ -147,10 +151,14 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    const updates = ['role = $1']
+    if (columns.updatedAt) {
+      updates.push('updated_at = NOW()')
+    }
+
     const updated = await db.queryOne<TeamUserRow>(
       `UPDATE users
-       SET role = $1,
-           updated_at = NOW()
+       SET ${updates.join(', ')}
        WHERE id = $2
        RETURNING id,
                  full_name,
