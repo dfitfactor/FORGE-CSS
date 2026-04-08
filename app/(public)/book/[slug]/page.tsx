@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
@@ -42,6 +42,12 @@ type BookingFormState = {
   notes: string
 }
 
+type ClientProfile = {
+  full_name: string
+  email: string | null
+  phone: string | null
+}
+
 type AvailableSlot = {
   value: string
   label: string
@@ -61,6 +67,18 @@ const INITIAL_FORM: BookingFormState = {
   notes: '',
 }
 
+function buildPurchaserNote(notes: string, profile: ClientProfile | null, purchasingForSomeoneElse: boolean) {
+  const trimmedNotes = notes.trim()
+  if (!purchasingForSomeoneElse || !profile) {
+    return trimmedNotes || null
+  }
+
+  const purchaserBits = [profile.full_name, profile.email, profile.phone].filter(Boolean)
+  const purchaserLine = `Booked by account holder: ${purchaserBits.join(' | ')}`
+
+  return trimmedNotes ? `${purchaserLine}\n\n${trimmedNotes}` : purchaserLine
+}
+
 export default function PublicBookingDetailPage() {
   const params = useParams<{ slug: string }>()
   const router = useRouter()
@@ -68,6 +86,8 @@ export default function PublicBookingDetailPage() {
   const [services, setServices] = useState<Service[]>([])
   const [packages, setPackages] = useState<Package[]>([])
   const [form, setForm] = useState(INITIAL_FORM)
+  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null)
+  const [purchasingForSomeoneElse, setPurchasingForSomeoneElse] = useState(false)
   const [loading, setLoading] = useState(true)
   const [inquiryLoading, setInquiryLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
@@ -82,11 +102,37 @@ export default function PublicBookingDetailPage() {
       setLoading(true)
       setError('')
       try {
-        const res = await fetch('/api/public/book', { cache: 'no-store' })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error ?? 'Failed to load booking option')
-        setServices(Array.isArray(data.services) ? data.services : [])
-        setPackages(Array.isArray(data.packages) ? data.packages : [])
+        const [bookingRes, clientRes] = await Promise.all([
+          fetch('/api/public/book', { cache: 'no-store' }),
+          fetch('/api/portal/client/me', { cache: 'no-store' }),
+        ])
+
+        const bookingData = await bookingRes.json().catch(() => ({}))
+        if (!bookingRes.ok) throw new Error(bookingData.error ?? 'Failed to load booking option')
+        setServices(Array.isArray(bookingData.services) ? bookingData.services : [])
+        setPackages(Array.isArray(bookingData.packages) ? bookingData.packages : [])
+
+        if (clientRes.ok) {
+          const clientData = await clientRes.json().catch(() => ({}))
+          const client = clientData.client as Partial<ClientProfile> | undefined
+          const profile = client
+            ? {
+                full_name: String(client.full_name ?? ''),
+                email: client.email ? String(client.email) : null,
+                phone: client.phone ? String(client.phone) : null,
+              }
+            : null
+
+          if (profile?.full_name) {
+            setClientProfile(profile)
+            setForm((current) => ({
+              ...current,
+              clientName: current.clientName || profile.full_name,
+              clientEmail: current.clientEmail || profile.email || '',
+              clientPhone: current.clientPhone || profile.phone || '',
+            }))
+          }
+        }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load booking option')
       } finally {
@@ -96,6 +142,39 @@ export default function PublicBookingDetailPage() {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (!clientProfile) return
+
+    if (purchasingForSomeoneElse) {
+      setForm((current) => {
+        const matchesProfile =
+          current.clientName === clientProfile.full_name &&
+          current.clientEmail === (clientProfile.email || '') &&
+          current.clientPhone === (clientProfile.phone || '')
+
+        if (!matchesProfile) {
+          return current
+        }
+
+        return {
+          ...current,
+          clientName: '',
+          clientEmail: '',
+          clientPhone: '',
+        }
+      })
+
+      return
+    }
+
+    setForm((current) => ({
+      ...current,
+      clientName: clientProfile.full_name,
+      clientEmail: clientProfile.email || '',
+      clientPhone: clientProfile.phone || '',
+    }))
+  }, [clientProfile, purchasingForSomeoneElse])
 
   const selectedTarget = useMemo<SelectedBookingTarget | null>(() => {
     const service = services.find((item) => item.slug === params.slug)
@@ -145,7 +224,9 @@ export default function PublicBookingDetailPage() {
 
   function validateBookingSelection() {
     if (!form.clientName || !form.clientEmail || !form.clientPhone) {
-      return 'Please fill in your name, email, and phone'
+      return purchasingForSomeoneElse
+        ? 'Please fill in the recipient name, email, and phone'
+        : 'Please fill in your name, email, and phone'
     }
     if (!form.bookingDate) {
       return 'Please choose a date first'
@@ -174,7 +255,7 @@ export default function PublicBookingDetailPage() {
         client_phone: form.clientPhone,
         booking_date: form.bookingDate,
         booking_time: form.bookingTime,
-        notes: form.notes || null,
+        notes: buildPurchaserNote(form.notes, clientProfile, purchasingForSomeoneElse),
       }
 
       if (selectedTarget?.kind === 'service') {
@@ -219,7 +300,7 @@ export default function PublicBookingDetailPage() {
           clientPhone: form.clientPhone,
           bookingDate: form.bookingDate,
           bookingTime: form.bookingTime,
-          notes: form.notes,
+          notes: buildPurchaserNote(form.notes, clientProfile, purchasingForSomeoneElse),
         })
       })
       const data = await res.json().catch(() => ({}))
@@ -275,16 +356,34 @@ export default function PublicBookingDetailPage() {
           {error ? <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</div> : null}
 
           <div className="mt-6 space-y-4">
+            {clientProfile ? (
+              <label className="flex items-start gap-3 rounded-2xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm text-[#1b140d]">
+                <input
+                  type="checkbox"
+                  checked={purchasingForSomeoneElse}
+                  onChange={(event) => setPurchasingForSomeoneElse(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-black/20 text-[#D4AF37] focus:ring-[#D4AF37]"
+                />
+                <span>
+                  <span className="block font-medium">I am purchasing this booking for someone else</span>
+                  <span className="mt-1 block text-xs text-black/50">
+                    {purchasingForSomeoneElse
+                      ? 'Enter the recipient details below. Your account information will still be attached internally to the booking request.'
+                      : 'Your client account information has been filled in below for a faster checkout.'}
+                  </span>
+                </span>
+              </label>
+            ) : null}
             <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Full Name*</label>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">{purchasingForSomeoneElse ? 'Recipient Full Name*' : 'Full Name*'}</label>
               <input value={form.clientName} onChange={(event) => setForm((current) => ({ ...current, clientName: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Email*</label>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">{purchasingForSomeoneElse ? 'Recipient Email*' : 'Email*'}</label>
               <input type="email" value={form.clientEmail} onChange={(event) => setForm((current) => ({ ...current, clientEmail: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-[#1b140d]">Phone*</label>
+              <label className="mb-2 block text-sm font-medium text-[#1b140d]">{purchasingForSomeoneElse ? 'Recipient Phone*' : 'Phone*'}</label>
               <input value={form.clientPhone} onChange={(event) => setForm((current) => ({ ...current, clientPhone: event.target.value }))} className="w-full rounded-xl border border-black/10 bg-[#faf8f2] px-4 py-3 text-sm outline-none focus:border-[#D4AF37]" />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
