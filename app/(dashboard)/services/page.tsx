@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Copy, Eye, ExternalLink, Plus, SquarePen, X } from 'lucide-react'
@@ -246,7 +246,7 @@ function packageIncludedServicesSummary(value: unknown) {
   const services = normalizeIncludedServices(value)
   if (services.length === 0) return 'No linked bookable sessions'
   return services
-    .map((service) => `${service.service_name || 'Attached service'} · ${service.monthly_session_allotment}/month`)
+    .map((service) => `${service.service_name || 'Attached service'} - ${service.monthly_session_allotment}/month`)
     .join(', ')
 }
 
@@ -400,17 +400,11 @@ export default function ServicesPage() {
         const aOrder = orderByName.get(String(a.name)) ?? Number.MAX_SAFE_INTEGER
         const bOrder = orderByName.get(String(b.name)) ?? Number.MAX_SAFE_INTEGER
         if (aOrder !== bOrder) return aOrder - bOrder
-        const aSort = Number(a.sort_order ?? 0)
-        const bSort = Number(b.sort_order ?? 0)
-        if (aSort !== bSort) return aSort - bSort
         return String(a.name ?? '').localeCompare(String(b.name ?? ''))
       })
     }
 
     initial.unassigned = [...(initial.unassigned ?? [])].sort((a, b) => {
-      const aSort = Number(a.sort_order ?? 0)
-      const bSort = Number(b.sort_order ?? 0)
-      if (aSort !== bSort) return aSort - bSort
       return String(a.name ?? '').localeCompare(String(b.name ?? ''))
     })
 
@@ -604,7 +598,7 @@ export default function ServicesPage() {
           ))}
         </div>
 
-        {loading ? <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">Loadingâ€¦</div> : null}
+        {loading ? <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">Loading...</div> : null}
 
         {!loading && tab === 'services' ? (
           <div className="space-y-4">
@@ -784,7 +778,7 @@ export default function ServicesPage() {
                         />
                         <span>
                           <span className="block font-medium text-forge-text-primary">{service.name}</span>
-                          <span className="mt-1 block text-xs text-forge-text-muted">{formatDurationLabel(service.duration_minutes)} · {stageLabel(service.category)}</span>
+                          <span className="mt-1 block text-xs text-forge-text-muted">{formatDurationLabel(service.duration_minutes)} - {stageLabel(service.category)}</span>
                         </span>
                       </label>
                       {selectedService ? (

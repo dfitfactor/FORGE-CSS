@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
 async function supportsIncludedServicesTable() {
@@ -57,7 +57,7 @@ export async function GET() {
         `SELECT *
          FROM services
          WHERE is_public = true AND is_active = true
-         ORDER BY sort_order NULLS LAST, name ASC`
+         ORDER BY name ASC`
       ),
       db.query(buildPackagesQuery(includeIncludedServices)),
     ])
