@@ -62,7 +62,14 @@ export async function GET() {
       db.query(buildPackagesQuery(includeIncludedServices)),
     ])
 
-    return NextResponse.json({ services, packages })
+    return NextResponse.json(
+      { services, packages },
+      {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to load booking options' }, { status: 500 })
   }
