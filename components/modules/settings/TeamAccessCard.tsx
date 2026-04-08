@@ -1,7 +1,7 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
-import { Crown, Loader2, ShieldCheck, UserCog } from 'lucide-react'
+import { Crown, Loader2, UserCog } from 'lucide-react'
 
 type TeamUser = {
   id: string
@@ -14,6 +14,8 @@ type TeamUser = {
   last_login_at: string | null
   created_at: string
 }
+
+type AccessLevelOption = 'admin' | 'regular'
 
 type Props = {
   canManage: boolean
@@ -77,7 +79,7 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
     }
   }, [canManage])
 
-  async function updateRole(userId: string, accessLevel: 'admin' | 'regular') {
+  async function updateRole(userId: string, accessLevel: AccessLevelOption) {
     setSavingUserId(userId)
     setError('')
     setSuccess('')
@@ -193,22 +195,31 @@ export default function TeamAccessCard({ canManage, currentUserId }: Props) {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    {isSuperuser ? (
-                      <div className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-gold/25 bg-forge-gold/10 px-4 py-2 text-sm text-forge-gold">
-                        <Crown className="h-4 w-4" />
-                        Reserved Superuser
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void updateRole(user.id, 'regular')}
-                        disabled={isSaving || user.access_level === 'regular' || isSelf}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-secondary hover:bg-forge-surface-2 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  <div className="flex min-w-[220px] flex-col gap-2">
+                    <label className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">
+                      Role
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={isSuperuser ? 'admin' : 'regular'}
+                        onChange={(event) => void updateRole(user.id, event.target.value as AccessLevelOption)}
+                        disabled={isSaving || isSelf}
+                        className="forge-input h-11 min-w-0 flex-1 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                        Regular Access
-                      </button>
+                        <option value="regular">Regular</option>
+                        <option value="admin">{isSuperuser ? 'Superuser' : 'Superuser (Reserved)'}</option>
+                      </select>
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin text-forge-text-muted" /> : null}
+                    </div>
+                    {isSuperuser ? (
+                      <p className="inline-flex items-center gap-2 text-xs text-forge-gold">
+                        <Crown className="h-3.5 w-3.5" />
+                        Reserved for Coach Dee
+                      </p>
+                    ) : (
+                      <p className="text-xs text-forge-text-muted">
+                        Only `coach@dfitfactor.com` can hold superuser access.
+                      </p>
                     )}
                   </div>
                 </div>
