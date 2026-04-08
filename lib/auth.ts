@@ -10,6 +10,7 @@ const JWT_SECRET = new TextEncoder().encode(
 
 const COOKIE_NAME = 'forge_session'
 const TOKEN_EXPIRY = '7d'
+const SUPERUSER_EMAIL = 'coach@dfitfactor.com'
 
 export type AuthUser = {
   id: string
@@ -27,7 +28,17 @@ export type JWTPayload = {
   exp?: number
 }
 
-// ─── Token Operations ───────────────────────────────────────
+function normalizeRole(email: string, role: string): AuthUser['role'] {
+  if (email.toLowerCase() === SUPERUSER_EMAIL) {
+    return 'admin'
+  }
+
+  if (role === 'admin' || role === 'coach' || role === 'client') {
+    return role
+  }
+
+  return 'coach'
+}
 
 export async function signToken(payload: Omit<JWTPayload, 'iat' | 'exp'>) {
   return await new SignJWT(payload)
@@ -46,46 +57,46 @@ export async function verifyToken(token: string): Promise<JWTPayload | null> {
   }
 }
 
-// ─── Session Management ──────────────────────────────────────
-
 export async function createSession(userId: string): Promise<string> {
   const user = await db.queryOne<{ id: string; email: string; full_name: string; role: string }>(
     'SELECT id, email, full_name, role FROM users WHERE id = $1 AND is_active = true',
     [userId]
   )
-  
+
   if (!user) throw new Error('User not found')
-  
+
+  const effectiveRole = normalizeRole(user.email, user.role)
+
   const token = await signToken({
     sub: user.id,
     email: user.email,
     fullName: user.full_name,
-    role: user.role,
+    role: effectiveRole,
   })
-  
+
   return token
 }
 
 export async function getSession(request?: NextRequest): Promise<AuthUser | null> {
   let token: string | undefined
-  
+
   if (request) {
     token = request.cookies.get(COOKIE_NAME)?.value
   } else {
     const cookieStore = cookies()
     token = cookieStore.get(COOKIE_NAME)?.value
   }
-  
+
   if (!token) return null
-  
+
   const payload = await verifyToken(token)
   if (!payload) return null
-  
+
   return {
     id: payload.sub,
     email: payload.email,
     fullName: payload.fullName,
-    role: payload.role as AuthUser['role'],
+    role: normalizeRole(payload.email, payload.role),
   }
 }
 
@@ -94,7 +105,7 @@ export function setSessionCookie(token: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 7,
     path: '/',
   })
 }
@@ -102,8 +113,6 @@ export function setSessionCookie(token: string) {
 export function clearSessionCookie() {
   cookies().delete(COOKIE_NAME)
 }
-
-// ─── Password Operations ─────────────────────────────────────
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12)
@@ -115,8 +124,6 @@ export async function verifyPassword(
 ): Promise<boolean> {
   return bcrypt.compare(password, hash)
 }
-
-// ─── Authorization ────────────────────────────────────────────
 
 export function requireRole(user: AuthUser | null, ...roles: AuthUser['role'][]) {
   if (!user) throw new Error('Unauthenticated')
@@ -131,4 +138,8 @@ export function canAccessClient(
   if (user.role === 'admin') return true
   if (user.role === 'coach' && user.id === clientCoachId) return true
   return false
+}
+
+export function getEffectiveRole(email: string, role: string): AuthUser['role'] {
+  return normalizeRole(email, role)
 }

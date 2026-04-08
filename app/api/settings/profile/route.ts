@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createSession, getSession, setSessionCookie } from '@/lib/auth'
+import { createSession, getEffectiveRole, getSession, setSessionCookie } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib/coach-settings'
 
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         id: user.id,
         full_name: user.full_name,
         email: user.email,
-        role: user.role,
+        role: getEffectiveRole(user.email, user.role),
         avatar_url: user.avatar_url,
         timezone: user.timezone || 'America/New_York',
         notification_email: user.notification_email || user.email,
