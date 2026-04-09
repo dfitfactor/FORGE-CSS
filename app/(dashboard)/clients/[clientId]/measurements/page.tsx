@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
@@ -175,10 +175,10 @@ export default function MeasurementsPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-[#0a0a0a] p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Link href={'/clients/' + clientId}
               className="w-9 h-9 rounded-lg bg-white/6 border border-white/10 flex items-center justify-center text-white/50 hover:text-white transition-colors">
@@ -210,11 +210,11 @@ export default function MeasurementsPage() {
 
         {latest && (
           <div className="bg-[#111111] border border-white/8 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Latest — {formatDate(latest.measurement_date)}</h2>
               {previous && <span className="text-xs text-white/30">vs {formatDate(previous.measurement_date)}</span>}
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {SUMMARY_METRICS.filter(m => m.current !== null).map(m => (
                 <div key={m.label} className="bg-white/4 rounded-xl p-3">
                   <div className="text-xs text-white/35 mb-1">{m.label}</div>
@@ -230,7 +230,7 @@ export default function MeasurementsPage() {
 
         {showForm && (
           <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Log Measurements</h2>
               <button onClick={() => setShowForm(false)} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
@@ -242,7 +242,7 @@ export default function MeasurementsPage() {
 
             <div>
               <p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Body Composition</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div><label className="forge-label">Height (in)</label><input type="number" step="0.1" value={form.heightIn} onChange={e => set('heightIn', e.target.value)} className="forge-input" placeholder="65.0" /></div>
                 <div><label className="forge-label">Weight (lbs)</label><input type="number" step="0.1" value={form.weightLbs} onChange={e => set('weightLbs', e.target.value)} className="forge-input" placeholder="148.0" /></div>
                 <div><label className="forge-label">Body Fat %</label><input type="number" step="0.1" value={form.bodyFatPct} onChange={e => set('bodyFatPct', e.target.value)} className="forge-input" placeholder="28.5" /></div>
@@ -252,7 +252,7 @@ export default function MeasurementsPage() {
 
             <div>
               <p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Circumference (inches)</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div><label className="forge-label">Waist</label><input type="number" step="0.1" value={form.waistIn} onChange={e => set('waistIn', e.target.value)} className="forge-input" placeholder="30.0" /></div>
                 <div><label className="forge-label">Hips</label><input type="number" step="0.1" value={form.hipsIn} onChange={e => set('hipsIn', e.target.value)} className="forge-input" placeholder="38.0" /></div>
                 <div><label className="forge-label">Chest</label><input type="number" step="0.1" value={form.chestIn} onChange={e => set('chestIn', e.target.value)} className="forge-input" placeholder="34.0" /></div>
@@ -302,7 +302,7 @@ export default function MeasurementsPage() {
                         <Trash2 size={13} />
                       </button>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                       {[
                         { label: 'Height', value: fmt(m.height_in, '"'), current: m.height_in, prev: prev?.height_in ?? null, lower: false },
                         { label: 'Weight', value: fmt(m.weight_lbs, ' lbs'), current: m.weight_lbs, prev: prev?.weight_lbs ?? null, lower: true },

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
@@ -191,9 +191,9 @@ export default function BiomarkersPage() {
   const latest = panels[0] ?? null
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-[#0a0a0a] p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Link href={'/clients/' + clientId} className="w-9 h-9 rounded-lg bg-white/6 border border-white/10 flex items-center justify-center text-white/50 hover:text-white transition-colors">
               <ArrowLeft size={16} />
@@ -213,11 +213,11 @@ export default function BiomarkersPage() {
 
         {latest && (
           <div className="bg-[#111111] border border-white/8 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Latest — {formatDate(latest.panel_date)}</h2>
               {latest.lab_name && <span className="text-xs text-white/30">{latest.lab_name}</span>}
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(latest.fasting_glucose || latest.hba1c || latest.triglycerides || latest.hdl || latest.ldl) && (
                 <div className="bg-white/3 rounded-xl p-3">
                   <p className="text-[10px] font-mono uppercase tracking-widest text-white/30 mb-2">Metabolic</p>
@@ -272,21 +272,21 @@ export default function BiomarkersPage() {
 
         {showForm && (
           <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">{editingId ? 'Edit Panel' : 'Log Panel'}</h2>
               <button onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm) }} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label className="forge-label">Date</label><input type="date" value={form.panelDate} onChange={e => setF('panelDate', e.target.value)} className="forge-input" /></div>
               <div><label className="forge-label">Panel Type</label><select value={form.panelType} onChange={e => setF('panelType', e.target.value)} className="forge-input">{PANEL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
               <div><label className="forge-label">Lab Name</label><input value={form.labName} onChange={e => setF('labName', e.target.value)} className="forge-input" placeholder="e.g. LabCorp" /></div>
               <div><label className="forge-label">Ordered By</label><input value={form.orderedBy} onChange={e => setF('orderedBy', e.target.value)} className="forge-input" placeholder="Dr. Name" /></div>
             </div>
-            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Metabolic</p><div className="grid grid-cols-3 gap-3"><Field label="Fasting Glucose" field="fastingGlucose" placeholder="95" unit="mg/dL" /><Field label="HbA1c" field="hba1c" placeholder="5.4" unit="%" /><Field label="Insulin" field="insulin" placeholder="8.0" unit="uIU/mL" /><Field label="Triglycerides" field="triglycerides" placeholder="120" unit="mg/dL" /><Field label="HDL" field="hdl" placeholder="65" unit="mg/dL" /><Field label="LDL" field="ldl" placeholder="90" unit="mg/dL" /><Field label="Total Cholesterol" field="totalCholesterol" placeholder="180" unit="mg/dL" /></div></div>
-            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Hormonal</p><div className="grid grid-cols-3 gap-3"><Field label="Testosterone Total" field="testosteroneTotal" placeholder="450" unit="ng/dL" /><Field label="Testosterone Free" field="testosteroneFree" placeholder="12" unit="pg/mL" /><Field label="Estradiol" field="estradiol" placeholder="80" unit="pg/mL" /><Field label="Progesterone" field="progesterone" placeholder="1.2" unit="ng/mL" /><Field label="Cortisol" field="cortisol" placeholder="14" unit="mcg/dL" /><Field label="DHEA-S" field="dheaS" placeholder="200" unit="mcg/dL" /></div></div>
-            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Thyroid</p><div className="grid grid-cols-3 gap-3"><Field label="TSH" field="tsh" placeholder="2.0" unit="mIU/L" /><Field label="Free T3" field="t3Free" placeholder="3.2" unit="pg/mL" /><Field label="Free T4" field="t4Free" placeholder="1.2" unit="ng/dL" /></div></div>
-            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Inflammatory</p><div className="grid grid-cols-3 gap-3"><Field label="CRP" field="crp" placeholder="0.5" unit="mg/L" /><Field label="Homocysteine" field="homocysteine" placeholder="8.0" unit="umol/L" /></div></div>
-            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Nutrients</p><div className="grid grid-cols-3 gap-3"><Field label="Vitamin D" field="vitaminD" placeholder="45" unit="ng/mL" /><Field label="B12" field="b12" placeholder="500" unit="pg/mL" /><Field label="Ferritin" field="ferritin" placeholder="80" unit="ng/mL" /></div></div>
+            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Metabolic</p><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"><Field label="Fasting Glucose" field="fastingGlucose" placeholder="95" unit="mg/dL" /><Field label="HbA1c" field="hba1c" placeholder="5.4" unit="%" /><Field label="Insulin" field="insulin" placeholder="8.0" unit="uIU/mL" /><Field label="Triglycerides" field="triglycerides" placeholder="120" unit="mg/dL" /><Field label="HDL" field="hdl" placeholder="65" unit="mg/dL" /><Field label="LDL" field="ldl" placeholder="90" unit="mg/dL" /><Field label="Total Cholesterol" field="totalCholesterol" placeholder="180" unit="mg/dL" /></div></div>
+            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Hormonal</p><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"><Field label="Testosterone Total" field="testosteroneTotal" placeholder="450" unit="ng/dL" /><Field label="Testosterone Free" field="testosteroneFree" placeholder="12" unit="pg/mL" /><Field label="Estradiol" field="estradiol" placeholder="80" unit="pg/mL" /><Field label="Progesterone" field="progesterone" placeholder="1.2" unit="ng/mL" /><Field label="Cortisol" field="cortisol" placeholder="14" unit="mcg/dL" /><Field label="DHEA-S" field="dheaS" placeholder="200" unit="mcg/dL" /></div></div>
+            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Thyroid</p><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"><Field label="TSH" field="tsh" placeholder="2.0" unit="mIU/L" /><Field label="Free T3" field="t3Free" placeholder="3.2" unit="pg/mL" /><Field label="Free T4" field="t4Free" placeholder="1.2" unit="ng/dL" /></div></div>
+            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Inflammatory</p><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"><Field label="CRP" field="crp" placeholder="0.5" unit="mg/L" /><Field label="Homocysteine" field="homocysteine" placeholder="8.0" unit="umol/L" /></div></div>
+            <div><p className="text-xs font-mono uppercase tracking-widest text-white/35 mb-3">Nutrients</p><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"><Field label="Vitamin D" field="vitaminD" placeholder="45" unit="ng/mL" /><Field label="B12" field="b12" placeholder="500" unit="pg/mL" /><Field label="Ferritin" field="ferritin" placeholder="80" unit="ng/mL" /></div></div>
             <div><label className="forge-label">Coach Interpretation</label><textarea rows={3} value={form.coachInterpretation} onChange={e => setF('coachInterpretation', e.target.value)} className="forge-input resize-none" placeholder="Clinical observations and coaching notes..." /></div>
             <button onClick={handleSave} disabled={saving} className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50">
               {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><FlaskConical size={16} /> {editingId ? 'Update Panel' : 'Save Panel'}</>}
@@ -324,7 +324,7 @@ export default function BiomarkersPage() {
                     </div>
                   </div>
                   {expandedPanel === panel.id && (
-                    <div className="px-4 pb-4 border-t border-white/6 pt-4 grid grid-cols-2 gap-2 text-xs">
+                    <div className="px-4 pb-4 border-t border-white/6 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {panel.fasting_glucose && <div className="flex justify-between"><span className="text-white/35">Glucose</span><span className="text-white/60">{panel.fasting_glucose} mg/dL</span></div>}
                       {panel.hba1c && <div className="flex justify-between"><span className="text-white/35">HbA1c</span><span className="text-white/60">{panel.hba1c}%</span></div>}
                       {panel.triglycerides && <div className="flex justify-between"><span className="text-white/35">Triglycerides</span><span className="text-white/60">{panel.triglycerides} mg/dL</span></div>}

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
@@ -362,10 +362,10 @@ export default function JournalsPage() {
   const filtered = filterType === 'all' ? entries : entries.filter(e => e.entry_type === filterType)
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 md:p-8">
+    <div className="min-h-screen bg-[#0a0a0a] p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Link href={'/clients/' + clientId} className="w-9 h-9 rounded-lg bg-white/6 border border-white/10 flex items-center justify-center text-white/50 hover:text-white transition-colors">
               <ArrowLeft size={16} />
@@ -375,7 +375,7 @@ export default function JournalsPage() {
               <p className="text-sm text-white/40">{clientName}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <button
               onClick={() => setShowUpload(v => !v)}
               className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-sm text-white/75 hover:text-white transition-colors flex items-center gap-2"
@@ -393,7 +393,7 @@ export default function JournalsPage() {
 
         {showUpload && (
           <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">Upload Weekly Check-In</h2>
                 <p className="text-xs text-white/35 mt-1">Adds the questionnaire as an AI-enabled document so it can inform insights and BIE scores even before manual journal entry.</p>
@@ -449,7 +449,7 @@ export default function JournalsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="forge-label">Title</label>
                 <input
@@ -510,12 +510,12 @@ export default function JournalsPage() {
         {/* New entry form */}
         {showForm && (
           <div className="bg-[#111111] border border-[#D4AF37]/20 rounded-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-xs font-semibold text-white uppercase tracking-widest font-mono">{editingId ? 'Edit Entry' : 'New Entry'}</h2>
               <button onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm) }} className="text-white/30 hover:text-white"><X size={16} /></button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label className="forge-label">Date</label><input type="date" value={String(form.entryDate)} onChange={e => setF('entryDate', e.target.value)} className="forge-input" /></div>
               <div><label className="forge-label">Entry Type</label><select value={String(form.entryType)} onChange={e => setF('entryType', e.target.value)} className="forge-input">{ENTRY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
             </div>
@@ -527,7 +527,7 @@ export default function JournalsPage() {
             {/* Daily metrics */}
             <div className="space-y-4">
               <p className="text-xs font-mono uppercase tracking-widest text-white/35">Daily Metrics</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><label className="forge-label flex items-center gap-1.5"><Moon size={12} /> Sleep Hours</label><input type="number" step="0.5" min="0" max="24" value={String(form.sleepHours)} onChange={e => setF('sleepHours', e.target.value)} className="forge-input" placeholder="7.5" /></div>
                 <div><label className="forge-label flex items-center gap-1.5"><Moon size={12} /> Sleep Quality (1-5)</label><RatingButtons value={String(form.sleepQuality)} onChange={v => setF('sleepQuality', v)} /></div>
                 <div><label className="forge-label flex items-center gap-1.5"><Zap size={12} /> Energy (1-5)</label><RatingButtons value={String(form.energyLevel)} onChange={v => setF('energyLevel', v)} /></div>
@@ -620,7 +620,7 @@ export default function JournalsPage() {
                         </div>
                       )}
                       {/* Metrics grid */}
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {entry.sleep_hours && <div className="bg-white/3 rounded-lg p-2 text-center"><Moon size={12} className="mx-auto text-blue-400 mb-1" /><p className="text-xs text-white/35">Sleep</p><p className="text-sm font-bold text-white">{entry.sleep_hours}h</p></div>}
                         {entry.energy_level && <div className="bg-white/3 rounded-lg p-2 text-center"><Zap size={12} className="mx-auto text-[#D4AF37] mb-1" /><p className="text-xs text-white/35">Energy</p><p className="text-sm font-bold text-white">{entry.energy_level}/5</p></div>}
                         {entry.mood && <div className="bg-white/3 rounded-lg p-2 text-center"><Heart size={12} className="mx-auto text-emerald-400 mb-1" /><p className="text-xs text-white/35">Mood</p><p className="text-sm font-bold text-white">{entry.mood}/5</p></div>}
