@@ -39,13 +39,17 @@ export function DashboardFrame({ children }: { children: React.ReactNode }) {
   }, [])
 
   const previewClassName =
-    previewMode === 'mobile' ? 'max-w-md' : previewMode === 'tablet' ? 'max-w-3xl' : 'max-w-none'
+    previewMode === 'mobile'
+      ? 'w-full max-w-[390px] min-w-[360px] ml-0 mr-auto'
+      : previewMode === 'tablet'
+        ? 'w-full max-w-3xl ml-0 mr-auto'
+        : 'w-full max-w-none mx-auto'
 
   return (
     <div className="flex min-h-screen bg-forge-surface">
       <Sidebar />
       <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-        <div className={`mx-auto min-h-full transition-all duration-200 ${previewClassName}`}>
+        <div className={`min-h-full transition-all duration-200 ${previewClassName}`}>
           {children}
         </div>
       </main>

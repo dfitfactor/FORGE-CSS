@@ -55,7 +55,8 @@ export function Sidebar() {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop')
 
   useEffect(() => {
-    const saved = localStorage.getItem('forge-sidebar-collapsed') === 'true'
+    const storedCollapsed = localStorage.getItem('forge-sidebar-collapsed')
+    const saved = storedCollapsed === null ? true : storedCollapsed === 'true'
     const storedPreview = localStorage.getItem(PREVIEW_STORAGE_KEY)
     setCollapsed(saved)
     setPreviewMode(storedPreview === 'tablet' || storedPreview === 'mobile' ? storedPreview : 'desktop')
@@ -103,6 +104,7 @@ export function Sidebar() {
     }
   }
 
+  const isForcedMobilePreview = previewMode === 'mobile'
   const effectiveCollapsed = previewMode !== 'desktop' ? true : collapsed
   const desktopWidth = !mounted ? 60 : effectiveCollapsed ? 60 : 256
 
@@ -184,7 +186,7 @@ export function Sidebar() {
 
   const desktopSidebar = (
     <aside
-      className="hidden min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200 md:flex md:flex-col"
+      className={`${isForcedMobilePreview ? 'hidden' : 'hidden md:flex md:flex-col'} min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200`}
       style={{ width: desktopWidth, minWidth: desktopWidth, maxWidth: desktopWidth, flex: `0 0 ${desktopWidth}px` }}
     >
       <div className={`${effectiveCollapsed ? 'px-3 py-5' : 'px-6 py-5'} border-b border-forge-border`}>
@@ -229,8 +231,9 @@ export function Sidebar() {
       <div className={`px-2 pb-2 ${effectiveCollapsed ? 'flex justify-center' : ''}`}>
         <button
           onClick={toggle}
-          title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-forge-text-muted transition-all hover:bg-forge-surface-3 hover:text-forge-text-primary ${
+          disabled={previewMode !== 'desktop'}
+          title={previewMode !== 'desktop' ? 'Sidebar stays compact in tablet and mobile preview' : effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-forge-text-muted transition-all hover:bg-forge-surface-3 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-40 ${
             effectiveCollapsed ? 'w-auto justify-center' : 'w-full'
           }`}
         >
@@ -281,9 +284,11 @@ export function Sidebar() {
     </aside>
   )
 
+  const showMobileChrome = isForcedMobilePreview
+
   return (
     <>
-      <div className="sticky top-0 z-40 border-b border-forge-border bg-forge-surface-2/95 px-4 py-3 backdrop-blur md:hidden">
+      <div className={`sticky top-0 z-40 border-b border-forge-border bg-forge-surface-2/95 px-4 py-3 backdrop-blur ${showMobileChrome ? '' : 'md:hidden'}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -309,7 +314,7 @@ export function Sidebar() {
       </div>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className={`fixed inset-0 z-50 ${showMobileChrome ? '' : 'md:hidden'}`}>
           <button
             type="button"
             aria-label="Close navigation"
