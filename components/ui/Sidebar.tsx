@@ -82,6 +82,7 @@ export function Sidebar() {
 
   function setGlobalPreviewMode(mode: PreviewMode) {
     setPreviewMode(mode)
+    setMobileOpen(false)
     localStorage.setItem(PREVIEW_STORAGE_KEY, mode)
     window.dispatchEvent(new CustomEvent('forge-preview-mode-change'))
   }
@@ -146,6 +147,7 @@ export function Sidebar() {
           key={item.href}
           href={item.href}
           title={compact ? item.label : undefined}
+          onClick={() => setMobileOpen(false)}
           className={`flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm font-medium transition-all duration-150 ${
             compact ? 'justify-center' : ''
           } ${
@@ -170,6 +172,7 @@ export function Sidebar() {
           key={item.href}
           href={item.href}
           title={compact ? item.label : undefined}
+          onClick={() => setMobileOpen(false)}
           className={`flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm font-medium transition-all duration-150 ${
             compact ? 'justify-center' : ''
           } ${
@@ -339,7 +342,7 @@ export function Sidebar() {
             className="absolute inset-0 bg-black/45"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative z-10 flex h-full w-[88vw] max-w-[320px] flex-col border-r border-forge-border bg-forge-surface-2 shadow-2xl">
+          <aside className="relative z-10 flex h-full w-[78vw] max-w-[280px] flex-col border-r border-forge-border bg-forge-surface-2 shadow-2xl">
             <div className="flex items-center justify-between border-b border-forge-border px-5 py-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
@@ -396,3 +399,6 @@ export function Sidebar() {
     </>
   )
 }
+
+
+
