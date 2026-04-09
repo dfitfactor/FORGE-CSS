@@ -103,7 +103,8 @@ export function Sidebar() {
     }
   }
 
-  const desktopWidth = !mounted ? 60 : collapsed ? 60 : 256
+  const effectiveCollapsed = previewMode !== 'desktop' ? true : collapsed
+  const desktopWidth = !mounted ? 60 : effectiveCollapsed ? 60 : 256
 
   function renderPreviewControls(compact: boolean) {
     return (
@@ -186,9 +187,9 @@ export function Sidebar() {
       className="hidden min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200 md:flex md:flex-col"
       style={{ width: desktopWidth, minWidth: desktopWidth, maxWidth: desktopWidth, flex: `0 0 ${desktopWidth}px` }}
     >
-      <div className={`${collapsed ? 'px-3 py-5' : 'px-6 py-5'} border-b border-forge-border`}>
-        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-          {!mounted || !collapsed ? (
+      <div className={`${effectiveCollapsed ? 'px-3 py-5' : 'px-6 py-5'} border-b border-forge-border`}>
+        <div className={`flex items-center ${effectiveCollapsed ? 'justify-center' : 'gap-3'}`}>
+          {!mounted || !effectiveCollapsed ? (
             <>
               <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
                 <img src="/forge-logo.png" alt="FORGE" className="h-5 w-5 object-contain" />
@@ -205,35 +206,35 @@ export function Sidebar() {
           )}
         </div>
 
-        <div className={`mt-4 space-y-3 ${collapsed ? 'flex flex-col items-center' : ''}`}>
-          <div className={collapsed ? 'flex justify-center' : ''}>
-            <ThemeToggle compact={collapsed} />
+        <div className={`mt-4 space-y-3 ${effectiveCollapsed ? 'flex flex-col items-center' : ''}`}>
+          <div className={effectiveCollapsed ? 'flex justify-center' : ''}>
+            <ThemeToggle compact={effectiveCollapsed} />
           </div>
-          {renderPreviewControls(collapsed)}
+          {renderPreviewControls(effectiveCollapsed)}
         </div>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
-        {renderNavItems(collapsed)}
+        {renderNavItems(effectiveCollapsed)}
 
-        {collapsed ? (
+        {effectiveCollapsed ? (
           <div className="pb-2 pt-4"><div className="border-t border-forge-border" /></div>
         ) : (
           <div className="px-3 pb-2 pt-4"><div className="text-[10px] font-semibold uppercase tracking-widest text-forge-text-muted">System</div></div>
         )}
 
-        {renderBottomItems(collapsed)}
+        {renderBottomItems(effectiveCollapsed)}
       </nav>
 
-      <div className={`px-2 pb-2 ${collapsed ? 'flex justify-center' : ''}`}>
+      <div className={`px-2 pb-2 ${effectiveCollapsed ? 'flex justify-center' : ''}`}>
         <button
           onClick={toggle}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-forge-text-muted transition-all hover:bg-forge-surface-3 hover:text-forge-text-primary ${
-            collapsed ? 'w-auto justify-center' : 'w-full'
+            effectiveCollapsed ? 'w-auto justify-center' : 'w-full'
           }`}
         >
-          {collapsed ? (
+          {effectiveCollapsed ? (
             <ChevronRight className="h-4 w-4 flex-shrink-0" />
           ) : (
             <>
@@ -244,8 +245,8 @@ export function Sidebar() {
         </button>
       </div>
 
-      <div className={`border-t border-forge-border pb-4 pt-4 ${collapsed ? 'px-2' : 'px-3'}`}>
-        {collapsed ? (
+      <div className={`border-t border-forge-border pb-4 pt-4 ${effectiveCollapsed ? 'px-2' : 'px-3'}`}>
+        {effectiveCollapsed ? (
           <div className="flex flex-col items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-forge-purple text-xs font-bold text-forge-gold">C</div>
             <button
