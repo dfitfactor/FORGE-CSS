@@ -106,7 +106,6 @@ export function Sidebar() {
     }
   }
 
-  const isForcedMobilePreview = previewMode === 'mobile'
   const effectiveCollapsed = previewMode !== 'desktop' ? true : collapsed
   const desktopWidth = !mounted ? 60 : effectiveCollapsed ? 60 : 256
 
@@ -305,7 +304,7 @@ export function Sidebar() {
     </aside>
   )
 
-  const showMobileChrome = isForcedMobilePreview
+  const showMobileChrome = false
 
   return (
     <>
