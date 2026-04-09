@@ -107,7 +107,7 @@ html[data-theme='dark'] {
 
 @layer components {
   .forge-card {
-    @apply bg-forge-surface-2 border border-forge-border rounded-xl p-4 md:p-6;
+    @apply bg-forge-surface-2 border border-forge-border rounded-xl p-4 md:p-5 lg:p-6;
     box-shadow: var(--app-shadow);
   }
 
@@ -120,7 +120,7 @@ html[data-theme='dark'] {
   }
 
   .forge-input {
-    @apply w-full bg-forge-surface-3 border border-forge-border rounded-lg px-3 py-2.5 md:px-4
+    @apply w-full bg-forge-surface-3 border border-forge-border rounded-lg px-3 py-2.5 md:px-3.5 lg:px-4
            text-forge-text-primary placeholder-forge-text-muted
            focus:outline-none focus:border-forge-purple-light focus:ring-1 focus:ring-forge-purple-light
            transition-colors duration-200;

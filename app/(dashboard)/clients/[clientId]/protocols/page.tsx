@@ -533,7 +533,7 @@ export default function ProtocolsPage() {
         {error && <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3"><AlertCircle size={16} className="text-red-400" /><span className="text-sm text-red-400 flex-1">{error}</span><button onClick={() => setError('')}><X size={14} className="text-red-400/60" /></button></div>}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           <div className="bg-[#111111] border border-white/8 rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-emerald-400">{active.length}</div>
             <div className="text-xs text-white/35 mt-1 font-mono uppercase tracking-wide">Active</div>
@@ -577,7 +577,7 @@ export default function ProtocolsPage() {
                 {Object.keys(clientBIE).length > 0 && (
                   <div className="bg-white/3 border border-white/8 rounded-xl p-4">
                     <p className="text-xs font-mono uppercase tracking-widest text-white/30 mb-3">Current BIE State</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
                       {Object.entries(clientBIE).map(([k, v]) => (
                         <div key={k} className="text-center">
                           <p className="text-[10px] font-mono text-white/30 uppercase">{k}</p>
@@ -638,7 +638,7 @@ export default function ProtocolsPage() {
                 </div>
 
                 {/* Split view — Content + Insights */}
-                <div className="flex flex-col lg:flex-row">
+                <div className="flex flex-col xl:flex-row">
                   {/* Left — Protocol content */}
                   <div className="flex-1 p-5 space-y-5 min-w-0">
 
@@ -956,7 +956,7 @@ export default function ProtocolsPage() {
 
                   {/* Right — AI Insights panel */}
                   {genContext && (
-                    <div className="w-full lg:w-72 border-t lg:border-t-0 lg:border-l border-white/6 bg-white/1">
+                    <div className="w-full xl:w-72 border-t xl:border-t-0 xl:border-l border-white/6 bg-white/1">
                       <button onClick={() => setShowInsights(!showInsights)}
                         className="w-full flex items-center justify-between p-4 text-xs font-mono uppercase tracking-widest text-white/40 hover:text-white">
                         <span className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"><Brain size={12} className="text-[#D4AF37]" /> AI Insights</span>

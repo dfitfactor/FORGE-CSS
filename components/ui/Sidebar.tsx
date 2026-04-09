@@ -133,7 +133,7 @@ export function Sidebar() {
 
   const desktopSidebar = (
     <aside
-      className="hidden min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200 lg:flex lg:flex-col"
+      className="hidden min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200 md:flex md:flex-col"
       style={{ width: desktopWidth, minWidth: desktopWidth, maxWidth: desktopWidth, flex: `0 0 ${desktopWidth}px` }}
     >
       <div className={`${collapsed ? 'px-3 py-5' : 'px-6 py-5'} border-b border-forge-border`}>
@@ -229,7 +229,7 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="sticky top-0 z-40 border-b border-forge-border bg-forge-surface-2/95 px-4 py-3 backdrop-blur lg:hidden">
+      <div className="sticky top-0 z-40 border-b border-forge-border bg-forge-surface-2/95 px-4 py-3 backdrop-blur md:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -255,7 +255,7 @@ export function Sidebar() {
       </div>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 md:hidden">
           <button
             type="button"
             aria-label="Close navigation"
