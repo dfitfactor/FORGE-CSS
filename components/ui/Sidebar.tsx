@@ -20,6 +20,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { BrandLogoImage } from '@/components/ui/BrandLogoImage'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navItems = [
@@ -190,21 +191,38 @@ export function Sidebar() {
       style={{ width: desktopWidth, minWidth: desktopWidth, maxWidth: desktopWidth, flex: `0 0 ${desktopWidth}px` }}
     >
       <div className={`${effectiveCollapsed ? 'px-3 py-5' : 'px-6 py-5'} border-b border-forge-border`}>
-        <div className={`flex items-center ${effectiveCollapsed ? 'justify-center' : 'gap-3'}`}>
+        <div className={`flex items-center ${effectiveCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
           {!mounted || !effectiveCollapsed ? (
             <>
-              <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
-                <img src="/forge-logo.png" alt="FORGE" className="h-5 w-5 object-contain" />
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
+                  <BrandLogoImage alt="FORGE" className="h-5 w-5 object-contain" />
+                </div>
+                <div>
+                  <div className="font-bold tracking-wide text-forge-text-primary">FORGE</div>
+                  <div className="text-[10px] uppercase tracking-widest leading-none text-forge-text-muted">Client Support System</div>
+                </div>
               </div>
-              <div>
-                <div className="font-bold tracking-wide text-forge-text-primary">FORGE</div>
-                <div className="text-[10px] uppercase tracking-widest leading-none text-forge-text-muted">Client Support System</div>
-              </div>
+              <button
+                type="button"
+                onClick={toggle}
+                disabled={previewMode !== 'desktop'}
+                title={previewMode !== 'desktop' ? 'Sidebar stays compact in tablet and mobile preview' : 'Collapse sidebar'}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-forge-border bg-forge-surface-3 text-forge-text-muted transition-all hover:bg-forge-surface hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
             </>
           ) : (
-            <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
-              <img src="/forge-logo.png" alt="FORGE" className="h-5 w-5 object-contain" />
-            </div>
+            <button
+              type="button"
+              onClick={toggle}
+              disabled={previewMode !== 'desktop'}
+              title={previewMode !== 'desktop' ? 'Sidebar stays compact in tablet and mobile preview' : 'Expand sidebar'}
+              className="glow-purple inline-flex h-9 w-9 items-center justify-center rounded-lg bg-forge-purple text-forge-gold transition-all disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           )}
         </div>
 
@@ -301,7 +319,7 @@ export function Sidebar() {
             </button>
             <Link href="/dashboard" className="flex min-w-0 items-center gap-3 no-underline">
               <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
-                <img src="/forge-logo.png" alt="FORGE" className="h-5 w-5 object-contain" />
+                <BrandLogoImage alt="FORGE" className="h-5 w-5 object-contain" />
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold tracking-wide text-forge-text-primary">FORGE</div>
@@ -325,7 +343,7 @@ export function Sidebar() {
             <div className="flex items-center justify-between border-b border-forge-border px-5 py-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="glow-purple flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-forge-purple">
-                  <img src="/forge-logo.png" alt="FORGE" className="h-5 w-5 object-contain" />
+                  <BrandLogoImage alt="FORGE" className="h-5 w-5 object-contain" />
                 </div>
                 <div className="min-w-0">
                   <div className="truncate font-bold tracking-wide text-forge-text-primary">FORGE</div>

@@ -7,7 +7,7 @@ import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib
 const ProfileSchema = z.object({
   full_name: z.string().trim().min(2).max(255),
   email: z.string().trim().email().max(255),
-  avatar_url: z.string().trim().max(2000).optional().nullable(),
+  avatar_url: z.string().trim().max(500000).optional().nullable(),
   timezone: z.string().trim().min(1).max(255).default('America/New_York'),
   notification_email: z.string().trim().max(255).optional().nullable(),
 })
@@ -90,10 +90,14 @@ export async function PATCH(request: NextRequest) {
 
     let nextAvatarUrl: string | null = data.avatar_url?.trim() ? data.avatar_url.trim() : null
     if (nextAvatarUrl) {
-      try {
-        nextAvatarUrl = new URL(nextAvatarUrl).toString()
-      } catch {
-        nextAvatarUrl = null
+      if (nextAvatarUrl.startsWith('data:image/')) {
+        nextAvatarUrl = nextAvatarUrl
+      } else {
+        try {
+          nextAvatarUrl = new URL(nextAvatarUrl).toString()
+        } catch {
+          nextAvatarUrl = null
+        }
       }
     }
 
@@ -166,3 +170,4 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
   }
 }
+

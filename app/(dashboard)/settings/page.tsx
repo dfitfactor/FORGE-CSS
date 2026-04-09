@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail
+  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail, Upload, X
 } from 'lucide-react'
 import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
 import TeamAccessCard from '@/components/modules/settings/TeamAccessCard'
@@ -42,8 +42,6 @@ type TemplateFormState = {
   is_active: boolean
   sort_order: string
 }
-
-type SettingsPreviewMode = 'desktop' | 'tablet' | 'mobile'
 
 const INITIAL_STATE: AccountState = {
   id: '',
@@ -85,6 +83,52 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+async function resizeLogoFile(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please choose an image file')
+  }
+
+  const fileDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result)
+      else reject(new Error('Failed to read file'))
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Failed to load image'))
+    img.src = fileDataUrl
+  })
+
+  const maxSize = 512
+  const scale = Math.min(maxSize / image.width, maxSize / image.height, 1)
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Failed to process image')
+  }
+
+  context.clearRect(0, 0, width, height)
+  context.drawImage(image, 0, 0, width, height)
+
+  const output = canvas.toDataURL('image/webp', 0.9)
+  if (output.length > 450000) {
+    throw new Error('Logo is still too large after compression. Try a smaller image.')
+  }
+
+  return output
+}
 export default function SettingsPage() {
   const router = useRouter()
   const [form, setForm] = useState<AccountState>(INITIAL_STATE)
@@ -108,6 +152,7 @@ export default function SettingsPage() {
   const [showTemplateForm, setShowTemplateForm] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(INITIAL_TEMPLATE_FORM)
+  const [logoUploading, setLogoUploading] = useState(false)
 
   useEffect(() => {
     async function loadAccount() {
@@ -197,6 +242,7 @@ export default function SettingsPage() {
       }
 
       setSuccess('Settings saved successfully')
+      window.dispatchEvent(new CustomEvent('forge-branding-change', { detail: { logoUrl: profileData.user?.avatar_url ?? form.avatar_url ?? '' } }))
       setForm((current) => ({ ...current, current_password: '', new_password: '' }))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save settings')
@@ -216,6 +262,24 @@ export default function SettingsPage() {
     }
   }
 
+
+  async function handleLogoFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setLogoUploading(true)
+    setError('')
+
+    try {
+      const nextLogo = await resizeLogoFile(file)
+      setForm((current) => ({ ...current, avatar_url: nextLogo }))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to process logo')
+    } finally {
+      setLogoUploading(false)
+      event.target.value = ''
+    }
+  }
   async function handlePortalTest(event: React.FormEvent) {
     event.preventDefault()
     if (!portalTestEmail) return
@@ -390,8 +454,39 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="forge-label">Avatar URL</label>
-                  <input className="forge-input" value={form.avatar_url} onChange={(event) => setForm((current) => ({ ...current, avatar_url: event.target.value }))} placeholder="https://..." />
+                  <label className="forge-label">Brand Logo</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-3">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-forge-purple">
+                        <img src={form.avatar_url || '/forge-logo.png'} alt="Brand logo preview" className="h-9 w-9 object-contain" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-forge-text-primary">Upload your logo</p>
+                        <p className="mt-1 text-xs text-forge-text-muted">Used across the dashboard, booking pages, and auth screens.</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-forge-border bg-forge-surface-3 px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface">
+                        {logoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {logoUploading ? 'Processing...' : 'Upload Logo'}
+                        <input type="file" accept="image/*" className="hidden" onChange={handleLogoFileChange} />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setForm((current) => ({ ...current, avatar_url: '' }))}
+                        className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-primary/70 transition-all hover:bg-forge-surface-3 hover:text-forge-text-primary"
+                      >
+                        <X className="h-4 w-4" />
+                        Remove
+                      </button>
+                    </div>
+                    <input
+                      className="forge-input"
+                      value={form.avatar_url}
+                      onChange={(event) => setForm((current) => ({ ...current, avatar_url: event.target.value }))}
+                      placeholder="Paste an image URL instead"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -712,3 +807,7 @@ export default function SettingsPage() {
     </div>
   )
 }
+
+
+
+

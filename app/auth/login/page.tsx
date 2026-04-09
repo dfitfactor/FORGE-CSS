@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { BrandLogoImage } from '@/components/ui/BrandLogoImage'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -40,7 +41,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-xl bg-forge-purple flex items-center justify-center">
-              <img src="/Forge-Logo.png" alt="FORGE" className="w-7 h-7 object-contain" />
+              <BrandLogoImage alt="FORGE" className="w-7 h-7 object-contain" />
             </div>
             <div className="text-left">
               <div className="text-2xl font-bold text-forge-text-primary">FORG<span className="text-forge-gold">E</span></div>
@@ -117,3 +118,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

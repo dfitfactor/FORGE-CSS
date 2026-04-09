@@ -7,7 +7,7 @@ import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib
 const AccountSchema = z.object({
   full_name: z.string().trim().min(2).max(255),
   email: z.string().trim().email().max(255),
-  avatar_url: z.union([z.string().trim().url(), z.literal('')]).optional().nullable(),
+  avatar_url: z.string().trim().max(500000).optional().nullable(),
   current_password: z.string().optional(),
   new_password: z.union([z.string().min(8).max(128), z.literal('')]).optional(),
 })
@@ -67,10 +67,14 @@ export async function PATCH(request: NextRequest) {
     let nextAvatarUrl = data.avatar_url?.trim() ? data.avatar_url.trim() : null
 
     if (nextAvatarUrl) {
-      try {
-        nextAvatarUrl = new URL(nextAvatarUrl).toString()
-      } catch {
-        nextAvatarUrl = null
+      if (nextAvatarUrl.startsWith('data:image/')) {
+        nextAvatarUrl = nextAvatarUrl
+      } else {
+        try {
+          nextAvatarUrl = new URL(nextAvatarUrl).toString()
+        } catch {
+          nextAvatarUrl = null
+        }
       }
     }
 
@@ -147,3 +151,4 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update account' }, { status: 500 })
   }
 }
+
