@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail, Monitor, Tablet, Smartphone
+  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail
 } from 'lucide-react'
 import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
 import TeamAccessCard from '@/components/modules/settings/TeamAccessCard'
@@ -108,18 +108,6 @@ export default function SettingsPage() {
   const [showTemplateForm, setShowTemplateForm] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(INITIAL_TEMPLATE_FORM)
-  const [previewMode, setPreviewMode] = useState<SettingsPreviewMode>('desktop')
-
-  const previewClassName = useMemo(() => {
-    switch (previewMode) {
-      case 'mobile':
-        return 'max-w-md'
-      case 'tablet':
-        return 'max-w-3xl'
-      default:
-        return 'max-w-5xl'
-    }
-  }, [previewMode])
 
   useEffect(() => {
     async function loadAccount() {
@@ -367,39 +355,12 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-forge-surface p-4 md:p-8">
-      <div className={`mx-auto space-y-6 transition-all duration-200 ${previewClassName}`}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-forge-text-primary">Settings</h1>
-            <p className="mt-1 text-sm text-forge-text-muted">
-              Manage your account plus reusable nutrition, movement, and habit coaching templates.
-            </p>
-          </div>
-          <div className="self-start rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-2">
-            <div className="flex items-center gap-2">
-              {[
-                { value: 'desktop', label: 'Desktop', icon: Monitor },
-                { value: 'tablet', label: 'Tablet', icon: Tablet },
-                { value: 'mobile', label: 'Mobile', icon: Smartphone },
-              ].map((option) => {
-                const Icon = option.icon
-                const active = previewMode === option.value
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setPreviewMode(option.value as SettingsPreviewMode)}
-                    aria-label={`Preview ${option.label.toLowerCase()} layout`}
-                    title={`Preview ${option.label.toLowerCase()} layout`}
-                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all ${active ? 'bg-forge-gold text-forge-purple-dark' : 'text-forge-text-secondary hover:bg-forge-surface-3 hover:text-forge-text-primary'}`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="hidden sm:inline">{option.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-forge-text-primary">Settings</h1>
+          <p className="mt-1 text-sm text-forge-text-muted">
+            Manage your account plus reusable nutrition, movement, and habit coaching templates.
+          </p>
         </div>
         {loading ? (
           <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">

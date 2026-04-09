@@ -12,8 +12,11 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  Monitor,
   Settings,
+  Smartphone,
   Sparkles,
+  Tablet,
   Users,
   X,
 } from 'lucide-react'
@@ -32,6 +35,16 @@ const bottomItems = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
+type PreviewMode = 'desktop' | 'tablet' | 'mobile'
+
+const PREVIEW_STORAGE_KEY = 'forge-dashboard-preview-mode'
+
+const previewOptions = [
+  { value: 'desktop' as const, label: 'Desktop', icon: Monitor },
+  { value: 'tablet' as const, label: 'Tablet', icon: Tablet },
+  { value: 'mobile' as const, label: 'Mobile', icon: Smartphone },
+]
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -39,10 +52,13 @@ export function Sidebar() {
   const [mounted, setMounted] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop')
 
   useEffect(() => {
     const saved = localStorage.getItem('forge-sidebar-collapsed') === 'true'
+    const storedPreview = localStorage.getItem(PREVIEW_STORAGE_KEY)
     setCollapsed(saved)
+    setPreviewMode(storedPreview === 'tablet' || storedPreview === 'mobile' ? storedPreview : 'desktop')
     setMounted(true)
     if (saved) document.documentElement.setAttribute('data-sidebar', 'collapsed')
   }, [])
@@ -61,6 +77,12 @@ export function Sidebar() {
       document.body.style.overflow = previousOverflow
     }
   }, [mobileOpen])
+
+  function setGlobalPreviewMode(mode: PreviewMode) {
+    setPreviewMode(mode)
+    localStorage.setItem(PREVIEW_STORAGE_KEY, mode)
+    window.dispatchEvent(new CustomEvent('forge-preview-mode-change'))
+  }
 
   function toggle() {
     const next = !collapsed
@@ -82,6 +104,34 @@ export function Sidebar() {
   }
 
   const desktopWidth = !mounted ? 256 : collapsed ? 60 : 256
+
+  function renderPreviewControls(compact: boolean) {
+    return (
+      <div className={`flex rounded-xl border border-forge-border bg-forge-surface-3/60 p-2 ${compact ? 'flex-col items-center gap-2' : 'items-center gap-2'}`}>
+        {previewOptions.map((option) => {
+          const Icon = option.icon
+          const active = previewMode === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setGlobalPreviewMode(option.value)}
+              title={`Preview ${option.label.toLowerCase()} layout`}
+              aria-label={`Preview ${option.label.toLowerCase()} layout`}
+              className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-all ${
+                active
+                  ? 'bg-forge-gold text-forge-purple-dark'
+                  : 'text-forge-text-secondary hover:bg-forge-surface-2 hover:text-forge-text-primary'
+              } ${compact ? 'justify-center' : ''}`}
+            >
+              <Icon className="h-4 w-4 flex-shrink-0" />
+              {!compact && <span>{option.label}</span>}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
 
   function renderNavItems(compact: boolean) {
     return navItems.map((item) => {
@@ -155,8 +205,11 @@ export function Sidebar() {
           )}
         </div>
 
-        <div className={`mt-4 ${collapsed ? 'flex justify-center' : ''}`}>
-          <ThemeToggle compact={collapsed} />
+        <div className={`mt-4 space-y-3 ${collapsed ? 'flex flex-col items-center' : ''}`}>
+          <div className={collapsed ? 'flex justify-center' : ''}>
+            <ThemeToggle compact={collapsed} />
+          </div>
+          {renderPreviewControls(collapsed)}
         </div>
       </div>
 
@@ -281,6 +334,10 @@ export function Sidebar() {
               >
                 <X className="h-5 w-5" />
               </button>
+            </div>
+
+            <div className="border-b border-forge-border px-4 py-4">
+              {renderPreviewControls(false)}
             </div>
 
             <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
