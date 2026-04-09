@@ -48,7 +48,7 @@ const previewOptions = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [mounted, setMounted] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -103,7 +103,7 @@ export function Sidebar() {
     }
   }
 
-  const desktopWidth = !mounted ? 256 : collapsed ? 60 : 256
+  const desktopWidth = !mounted ? 60 : collapsed ? 60 : 256
 
   function renderPreviewControls(compact: boolean) {
     return (
