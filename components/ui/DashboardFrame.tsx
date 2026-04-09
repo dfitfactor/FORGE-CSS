@@ -40,7 +40,7 @@ export function DashboardFrame({ children }: { children: React.ReactNode }) {
 
   const previewClassName =
     previewMode === 'mobile'
-      ? 'w-full max-w-[390px] min-w-[360px] ml-0 mr-auto'
+      ? 'w-full max-w-[390px] ml-0 mr-auto'
       : previewMode === 'tablet'
         ? 'w-full max-w-3xl ml-0 mr-auto'
         : 'w-full max-w-none mx-auto'
