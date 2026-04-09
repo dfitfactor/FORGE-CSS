@@ -30,7 +30,7 @@ export default function PortalLayout({
             style={{
               backgroundColor: 'var(--app-surface)',
               borderBottom: '1px solid var(--app-border)',
-              padding: '16px 24px',
+              padding: '14px 16px',
               boxShadow: 'var(--app-shadow)',
             }}
           >
@@ -39,7 +39,7 @@ export default function PortalLayout({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '16px',
+                gap: '12px',
                 flexWrap: 'wrap',
               }}
             >
@@ -50,14 +50,16 @@ export default function PortalLayout({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  minWidth: 0,
                 }}
               >
                 <span
                   style={{
                     color: 'var(--app-gold)',
                     fontWeight: 'bold',
-                    fontSize: '20px',
-                    letterSpacing: '2px',
+                    fontSize: '18px',
+                    letterSpacing: '1.5px',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   FORGE
@@ -65,16 +67,17 @@ export default function PortalLayout({
                 <span
                   style={{
                     color: 'var(--app-text-muted)',
-                    fontSize: '12px',
+                    fontSize: '11px',
                     letterSpacing: '1px',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   CLIENT PORTAL
                 </span>
               </Link>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ThemeToggle />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto' }}>
+                <ThemeToggle compact />
                 <Link
                   href="/api/portal/auth/signout"
                   style={{
@@ -84,6 +87,7 @@ export default function PortalLayout({
                     border: '1px solid var(--app-border)',
                     borderRadius: '999px',
                     padding: '8px 12px',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   Sign Out
@@ -91,7 +95,16 @@ export default function PortalLayout({
               </div>
             </div>
 
-            <nav style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+            <nav
+              style={{
+                display: 'flex',
+                gap: '10px',
+                flexWrap: 'nowrap',
+                marginTop: '14px',
+                overflowX: 'auto',
+                paddingBottom: '2px',
+              }}
+            >
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -104,6 +117,8 @@ export default function PortalLayout({
                     backgroundColor: 'var(--app-surface-muted)',
                     borderRadius: '999px',
                     padding: '8px 12px',
+                    whiteSpace: 'nowrap',
+                    flex: '0 0 auto',
                   }}
                 >
                   {link.label}
@@ -112,7 +127,7 @@ export default function PortalLayout({
             </nav>
           </header>
 
-          <main style={{ padding: '24px' }}>{children}</main>
+          <main style={{ padding: '16px', maxWidth: '100%' }}>{children}</main>
         </div>
       </body>
     </html>
