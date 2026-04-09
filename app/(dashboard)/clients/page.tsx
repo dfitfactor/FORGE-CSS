@@ -255,14 +255,14 @@ export default function ClientsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-bold text-forge-text-primary">Clients</h1>
             <p className="text-sm text-forge-text-muted mt-0.5">{clients.filter(c => c.status === 'active').length} active · {clients.length} total</p>
           </div>
-          <Link href="/clients/new" className="forge-btn-gold flex items-center gap-2 text-sm">
+          <Link href="/clients/new" className="forge-btn-gold inline-flex w-full items-center justify-center gap-2 text-sm sm:w-auto">
             <Plus size={15} /> New Client
           </Link>
         </div>
@@ -328,7 +328,57 @@ export default function ClientsPage() {
           </div>
         ) : (
           <div className="bg-forge-surface-2 border border-forge-border/70 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="space-y-3 p-3 md:hidden">
+              {filtered.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => router.push(`/clients/${c.id}`)}
+                  className={`w-full rounded-2xl border border-forge-border/70 bg-forge-surface-3/50 p-4 text-left transition-colors hover:bg-forge-surface-3/80 ${c.status !== 'active' ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-forge-text-primary">{c.full_name}</p>
+                      <p className="mt-1 truncate text-xs text-forge-text-muted">{c.email}</p>
+                    </div>
+                    <ArrowRight size={14} className="mt-0.5 flex-shrink-0 text-forge-text-muted/60" />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono uppercase capitalize ${STAGE_COLORS[c.current_stage ?? ''] ?? 'text-forge-text-muted bg-forge-surface-3/70 border-forge-border'}`}>
+                      {c.current_stage ?? '-'}
+                    </span>
+                    <span className="rounded-full border border-forge-border bg-forge-surface-2 px-2 py-0.5 text-[10px] text-forge-text-secondary">
+                      {c.last_session ? new Date(c.last_session).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No recent session'}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-4 gap-2 rounded-xl border border-forge-border/60 bg-forge-surface-2 px-3 py-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-forge-text-muted">BAR</div>
+                      <div className="mt-1"><BIEBar value={c.bar_score} /></div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-forge-text-muted">DBI</div>
+                      <div className="mt-1"><BIEBar value={c.dbi_score} invert /></div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-forge-text-muted">BLI</div>
+                      <div className="mt-1"><BIEBar value={c.bli_score} invert /></div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-forge-text-muted">GPS</div>
+                      <div className="mt-1"><GPSBadge value={c.gps} /></div>
+                    </div>
+                  </div>
+
+                  {c.primary_goal ? (
+                    <p className="mt-3 line-clamp-2 text-xs text-forge-text-muted">{c.primary_goal}</p>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-forge-border/70 bg-forge-surface-3/50">
@@ -393,7 +443,7 @@ export default function ClientsPage() {
                 </tbody>
               </table>
             </div>
-            <div className="px-5 py-3 border-t border-forge-border/60 flex items-center justify-between">
+            <div className="border-t border-forge-border/60 px-4 py-3 text-center flex flex-col gap-2 md:px-5 md:text-left md:flex-row md:items-center md:justify-between">
               <p className="text-xs text-forge-text-primary/25">{filtered.length} client{filtered.length !== 1 ? 's' : ''}</p>
               <p className="text-xs text-forge-text-muted/70 font-mono">Click any row to open client</p>
             </div>

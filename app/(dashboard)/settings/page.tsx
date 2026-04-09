@@ -352,7 +352,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-4 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-forge-text-primary">Settings</h1>
@@ -433,7 +433,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => void handleLogout()} disabled={loggingOut}
                 className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-primary/65 hover:text-forge-text-primary hover:bg-forge-surface-3/70 disabled:opacity-50">
                 {loggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
@@ -451,7 +451,7 @@ export default function SettingsPage() {
         <TeamAccessCard canManage={form.role === 'admin' && form.email.toLowerCase() === 'coach@dfitfactor.com'} currentUserId={form.id} />
 
         <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Templates</p>
               <h2 className="mt-3 text-sm font-semibold text-forge-text-primary">Coach Template Library</h2>
@@ -491,7 +491,7 @@ export default function SettingsPage() {
 
           {showTemplateForm ? (
             <form onSubmit={handleTemplateSave} className="rounded-2xl border border-forge-gold/20 bg-forge-surface-3/60 p-5 space-y-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">
                     {editingTemplateId ? 'Edit Template' : 'Create Template'}
@@ -603,9 +603,9 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {filteredTemplates.map((template) => (
                 <div key={template.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-2 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex flex-wrap gap-2">
                         <p className="text-sm font-semibold text-forge-text-primary">{template.name}</p>
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${
                           template.is_active
@@ -616,12 +616,12 @@ export default function SettingsPage() {
                         </span>
                       </div>
                       {template.description ? <p className="text-sm text-forge-text-secondary">{template.description}</p> : null}
-                      <p className="text-xs text-forge-text-muted">Updated {formatDateTime(template.updated_at)} · Sort {template.sort_order}</p>
+                      <p className="text-xs text-forge-text-muted">Updated {formatDateTime(template.updated_at)} Â· Sort {template.sort_order}</p>
                       <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4 text-xs text-forge-text-primary/60">
                         {template.template_text}
                       </pre>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0">
                       <button type="button" onClick={() => toggleTemplateActive(template)} className="text-forge-text-primary/60 hover:text-forge-text-primary">
                         {template.is_active ? <ToggleRight className="h-6 w-6 text-emerald-400" /> : <ToggleLeft className="h-6 w-6" />}
                       </button>
@@ -647,7 +647,7 @@ export default function SettingsPage() {
         </section>
 
         <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Client Portal</p>
               <h2 className="mt-3 text-sm font-semibold text-forge-text-primary">Portal Login Test</h2>

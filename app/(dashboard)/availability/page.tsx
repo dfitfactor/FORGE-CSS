@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Clock3, Copy, Loader2, Plus, Trash2, X } from 'lucide-react'
@@ -76,7 +76,7 @@ function BookingDetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
       <button className="flex-1" onClick={onClose} aria-label="Close booking details" />
-      <div className="h-full w-full max-w-lg overflow-y-auto border-l border-forge-border bg-forge-surface-2 p-6">
+      <div className="h-full w-full max-w-lg overflow-y-auto border-l border-forge-border bg-forge-surface-2 p-4 md:p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-widest text-forge-text-primary">Booking Details</h2>
@@ -538,7 +538,7 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-forge-surface p-6 md:p-8">
+    <div className="min-h-screen bg-forge-surface p-4 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-forge-text-primary">Availability</h1>
@@ -753,7 +753,7 @@ export default function AvailabilityPage() {
                 ) : null}
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-[160px_1fr_1fr_1.2fr_auto]">
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-[160px_1fr_1fr_1.2fr_auto]">
                 <div>
                   <label className="forge-label">Day</label>
                   <select value={blockedForm.day_of_week} onChange={(event) => setBlockedForm((current) => ({ ...current, day_of_week: Number(event.target.value) }))} className="forge-input">
@@ -783,7 +783,7 @@ export default function AvailabilityPage() {
               <div className="mt-5 space-y-3">
                 {blockedRules.length > 0 ? (
                   blockedRules.map((rule) => (
-                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3">
+                    <div key={rule.id} className="flex flex-col gap-3 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3 text-forge-text-secondary">
                         <Clock3 className="h-4 w-4 text-red-300" />
                         <span>{DAYS[Number(rule.day_of_week)]} · {rule.start_time} - {rule.end_time}</span>
@@ -850,7 +850,7 @@ export default function AvailabilityPage() {
               <div className="mt-5 space-y-3">
                 {blackoutRules.length > 0 ? (
                   blackoutRules.map((rule) => (
-                    <div key={rule.id} className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3">
+                    <div key={rule.id} className="flex flex-col gap-3 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3 text-forge-text-secondary">
                         <Clock3 className="h-4 w-4 text-forge-gold" />
                         <span>{new Date(`${rule.blackout_date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
