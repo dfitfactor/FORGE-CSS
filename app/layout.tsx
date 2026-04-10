@@ -5,8 +5,13 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'FORGË CSS — Client Support System',
-  description: 'FORGË Behavioral Intelligence Platform — Client Support System',
+  title: 'FORGE CSS - Client Support System',
+  description: 'FORGE Behavioral Intelligence Platform - Client Support System',
+  icons: {
+    icon: '/api/branding/icon',
+    shortcut: '/api/branding/icon',
+    apple: '/api/branding/icon',
+  },
 }
 
 const themeScript = `

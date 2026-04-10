@@ -6,7 +6,7 @@ type BrandingChangeDetail = {
   logoUrl?: string | null
 }
 
-const DEFAULT_LOGO_SRC = '/forge-logo.png'
+const DEFAULT_LOGO_SRC = '/Forge-Logo.png'
 
 export function BrandLogoImage({
   alt,

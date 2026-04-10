@@ -460,7 +460,7 @@ export default function SettingsPage() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-3 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-3">
                       <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-forge-purple">
-                        <img src={form.avatar_url || '/forge-logo.png'} alt="Brand logo preview" className="h-9 w-9 object-contain" />
+                        <img src={form.avatar_url || '/Forge-Logo.png'} alt="Brand logo preview" className="h-9 w-9 object-contain" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-forge-text-primary">Upload your logo</p>

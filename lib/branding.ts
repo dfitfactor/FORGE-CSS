@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { ensureCoachSettingsColumns, getCoachSettingsColumnSupport } from '@/lib/coach-settings'
 
-export const DEFAULT_LOGO_SRC = '/forge-logo.png'
+export const DEFAULT_LOGO_SRC = '/Forge-Logo.png'
 
 export async function getBrandLogoUrl(): Promise<string> {
   try {
