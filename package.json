@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:exercise-matcher": "npx ts-node --project tsconfig.scripts.json scripts/test-exercise-reference-matching.ts",
+    "import:yuhonas": "npx ts-node --project tsconfig.scripts.json scripts/import-yuhonas-exercises.ts",
     "db:migrate": "node infrastructure/scripts/migrate.js",
     "db:seed": "node infrastructure/scripts/seed.js",
     "db:reset": "node infrastructure/scripts/reset.js"

@@ -18,3 +18,5 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 GIT
+scripts/data/yuhonas-raw.json
+tsconfig.tsbuildinfo

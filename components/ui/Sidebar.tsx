@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Dumbbell,
   PlugZap,
   LayoutDashboard,
   LayoutGrid,
@@ -34,6 +35,7 @@ const navItems = [
 ]
 
 const bottomItems = [
+  { href: '/exercise-review', label: 'Exercise Review', icon: Dumbbell },
   { href: '/integrations', label: 'Integrations', icon: PlugZap },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]

@@ -1,7 +1,11 @@
 import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
-import { Pool, PoolClient } from 'pg'
+import pg from 'pg'
+import type { PoolClient } from 'pg'
+import { scoreExerciseNamePair } from '../lib/exercise-reference-matching'
+
+const { Pool } = pg
 
 const SOURCE_NAME = 'yuhonas'
 const SOURCE_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json'
@@ -267,29 +271,6 @@ function normalizeRecord(exercise: YuhonasExercise): NormalizedReference {
   }
 }
 
-function toBigrams(value: string) {
-  const normalized = normalizeText(value).toLowerCase()
-  if (normalized.length < 2) return new Set([normalized])
-  const result = new Set<string>()
-  for (let index = 0; index < normalized.length - 1; index += 1) {
-    result.add(normalized.slice(index, index + 2))
-  }
-  return result
-}
-
-function similarityScore(a: string, b: string) {
-  const left = toBigrams(a)
-  const right = toBigrams(b)
-  let matches = 0
-  left.forEach((value) => {
-    if (right.has(value)) matches += 1
-  })
-
-  const denominator = left.size + right.size
-  if (denominator === 0) return 0
-  return (2 * matches) / denominator
-}
-
 async function loadRawExercises() {
   await fs.mkdir(RAW_DATA_DIR, { recursive: true })
 
@@ -428,11 +409,11 @@ function determineMatch(
     }
 
     for (const name of names) {
-      const score = similarityScore(name, reference.displayName)
-      if (score > bestScore) {
+      const scored = scoreExerciseNamePair(name, reference.displayName)
+      if (scored && scored.score > bestScore) {
         bestMatch = exercise
-        bestScore = score
-        bestReason = 'fuzzy_name_match'
+        bestScore = scored.score
+        bestReason = scored.reason
       }
     }
   }
@@ -686,3 +667,4 @@ main().catch((error) => {
   console.error('Yuhonas import failed:', error)
   process.exit(1)
 })
+
