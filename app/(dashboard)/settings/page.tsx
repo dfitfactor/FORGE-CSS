@@ -6,6 +6,7 @@ import {
   Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail, Upload, X
 } from 'lucide-react'
 import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
+import IntegrationsHubCard from '@/components/modules/settings/IntegrationsHubCard'
 import TeamAccessCard from '@/components/modules/settings/TeamAccessCard'
 import { useDashboardPreviewMode } from '@/lib/use-dashboard-preview-mode'
 
@@ -547,6 +548,7 @@ export default function SettingsPage() {
 
         <BusinessHoursCard canEdit={form.role === 'admin'} />
         <TeamAccessCard canManage={form.role === 'admin' && form.email.toLowerCase() === 'coach@dfitfactor.com'} currentUserId={form.id} />
+        <IntegrationsHubCard />
 
         <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -809,6 +811,7 @@ export default function SettingsPage() {
     </div>
   )
 }
+
 
 
 
