@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BadgeDollarSign,
   BriefcaseBusiness,
+  Calculator,
   Calendar,
   CreditCard,
   Mail,
@@ -60,6 +61,15 @@ const INTEGRATIONS: IntegrationItem[] = [
     requirements: ['Provider selection', 'Field mapping', 'Sync rules'],
     notes: 'Best next step will be choosing the CRM provider before wiring connection logic.',
     icon: BriefcaseBusiness,
+  },
+  {
+    name: 'Zoho Books',
+    category: 'Accounting',
+    description: 'Placeholder for invoicing, bookkeeping sync, reconciliation, and financial reporting workflows.',
+    status: 'planned',
+    requirements: ['Zoho Books organization', 'OAuth credentials', 'Invoice and payment mapping'],
+    notes: 'Best fit for accounting visibility once package sales, invoice flows, and alternate payment methods need to reconcile into a single ledger.',
+    icon: Calculator,
   },
   {
     name: 'Fullscript',

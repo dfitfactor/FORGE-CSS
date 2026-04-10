@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
+  Calculator,
   Calendar,
   ChevronLeft,
   ChevronRight,
@@ -35,6 +36,7 @@ const navItems = [
 ]
 
 const bottomItems = [
+  { href: '/accounting', label: 'Accounting', icon: Calculator },
   { href: '/exercise-review', label: 'Exercise Review', icon: Dumbbell },
   { href: '/integrations', label: 'Integrations', icon: PlugZap },
   { href: '/settings', label: 'Settings', icon: Settings },
