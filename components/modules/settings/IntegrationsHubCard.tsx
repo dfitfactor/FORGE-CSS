@@ -7,6 +7,7 @@ import {
   Calendar,
   CreditCard,
   Mail,
+  Pill,
   ShieldCheck,
   Webhook,
 } from 'lucide-react'
@@ -61,13 +62,13 @@ const INTEGRATIONS: IntegrationItem[] = [
     icon: BriefcaseBusiness,
   },
   {
-    name: 'Venmo',
-    category: 'Payments',
-    description: 'Placeholder for manual payment workflows, payment instructions, and coach-side reconciliation.',
+    name: 'Fullscript',
+    category: 'Supplements',
+    description: 'Placeholder for supplement recommendations, dispensary workflows, client orders, and practitioner account sync.',
     status: 'planned',
-    requirements: ['Payment handle', 'Manual receipt flow', 'Coach confirmation'],
-    notes: 'Recommended as an operational payment option rather than a deep recurring billing source.',
-    icon: BadgeDollarSign,
+    requirements: ['Practitioner account', 'Catalog access', 'Client recommendation flow'],
+    notes: 'Best fit for supplement protocol handoff and product fulfillment once provider-level auth and mapping are added.',
+    icon: Pill,
   },
   {
     name: 'PayPal',
@@ -79,6 +80,15 @@ const INTEGRATIONS: IntegrationItem[] = [
     icon: ShieldCheck,
   },
   {
+    name: 'Venmo',
+    category: 'Payments',
+    description: 'Placeholder for manual payment workflows, payment instructions, and coach-side reconciliation.',
+    status: 'planned',
+    requirements: ['Payment handle', 'Manual receipt flow', 'Coach confirmation'],
+    notes: 'Recommended as an operational payment option rather than a deep recurring billing source.',
+    icon: BadgeDollarSign,
+  },
+  {
     name: 'Webhooks & Cron',
     category: 'Automation',
     description: 'Central place for Stripe webhook health, reminder cron status, and system automation checks.',
@@ -88,6 +98,8 @@ const INTEGRATIONS: IntegrationItem[] = [
     icon: Webhook,
   },
 ]
+
+const SORTED_INTEGRATIONS = [...INTEGRATIONS].sort((a, b) => a.name.localeCompare(b.name))
 
 function statusClasses(status: IntegrationStatus) {
   if (status === 'connected') {
@@ -122,7 +134,7 @@ export default function IntegrationsHubCard() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {INTEGRATIONS.map((integration) => {
+        {SORTED_INTEGRATIONS.map((integration) => {
           const Icon = integration.icon
 
           return (
@@ -183,5 +195,3 @@ export default function IntegrationsHubCard() {
     </section>
   )
 }
-
-
