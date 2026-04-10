@@ -1,12 +1,12 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail, Upload, X
+  Loader2, Save, Plus, SquarePen, Trash2, ToggleLeft, ToggleRight, BookTemplate, LogOut, Mail, Upload, X, ArrowUpRight, PlugZap
 } from 'lucide-react'
 import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
-import IntegrationsHubCard from '@/components/modules/settings/IntegrationsHubCard'
 import TeamAccessCard from '@/components/modules/settings/TeamAccessCard'
 import { useDashboardPreviewMode } from '@/lib/use-dashboard-preview-mode'
 
@@ -548,7 +548,31 @@ export default function SettingsPage() {
 
         <BusinessHoursCard canEdit={form.role === 'admin'} />
         <TeamAccessCard canManage={form.role === 'admin' && form.email.toLowerCase() === 'coach@dfitfactor.com'} currentUserId={form.id} />
-        <IntegrationsHubCard />
+
+        <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl border border-forge-gold/20 bg-forge-gold/10 p-3 text-forge-gold">
+                <PlugZap className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Integrations</p>
+                <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Open Integration Hub</h2>
+                <p className="mt-2 text-sm text-forge-text-secondary">
+                  Keep Settings focused on account controls and manage provider connections from the dedicated Integrations page.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/integrations"
+              className="forge-btn-gold inline-flex items-center justify-center gap-2 text-sm"
+            >
+              Open Integrations
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
 
         <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

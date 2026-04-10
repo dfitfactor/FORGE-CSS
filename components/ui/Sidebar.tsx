@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  PlugZap,
   LayoutDashboard,
   LayoutGrid,
   LogOut,
@@ -33,6 +34,7 @@ const navItems = [
 ]
 
 const bottomItems = [
+  { href: '/integrations', label: 'Integrations', icon: PlugZap },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
