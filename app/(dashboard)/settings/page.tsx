@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import BusinessHoursCard from '@/components/modules/settings/BusinessHoursCard'
 import TeamAccessCard from '@/components/modules/settings/TeamAccessCard'
+import { useDashboardPreviewMode } from '@/lib/use-dashboard-preview-mode'
 
 type AccountState = {
   id: string
@@ -153,6 +154,7 @@ export default function SettingsPage() {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(INITIAL_TEMPLATE_FORM)
   const [logoUploading, setLogoUploading] = useState(false)
+  const previewMode = useDashboardPreviewMode()
 
   useEffect(() => {
     async function loadAccount() {
@@ -436,7 +438,7 @@ export default function SettingsPage() {
             {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
             {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">{success}</div> : null}
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className={`grid gap-6 ${previewMode === 'desktop' ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
               <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5 space-y-4">
                 <div>
                   <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Account</p>
@@ -465,7 +467,7 @@ export default function SettingsPage() {
                         <p className="mt-1 text-xs text-forge-text-muted">Used across the dashboard, booking pages, and auth screens.</p>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className={`flex flex-col gap-3 ${previewMode === 'desktop' ? 'sm:flex-row sm:items-center' : ''}`}>
                       <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-forge-border bg-forge-surface-3 px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface">
                         {logoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                         {logoUploading ? 'Processing...' : 'Upload Logo'}
@@ -529,7 +531,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <div className={`flex flex-col-reverse gap-3 ${previewMode === 'desktop' ? 'sm:flex-row sm:justify-end' : ''}`}>
               <button type="button" onClick={() => void handleLogout()} disabled={loggingOut}
                 className="inline-flex items-center gap-2 rounded-xl border border-forge-border px-4 py-2 text-sm text-forge-text-primary/65 hover:text-forge-text-primary hover:bg-forge-surface-3/70 disabled:opacity-50">
                 {loggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
@@ -807,6 +809,8 @@ export default function SettingsPage() {
     </div>
   )
 }
+
+
 
 
 

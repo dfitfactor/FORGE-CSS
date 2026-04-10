@@ -15,6 +15,7 @@ import {
   slugify,
   stageLabel,
 } from '@/lib/booking'
+import { useDashboardPreviewMode } from '@/lib/use-dashboard-preview-mode'
 
 type Service = Record<string, any>
 type Package = Record<string, any>
@@ -32,7 +33,6 @@ type PackageSection = {
   description: string
   stages: string[]
 }
-
 const SERVICE_SECTIONS: ServiceSection[] = [
   {
     id: 'assessments',
@@ -255,6 +255,8 @@ function buildBookingLink(slug: string | null | undefined) {
   return `${getPublicBaseUrl()}/book/${slug}`
 }
 export default function ServicesPage() {
+  const previewMode = useDashboardPreviewMode()
+  const isDesktopPreview = previewMode === 'desktop'
   const [stageOrder, setStageOrder] = useState<string[]>(() =>
     PACKAGE_SECTIONS.flatMap((section) => section.stages)
   )
@@ -581,7 +583,7 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-forge-surface p-4 md:p-8">
+    <div className={`min-h-screen bg-forge-surface ${isDesktopPreview ? 'p-4 md:p-8' : 'p-4'}`}>
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-forge-gold">Services</h1>
@@ -590,9 +592,9 @@ export default function ServicesPage() {
 
         {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div> : null}
 
-        <div className="flex gap-2 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-2">
+        <div className={`rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-2 ${isDesktopPreview ? 'flex gap-2' : 'grid grid-cols-1 gap-2'}`}>
           {(['services', 'packages', 'forms'] as Tab[]).map(item => (
-            <button key={item} onClick={() => setTab(item)} className={`rounded-xl px-4 py-2 text-sm ${tab === item ? 'bg-forge-gold text-forge-purple-dark' : 'text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary'}`}>
+            <button key={item} onClick={() => setTab(item)} className={`rounded-xl px-4 py-2 text-sm ${!isDesktopPreview ? 'w-full' : ''} ${tab === item ? 'bg-forge-gold text-forge-purple-dark' : 'text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary'}`}>
               {item.charAt(0).toUpperCase() + item.slice(1)}
             </button>
           ))}
@@ -602,8 +604,8 @@ export default function ServicesPage() {
 
         {!loading && tab === 'services' ? (
           <div className="space-y-4">
-            <div className="flex justify-end">
-              <button onClick={() => { setServiceEditor({} as Service); setServiceForm({ name: '', slug: '', description: '', duration_minutes: 60, price_dollars: '0.00', category: 'assessment', section: 'assessments', service_type: 'single', booking_type: 'scheduled', required_forms: [], forge_stage: '', is_public: true, sort_order: 0 }) }} className="forge-btn-gold flex items-center gap-2">
+            <div className={`flex ${isDesktopPreview ? 'justify-end' : 'justify-stretch'}`}>
+              <button onClick={() => { setServiceEditor({} as Service); setServiceForm({ name: '', slug: '', description: '', duration_minutes: 60, price_dollars: '0.00', category: 'assessment', section: 'assessments', service_type: 'single', booking_type: 'scheduled', required_forms: [], forge_stage: '', is_public: true, sort_order: 0 }) }} className={`forge-btn-gold flex items-center gap-2 ${isDesktopPreview ? '' : 'w-full justify-center'}`}>
                 <Plus size={15} /> Add Service
               </button>
             </div>
@@ -649,8 +651,8 @@ export default function ServicesPage() {
 
         {!loading && tab === 'packages' ? (
           <div className="space-y-6">
-            <div className="flex justify-end">
-              <button onClick={() => { setPackageEditor({} as Package); setPackageForm({ name: '', slug: '', description: '', session_count: 4, duration_minutes: 60, price_dollars: '0.00', billing_type: 'monthly', billing_period_months: 1, forge_stage: 'foundations', is_public: true, sort_order: 0, included_services: [] }) }} className="forge-btn-gold flex items-center gap-2">
+            <div className={`flex ${isDesktopPreview ? 'justify-end' : 'justify-stretch'}`}>
+              <button onClick={() => { setPackageEditor({} as Package); setPackageForm({ name: '', slug: '', description: '', session_count: 4, duration_minutes: 60, price_dollars: '0.00', billing_type: 'monthly', billing_period_months: 1, forge_stage: 'foundations', is_public: true, sort_order: 0, included_services: [] }) }} className={`forge-btn-gold flex items-center gap-2 ${isDesktopPreview ? '' : 'w-full justify-center'}`}>
                 <Plus size={15} /> Add Package
               </button>
             </div>
@@ -698,7 +700,7 @@ export default function ServicesPage() {
                         </div>
                       </div>
                       {expandedStages[stage] ? (
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-forge-text-primary">{pkg.name}</h3><p className="mt-1 text-sm text-forge-text-muted">{pkg.session_count} sessions</p><p className="mt-2 max-w-xs text-xs text-forge-text-muted">{packageIncludedServicesSummary(pkg.included_services)}</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-xs text-forge-text-secondary">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-forge-gold/20 bg-forge-gold/10 px-2 py-1 text-xs capitalize text-forge-gold">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-xs text-forge-text-secondary">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-forge-text-muted">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-forge-border p-2 text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-forge-border p-2 text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2), included_services: normalizeIncludedServices(pkg.included_services) }) }} className="inline-flex items-center gap-2 rounded-lg border border-forge-border px-3 py-1.5 text-xs text-forge-text-secondary hover:text-forge-text-primary"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
+                        <div className={`grid gap-4 ${isDesktopPreview ? 'md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>{(groupedPackages[stage] ?? []).map((pkg, index, items) => <div key={pkg.id} className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-forge-text-primary">{pkg.name}</h3><p className="mt-1 text-sm text-forge-text-muted">{pkg.session_count} sessions</p><p className="mt-2 max-w-xs text-xs text-forge-text-muted">{packageIncludedServicesSummary(pkg.included_services)}</p></div><Toggle checked={Boolean(pkg.is_active)} onChange={next => void toggleActive('packages', pkg.id, next)} /></div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-xs text-forge-text-secondary">{formatPriceFromCents(pkg.price_cents)}</span><span className="rounded-full border border-forge-gold/20 bg-forge-gold/10 px-2 py-1 text-xs capitalize text-forge-gold">{pkg.billing_type}</span>{pkg.billing_period_months > 1 ? <span className="rounded-full border border-forge-border bg-forge-surface-3/70 px-2 py-1 text-xs text-forge-text-secondary">{pkg.billing_period_months} months</span> : null}</div><div className="mt-5 flex items-center justify-between gap-3"><div className="text-xs text-forge-text-muted">{formatDurationLabel(pkg.duration_minutes)} each</div><div className="flex items-center gap-2"><div className="flex items-center gap-1"><button type="button" disabled={saving || index === 0} onClick={() => void reorderPackage(stage, pkg.id, 'up')} className="rounded-lg border border-forge-border p-2 text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} up`}><ArrowUp size={13} /></button><button type="button" disabled={saving || index === items.length - 1} onClick={() => void reorderPackage(stage, pkg.id, 'down')} className="rounded-lg border border-forge-border p-2 text-forge-text-secondary hover:bg-forge-surface-3/70 hover:text-forge-text-primary disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Move ${pkg.name} down`}><ArrowDown size={13} /></button></div><button onClick={() => { setPackageEditor(pkg); setPackageForm({ ...pkg, price_dollars: (pkg.price_cents / 100).toFixed(2), included_services: normalizeIncludedServices(pkg.included_services) }) }} className="inline-flex items-center gap-2 rounded-lg border border-forge-border px-3 py-1.5 text-xs text-forge-text-secondary hover:text-forge-text-primary"><SquarePen size={13} /> Edit</button></div></div></div>)}</div>
                       ) : null}
                     </section>
                   ))}
@@ -730,7 +732,7 @@ export default function ServicesPage() {
           <div><label className="forge-label">Booking Section</label><select className="forge-input" value={serviceForm.section ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, section: e.target.value || null }))}><option value="">Unassigned</option>{SERVICE_SECTIONS.map(option => <option key={option.id} value={option.id}>{option.title}</option>)}</select></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Booking Type</label><select className="forge-input" value={serviceForm.booking_type ?? 'scheduled'} onChange={e => setServiceForm((c: any) => ({ ...c, booking_type: e.target.value }))}>{BOOKING_TYPES.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div><div><label className="forge-label">Forge Stage</label><select className="forge-input" value={serviceForm.forge_stage ?? ''} onChange={e => setServiceForm((c: any) => ({ ...c, forge_stage: e.target.value }))}><option value="">None</option>{FORGE_STAGE_OPTIONS.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
           <div><label className="forge-label">Required Forms</label><div className="grid grid-cols-2 gap-2 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">{REQUIRED_FORM_TYPES.map(option => <label key={option} className="flex items-center gap-2 text-sm text-forge-text-primary/65"><input type="checkbox" checked={(serviceForm.required_forms ?? []).includes(option)} onChange={() => setServiceForm((c: any) => ({ ...c, required_forms: (c.required_forms ?? []).includes(option) ? c.required_forms.filter((item: string) => item !== option) : [...(c.required_forms ?? []), option] }))} />{stageLabel(option)}</label>)}</div></div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2"><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Public</span><Toggle checked={Boolean(serviceForm.is_public)} onChange={next => setServiceForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={serviceForm.sort_order ?? 0} onChange={e => setServiceForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
+          <div className={`grid grid-cols-1 gap-4 ${isDesktopPreview ? 'md:grid-cols-2' : ''}`}><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Public</span><Toggle checked={Boolean(serviceForm.is_public)} onChange={next => setServiceForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={serviceForm.sort_order ?? 0} onChange={e => setServiceForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
           <button onClick={() => void save('services')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Service'}</button>
         </div>
       </SlideOver>
@@ -743,7 +745,7 @@ export default function ServicesPage() {
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Session Count</label><input className="forge-input" type="number" value={packageForm.session_count ?? 4} onChange={e => setPackageForm((c: any) => ({ ...c, session_count: e.target.value }))} /></div><div><label className="forge-label">Duration (min)</label><input className="forge-input" type="number" value={packageForm.duration_minutes ?? 60} onChange={e => setPackageForm((c: any) => ({ ...c, duration_minutes: e.target.value }))} /></div></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Price ($)</label><input className="forge-input" type="number" step="0.01" value={packageForm.price_dollars ?? '0.00'} onChange={e => setPackageForm((c: any) => ({ ...c, price_dollars: e.target.value }))} /></div><div><label className="forge-label">Billing Type</label><select className="forge-input" value={packageForm.billing_type ?? 'monthly'} onChange={e => setPackageForm((c: any) => ({ ...c, billing_type: e.target.value }))}>{BILLING_TYPES.map(option => <option key={option} value={option}>{option.toUpperCase()}</option>)}</select></div></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="forge-label">Billing Period</label><input className="forge-input" type="number" value={packageForm.billing_period_months ?? 1} onChange={e => setPackageForm((c: any) => ({ ...c, billing_period_months: e.target.value }))} /></div><div><label className="forge-label">Forge Stage</label><select className="forge-input" value={packageForm.forge_stage ?? 'foundations'} onChange={e => setPackageForm((c: any) => ({ ...c, forge_stage: e.target.value }))}>{FORGE_STAGE_OPTIONS.map(option => <option key={option} value={option}>{stageLabel(option)}</option>)}</select></div></div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2"><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Public</span><Toggle checked={Boolean(packageForm.is_public)} onChange={next => setPackageForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={packageForm.sort_order ?? 0} onChange={e => setPackageForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
+          <div className={`grid grid-cols-1 gap-4 ${isDesktopPreview ? 'md:grid-cols-2' : ''}`}><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Public</span><Toggle checked={Boolean(packageForm.is_public)} onChange={next => setPackageForm((c: any) => ({ ...c, is_public: next }))} /></div><div><label className="forge-label">Sort Order</label><input className="forge-input" type="number" value={packageForm.sort_order ?? 0} onChange={e => setPackageForm((c: any) => ({ ...c, sort_order: e.target.value }))} /></div></div>
           <div>
             <label className="forge-label">Included Bookable Sessions</label>
             <div className="space-y-3 rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
@@ -813,7 +815,7 @@ export default function ServicesPage() {
         <div className="space-y-4">
           <label className="forge-label">Name</label><input className="forge-input" value={templateForm.name ?? ''} onChange={e => setTemplateForm((c: any) => ({ ...c, name: e.target.value }))} />
           <label className="forge-label">Description</label><textarea className="forge-input min-h-[100px]" value={templateForm.description ?? ''} onChange={e => setTemplateForm((c: any) => ({ ...c, description: e.target.value }))} />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2"><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Requires Signature</span><Toggle checked={Boolean(templateForm.requires_signature)} onChange={next => setTemplateForm((c: any) => ({ ...c, requires_signature: next }))} /></div><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Active</span><Toggle checked={Boolean(templateForm.is_active)} onChange={next => setTemplateForm((c: any) => ({ ...c, is_active: next }))} /></div></div>
+          <div className={`grid grid-cols-1 gap-4 ${isDesktopPreview ? 'md:grid-cols-2' : ''}`}><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Requires Signature</span><Toggle checked={Boolean(templateForm.requires_signature)} onChange={next => setTemplateForm((c: any) => ({ ...c, requires_signature: next }))} /></div><div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3"><span className="text-sm text-forge-text-primary/65">Is Active</span><Toggle checked={Boolean(templateForm.is_active)} onChange={next => setTemplateForm((c: any) => ({ ...c, is_active: next }))} /></div></div>
           <label className="forge-label">Validity Days</label><input className="forge-input" type="number" value={templateForm.validity_days ?? ''} onChange={e => setTemplateForm((c: any) => ({ ...c, validity_days: e.target.value }))} />
           <label className="forge-label">Fields JSON</label><pre className="overflow-x-auto rounded-xl border border-forge-border/70 bg-forge-surface-3/60 p-4 text-xs text-forge-text-secondary">{templateForm.fields ?? '[]'}</pre>
           <button onClick={() => void save('forms')} disabled={saving} className="forge-btn-gold w-full disabled:opacity-50">{saving ? 'Saving...' : 'Save Template'}</button>
@@ -825,6 +827,7 @@ export default function ServicesPage() {
     </div>
   )
 }
+
 
 
 

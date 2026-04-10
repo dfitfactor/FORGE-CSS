@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Clock3, Copy, Loader2, Plus, Trash2, X } from 'lucide-react'
+import { useDashboardPreviewMode } from '@/lib/use-dashboard-preview-mode'
 
 type AvailabilityRule = {
   id: string
@@ -210,6 +211,8 @@ function isSameDate(dateString: string, date: Date) {
 }
 
 export default function AvailabilityPage() {
+  const previewMode = useDashboardPreviewMode()
+  const isDesktopPreview = previewMode === 'desktop'
   const [rules, setRules] = useState<AvailabilityRule[]>([])
   const [bookings, setBookings] = useState<CoachBooking[]>([])
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(new Date()))
@@ -538,7 +541,7 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-forge-surface p-4 md:p-8">
+    <div className={`min-h-screen bg-forge-surface ${isDesktopPreview ? 'p-4 md:p-8' : 'p-4'}`}>
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-forge-text-primary">Availability</h1>
@@ -565,7 +568,7 @@ export default function AvailabilityPage() {
                 </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className={`grid gap-4 ${isDesktopPreview ? 'md:grid-cols-2 xl:grid-cols-4' : 'grid-cols-1'}`}>
                 {days.map((day, index) => (
                   <div key={DAYS[index]} className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-4">
                     <div className="mb-4 flex items-center justify-between">
@@ -624,13 +627,13 @@ export default function AvailabilityPage() {
               </div>
 
               <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
-                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className={`mb-4 flex flex-col gap-3 ${isDesktopPreview ? 'md:flex-row md:items-end md:justify-between' : ''}`}>
                   <div>
                     <h3 className="text-base font-semibold text-forge-text-primary">Calendar View</h3>
                     <p className="mt-1 text-sm text-forge-text-muted">Preview any week of availability with blocked times, pending requests, and confirmed bookings layered into each day.</p>
                     <p className="mt-2 text-sm font-medium text-forge-text-secondary">{formatWeekRangeLabel(selectedWeekStart)}</p>
                   </div>
-                  <div className="flex flex-col gap-3 md:items-end">
+                  <div className={`flex flex-col gap-3 ${isDesktopPreview ? 'md:items-end' : ''}`}>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -741,7 +744,7 @@ export default function AvailabilityPage() {
             </section>
 
             <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
-              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className={`flex flex-col gap-4 ${isDesktopPreview ? 'md:flex-row md:items-end md:justify-between' : ''}`}>
                 <div>
                   <h2 className="text-lg font-semibold text-forge-text-primary">Blocked Times</h2>
                   <p className="text-sm text-forge-text-muted">Add recurring blocked windows for lunch, meetings, admin time, or anything else that changes by day.</p>
@@ -753,7 +756,7 @@ export default function AvailabilityPage() {
                 ) : null}
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-[160px_1fr_1fr_1.2fr_auto]">
+              <div className={`mt-4 grid gap-4 ${isDesktopPreview ? 'md:grid-cols-2 xl:grid-cols-[160px_1fr_1fr_1.2fr_auto]' : 'grid-cols-1'}`}>
                 <div>
                   <label className="forge-label">Day</label>
                   <select value={blockedForm.day_of_week} onChange={(event) => setBlockedForm((current) => ({ ...current, day_of_week: Number(event.target.value) }))} className="forge-input">
@@ -808,7 +811,7 @@ export default function AvailabilityPage() {
                 <p className="text-sm text-forge-text-muted">Adjust booking buffers and minimum notice for new requests. Master business hours are managed in Settings.</p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className={`grid gap-4 ${isDesktopPreview ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
                 <div>
                   <label className="forge-label">Buffer between appointments</label>
                   <select value={bufferMinutes} onChange={(event) => setBufferMinutes(Number(event.target.value))} className="forge-input">
@@ -833,12 +836,12 @@ export default function AvailabilityPage() {
             </section>
 
             <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
-              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className={`flex flex-col gap-4 ${isDesktopPreview ? 'md:flex-row md:items-end md:justify-between' : ''}`}>
                 <div>
                   <h2 className="text-lg font-semibold text-forge-text-primary">Blackout Dates</h2>
                   <p className="text-sm text-forge-text-muted">Block one-off days from being bookable.</p>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className={`flex flex-col gap-3 ${isDesktopPreview ? 'sm:flex-row' : ''}`}>
                   <input type="date" value={blackoutDate} onChange={(event) => setBlackoutDate(event.target.value)} className="forge-input" />
                   <button onClick={() => void addBlackoutDate()} disabled={saving || !blackoutDate} className="forge-btn-gold inline-flex items-center gap-2 disabled:opacity-50">
                     <Plus size={15} />
@@ -880,6 +883,7 @@ export default function AvailabilityPage() {
     </div>
   )
 }
+
 
 
 

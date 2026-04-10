@@ -7,6 +7,7 @@ import {
   Users, Plus, Search, AlertTriangle, ChevronUp, ChevronDown,
   ArrowRight, Zap, Filter
 } from 'lucide-react'
+import { useDashboardPreviewMode } from '@/lib/use-dashboard-preview-mode'
 
 type Client = {
   id: string
@@ -25,7 +26,6 @@ type Client = {
   snapshot_updated_at: string | null
   last_session: string | null
 }
-
 function getClientInfoScore(client: Client) {
   let score = 0
   if (client.email?.trim()) score += 1
@@ -164,6 +164,8 @@ function PriorityCard({ client }: { client: Client }) {
 type SortKey = 'full_name' | 'current_stage' | 'bar' | 'dbi' | 'bli' | 'gps' | 'last_session'
 
 export default function ClientsPage() {
+  const previewMode = useDashboardPreviewMode()
+  const isDesktopPreview = previewMode === 'desktop'
   const router = useRouter()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -255,14 +257,14 @@ export default function ClientsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-forge-surface p-4 md:p-8">
+    <div className={`min-h-screen bg-forge-surface ${isDesktopPreview ? 'p-4 md:p-8' : 'p-4'}`}>
       <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className={`flex flex-col gap-4 ${isDesktopPreview ? 'sm:flex-row sm:items-center sm:justify-between' : ''}`}>
           <div>
             <h1 className="text-xl font-bold text-forge-text-primary">Clients</h1>
             <p className="text-sm text-forge-text-muted mt-0.5">{clients.filter(c => c.status === 'active').length} active · {clients.length} total</p>
           </div>
-          <Link href="/clients/new" className="forge-btn-gold inline-flex w-full items-center justify-center gap-2 text-sm sm:w-auto">
+          <Link href="/clients/new" className={`forge-btn-gold inline-flex w-full items-center justify-center gap-2 text-sm ${isDesktopPreview ? 'sm:w-auto' : ''}`}>
             <Plus size={15} /> New Client
           </Link>
         </div>
@@ -273,7 +275,7 @@ export default function ClientsPage() {
               <AlertTriangle size={13} className="text-amber-400" />
               <p className="text-xs font-mono uppercase tracking-widest text-amber-400/70">Requires Attention</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className={`grid grid-cols-1 gap-3 ${isDesktopPreview ? 'md:grid-cols-3' : ''}`}>
               {priorityClients.map(c => <PriorityCard key={c.id} client={c} />)}
             </div>
           </div>
@@ -328,7 +330,7 @@ export default function ClientsPage() {
           </div>
         ) : (
           <div className="bg-forge-surface-2 border border-forge-border/70 rounded-2xl overflow-hidden">
-            <div className="space-y-3 p-3 md:hidden">
+            <div className={`space-y-3 p-3 ${isDesktopPreview ? 'md:hidden' : ''}`}>
               {filtered.map((c) => (
                 <button
                   key={c.id}
@@ -378,7 +380,7 @@ export default function ClientsPage() {
                 </button>
               ))}
             </div>
-            <div className="hidden overflow-x-auto md:block">
+            <div className={`overflow-x-auto ${isDesktopPreview ? 'hidden md:block' : 'hidden'}`}>
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-forge-border/70 bg-forge-surface-3/50">
@@ -443,7 +445,7 @@ export default function ClientsPage() {
                 </tbody>
               </table>
             </div>
-            <div className="border-t border-forge-border/60 px-4 py-3 text-center flex flex-col gap-2 md:px-5 md:text-left md:flex-row md:items-center md:justify-between">
+            <div className={`border-t border-forge-border/60 px-4 py-3 text-center flex flex-col gap-2 ${isDesktopPreview ? 'md:px-5 md:text-left md:flex-row md:items-center md:justify-between' : ''}`}>
               <p className="text-xs text-forge-text-primary/25">{filtered.length} client{filtered.length !== 1 ? 's' : ''}</p>
               <p className="text-xs text-forge-text-muted/70 font-mono">Click any row to open client</p>
             </div>
@@ -453,3 +455,4 @@ export default function ClientsPage() {
     </div>
   )
 }
+

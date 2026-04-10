@@ -189,7 +189,7 @@ export function Sidebar() {
 
   const desktopSidebar = (
     <aside
-      className={`${isForcedMobilePreview ? 'hidden' : 'hidden md:flex md:flex-col'} min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200`}
+      className="hidden min-h-screen overflow-hidden border-r border-forge-border bg-forge-surface-2 transition-all duration-200 md:flex md:flex-col"
       style={{ width: desktopWidth, minWidth: desktopWidth, maxWidth: desktopWidth, flex: `0 0 ${desktopWidth}px` }}
     >
       <div className={`${effectiveCollapsed ? 'px-3 py-5' : 'px-6 py-5'} border-b border-forge-border`}>
