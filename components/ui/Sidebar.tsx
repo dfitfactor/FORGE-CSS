@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Clock3,
   Dumbbell,
+  Network,
   PlugZap,
   LayoutDashboard,
   LayoutGrid,
@@ -28,6 +29,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/crm', label: 'CRM', icon: Network },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/services', label: 'Services', icon: LayoutGrid },
   { href: '/bookings', label: 'Bookings', icon: Calendar },

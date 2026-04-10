@@ -54,12 +54,12 @@ const INTEGRATIONS: IntegrationItem[] = [
     icon: Mail,
   },
   {
-    name: 'CRM',
+    name: 'AI-SHA CRM',
     category: 'Operations',
-    description: 'Placeholder for future CRM sync, client mapping, lifecycle updates, and lead handoff.',
+    description: 'Lead capture, follow-up automation, bookings, and prospect conversion before active clients move into FORGE CSS.',
     status: 'planned',
-    requirements: ['Provider selection', 'Field mapping', 'Sync rules'],
-    notes: 'Best next step will be choosing the CRM provider before wiring connection logic.',
+    requirements: ['API key', 'Lead endpoint mapping', 'Conversion handoff rule'],
+    notes: 'Recommended split: AI-SHA CRM owns prospects and nurture, then FORGE CSS becomes the system of record after conversion.',
     icon: BriefcaseBusiness,
   },
   {
