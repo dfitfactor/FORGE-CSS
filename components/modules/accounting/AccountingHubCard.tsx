@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
+  Activity,
   Calculator,
   CheckCircle2,
   CreditCard,
@@ -12,6 +13,7 @@ import {
   Receipt,
   Save,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react'
 
 type IntegrationState = {
@@ -40,6 +42,46 @@ type IntegrationState = {
     inbound_sources: string[]
     first_sync_event: string
     reconciliation_goal: string
+  }
+}
+
+type AccountingSummary = {
+  revenue: {
+    stripe_paid_cents: number
+    stripe_pending_cents: number
+    waived_cents: number
+    package_paid_cents: number
+    package_pending_cents: number
+    known_money_in_cents: number
+    known_pending_cents: number
+  }
+  activity: {
+    paid_booking_count: number
+    pending_booking_count: number
+    waived_booking_count: number
+    active_subscription_count: number
+    grace_period_count: number
+  }
+  integrations: {
+    stripe: {
+      configured: boolean
+      label: string
+    }
+    zoho_books: {
+      configured: boolean
+      enabled: boolean
+      last_test_status: string | null
+      last_test_message: string | null
+      last_tested_at: string | null
+      organization_id: string
+      has_refresh_token: boolean
+      location: string
+    }
+  }
+  reporting: {
+    expenses_available: boolean
+    profit_loss_available: boolean
+    notes: string[]
   }
 }
 
@@ -90,6 +132,10 @@ function formatDateTime(value: string | null) {
   })
 }
 
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
+}
+
 function statusStyles(status: string | null) {
   if (status === 'connected') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
   if (status === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-300'
@@ -122,9 +168,33 @@ function oauthMessage(status: string | null) {
   }
 }
 
+function StatCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  detail: string
+  icon: typeof Wallet
+}) {
+  return (
+    <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">{label}</p>
+      <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{value}</p>
+      <p className="mt-2 text-sm text-forge-text-secondary">{detail}</p>
+    </div>
+  )
+}
+
 export default function AccountingHubCard() {
   const searchParams = useSearchParams()
   const [integration, setIntegration] = useState<IntegrationState | null>(null)
+  const [summary, setSummary] = useState<AccountingSummary | null>(null)
   const [form, setForm] = useState<FormState>({
     display_name: 'FORGE CSS Zoho Books',
     integration_type: 'accounting',
@@ -145,7 +215,6 @@ export default function AccountingHubCard() {
     const zohoStatus = searchParams.get('zoho')
     const message = oauthMessage(zohoStatus)
     if (!message) return
-
     if (message.type === 'success') {
       setSuccess(message.text)
       setError('')
@@ -158,21 +227,26 @@ export default function AccountingHubCard() {
   useEffect(() => {
     let active = true
 
-    async function loadIntegration() {
+    async function loadData() {
       setLoading(true)
 
       try {
-        const res = await fetch('/api/integrations/zoho-books', { cache: 'no-store' })
-        const data = await res.json().catch(() => ({}))
+        const [integrationRes, summaryRes] = await Promise.all([
+          fetch('/api/integrations/zoho-books', { cache: 'no-store' }),
+          fetch('/api/accounting/summary', { cache: 'no-store' }),
+        ])
 
-        if (!res.ok) {
-          throw new Error(data.error ?? 'Failed to load Zoho Books integration')
-        }
+        const integrationData = await integrationRes.json().catch(() => ({}))
+        const summaryData = await summaryRes.json().catch(() => ({}))
+
+        if (!integrationRes.ok) throw new Error(integrationData.error ?? 'Failed to load Zoho Books integration')
+        if (!summaryRes.ok) throw new Error(summaryData.error ?? 'Failed to load accounting summary')
 
         if (!active) return
 
-        const nextIntegration = data.integration as IntegrationState
+        const nextIntegration = integrationData.integration as IntegrationState
         setIntegration(nextIntegration)
+        setSummary(summaryData.summary as AccountingSummary)
         setForm({
           display_name: nextIntegration.display_name,
           integration_type: nextIntegration.integration_type,
@@ -185,18 +259,26 @@ export default function AccountingHubCard() {
         })
       } catch (err: unknown) {
         if (!active) return
-        setError(err instanceof Error ? err.message : 'Failed to load Zoho Books integration')
+        setError(err instanceof Error ? err.message : 'Failed to load accounting workspace')
       } finally {
         if (active) setLoading(false)
       }
     }
 
-    void loadIntegration()
+    void loadData()
 
     return () => {
       active = false
     }
   }, [])
+
+  async function refreshSummary() {
+    const res = await fetch('/api/accounting/summary', { cache: 'no-store' })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setSummary(data.summary as AccountingSummary)
+    }
+  }
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault()
@@ -211,10 +293,7 @@ export default function AccountingHubCard() {
         body: JSON.stringify(form),
       })
       const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(data.error ?? 'Failed to save Zoho Books integration')
-      }
+      if (!res.ok) throw new Error(data.error ?? 'Failed to save Zoho Books integration')
 
       const nextIntegration = data.integration as IntegrationState
       setIntegration(nextIntegration)
@@ -227,6 +306,7 @@ export default function AccountingHubCard() {
         is_enabled: nextIntegration.is_enabled,
       }))
       setSuccess('Zoho Books configuration saved')
+      await refreshSummary()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save Zoho Books integration')
     } finally {
@@ -242,10 +322,7 @@ export default function AccountingHubCard() {
     try {
       const res = await fetch('/api/integrations/zoho-books/test', { method: 'POST' })
       const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(data.error ?? 'Connection test failed')
-      }
+      if (!res.ok) throw new Error(data.error ?? 'Connection test failed')
 
       setIntegration((current) =>
         current
@@ -258,6 +335,7 @@ export default function AccountingHubCard() {
           : current
       )
       setSuccess(data.message ?? 'Connection test completed')
+      await refreshSummary()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Connection test failed')
     } finally {
@@ -269,32 +347,145 @@ export default function AccountingHubCard() {
     return (
       <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">
         <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
-        Loading Zoho Books workspace...
+        Loading accounting dashboard...
       </section>
     )
   }
 
   return (
-    <section className="space-y-5 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
+    <section className="space-y-6 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
       <div className="flex items-start gap-3">
         <div className="rounded-2xl border border-forge-gold/20 bg-forge-gold/10 p-3 text-forge-gold">
           <Calculator className="h-5 w-5" />
         </div>
         <div>
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Accounting</p>
-          <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Zoho Books Workspace</h2>
+          <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Finance Dashboard</h2>
           <p className="mt-2 text-sm text-forge-text-secondary">
-            This is now shaped for Zoho OAuth, not just a generic token field, so you can register the app properly and complete a live server-based connection.
+            This page now works as the dashboard-group finance view: money in, pending collections, integration health, and the Zoho Books configuration workspace all in one place.
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-100">
-        Finance rule: <span className="font-medium">Zoho Books becomes the accounting source of truth</span> while FORGE CSS remains the operations system for bookings, services, and coaching delivery.
-      </div>
-
       {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div> : null}
       {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{success}</div> : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Known Money In"
+          value={formatMoney(summary?.revenue.known_money_in_cents ?? 0)}
+          detail={`${summary?.activity.paid_booking_count ?? 0} paid bookings + ${summary?.activity.active_subscription_count ?? 0} active subscriptions`}
+          icon={Wallet}
+        />
+        <StatCard
+          label="Pending Collections"
+          value={formatMoney(summary?.revenue.known_pending_cents ?? 0)}
+          detail={`${summary?.activity.pending_booking_count ?? 0} unpaid bookings and package balances still outstanding`}
+          icon={Receipt}
+        />
+        <StatCard
+          label="Stripe Revenue"
+          value={formatMoney(summary?.revenue.stripe_paid_cents ?? 0)}
+          detail={summary?.integrations.stripe.label ?? 'Stripe status unavailable'}
+          icon={CreditCard}
+        />
+        <StatCard
+          label="Package Revenue"
+          value={formatMoney(summary?.revenue.package_paid_cents ?? 0)}
+          detail={`${summary?.activity.grace_period_count ?? 0} accounts in grace period`}
+          icon={Activity}
+        />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-forge-text-primary">Financial Visibility</h3>
+              <p className="mt-1 text-sm text-forge-text-secondary">
+                Revenue is live from FORGE-recorded transactions. Profit and money-out remain intentionally blocked until expense data is wired.
+              </p>
+            </div>
+            <span className="rounded-full border border-forge-border bg-forge-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-forge-text-muted">
+              Honest mode
+            </span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Money Out</p>
+              <p className="mt-3 text-2xl font-semibold text-forge-text-primary">Unavailable</p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Zoho expense, bill, or vendor spend data is not connected yet.
+              </p>
+            </div>
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Profit / Loss</p>
+              <p className="mt-3 text-2xl font-semibold text-forge-text-primary">Unavailable</p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Profit requires both money-in and money-out. We only have reliable money-in right now.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Reporting Notes</p>
+            {summary?.reporting.notes.map((note) => (
+              <p key={note} className="text-sm text-forge-text-secondary">
+                {note}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-forge-text-primary">Reconciliation Readiness</h3>
+            <p className="mt-1 text-sm text-forge-text-secondary">
+              This gives you the split between operational revenue in FORGE and ledger readiness in Zoho Books.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-forge-text-primary">Stripe</p>
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                  summary?.integrations.stripe.configured
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border-red-500/30 bg-red-500/10 text-red-300'
+                }`}>
+                  {summary?.integrations.stripe.label ?? 'Unknown'}
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-forge-text-secondary">
+                Revenue tracked in FORGE: {formatMoney(summary?.revenue.stripe_paid_cents ?? 0)}
+              </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Pending Stripe-side collections: {formatMoney(summary?.revenue.stripe_pending_cents ?? 0)}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-forge-text-primary">Zoho Books</p>
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusStyles(summary?.integrations.zoho_books.last_test_status ?? null)}`}>
+                  {statusLabel(summary?.integrations.zoho_books.last_test_status ?? null)}
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-forge-text-secondary">
+                {summary?.integrations.zoho_books.has_refresh_token ? 'Refresh token saved' : 'Refresh token missing'}
+              </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Organization: {summary?.integrations.zoho_books.organization_id || 'Not set'}
+              </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                DC: {summary?.integrations.zoho_books.location || 'Not detected yet'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <form onSubmit={handleSave} className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
@@ -303,30 +494,21 @@ export default function AccountingHubCard() {
               <Landmark className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-forge-text-primary">OAuth Configuration</h3>
+              <h3 className="text-sm font-semibold text-forge-text-primary">Zoho Books OAuth Configuration</h3>
               <p className="mt-1 text-sm text-forge-text-secondary">
-                Save the Zoho app credentials here, then use the authorize button to generate the refresh token on the server.
+                The integrations hub should surface health, but the provider-specific setup still lives here on the accounting dashboard page where the financial work happens.
               </p>
             </div>
           </div>
 
           <div>
             <label className="forge-label">Integration Name</label>
-            <input
-              className="forge-input"
-              value={form.display_name}
-              onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))}
-              placeholder="FORGE CSS Zoho Books"
-            />
+            <input className="forge-input" value={form.display_name} onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))} />
           </div>
 
           <div>
             <label className="forge-label">Integration Type</label>
-            <select
-              className="forge-input"
-              value={form.integration_type}
-              onChange={(event) => setForm((current) => ({ ...current, integration_type: event.target.value }))}
-            >
+            <select className="forge-input" value={form.integration_type} onChange={(event) => setForm((current) => ({ ...current, integration_type: event.target.value }))}>
               <option value="accounting">Accounting</option>
               <option value="finance">Finance</option>
               <option value="other">Other</option>
@@ -335,12 +517,7 @@ export default function AccountingHubCard() {
 
           <div>
             <label className="forge-label">Client ID</label>
-            <input
-              className="forge-input"
-              value={form.client_id}
-              onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
-              placeholder="Zoho OAuth client ID"
-            />
+            <input className="forge-input" value={form.client_id} onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))} />
           </div>
 
           <div>
@@ -352,50 +529,25 @@ export default function AccountingHubCard() {
               onChange={(event) => setForm((current) => ({ ...current, client_secret: event.target.value }))}
               placeholder={integration?.has_client_secret ? integration.client_secret_masked || 'Saved secret on file' : 'Zoho OAuth client secret'}
             />
-            <p className="mt-2 text-xs text-forge-text-muted">
-              {integration?.has_client_secret
-                ? `Saved secret on file: ${integration.client_secret_masked || 'masked'}`
-                : 'No client secret saved yet.'}
-            </p>
           </div>
 
           <div>
             <label className="forge-label">Accounts URL</label>
-            <input
-              type="url"
-              className="forge-input"
-              value={form.accounts_url}
-              onChange={(event) => setForm((current) => ({ ...current, accounts_url: event.target.value }))}
-              placeholder="https://accounts.zoho.com"
-            />
-            <p className="mt-2 text-xs text-forge-text-muted">
-              Use the Zoho accounts domain for your data center if it differs from the U.S. default.
-            </p>
+            <input type="url" className="forge-input" value={form.accounts_url} onChange={(event) => setForm((current) => ({ ...current, accounts_url: event.target.value }))} />
           </div>
 
           <div>
             <label className="forge-label">API Base URL</label>
-            <input
-              type="url"
-              className="forge-input"
-              value={form.base_url}
-              onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
-              placeholder="https://www.zohoapis.com/books/v3"
-            />
+            <input type="url" className="forge-input" value={form.base_url} onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))} />
           </div>
 
           <div>
             <label className="forge-label">Organization ID</label>
-            <input
-              className="forge-input"
-              value={form.organization_id}
-              onChange={(event) => setForm((current) => ({ ...current, organization_id: event.target.value }))}
-              placeholder="Zoho Books organization ID"
-            />
+            <input className="forge-input" value={form.organization_id} onChange={(event) => setForm((current) => ({ ...current, organization_id: event.target.value }))} />
           </div>
 
           <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Redirect URI To Register In Zoho</p>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Redirect URI</p>
             <p className="mt-2 break-all text-sm text-forge-text-primary">{integration?.oauth.redirect_uri}</p>
             <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Scopes</p>
             <p className="mt-2 break-all text-xs text-forge-text-secondary">{integration?.oauth.scopes}</p>
@@ -404,9 +556,7 @@ export default function AccountingHubCard() {
           <div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-2 px-4 py-3">
             <div>
               <p className="text-sm font-medium text-forge-text-primary">Enable this integration</p>
-              <p className="mt-1 text-xs text-forge-text-muted">
-                Enable after the OAuth setup and organization mapping are in place.
-              </p>
+              <p className="mt-1 text-xs text-forge-text-muted">Enable after Zoho OAuth and organization mapping are in place.</p>
             </div>
             <button
               type="button"
@@ -427,10 +577,7 @@ export default function AccountingHubCard() {
               {saving ? 'Saving...' : 'Save Configuration'}
             </button>
 
-            <a
-              href="/api/integrations/zoho-books/oauth/start"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface-2"
-            >
+            <a href="/api/integrations/zoho-books/oauth/start" className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface-2">
               <ShieldCheck className="h-4 w-4" />
               Authorize Zoho Books
             </a>
@@ -448,34 +595,15 @@ export default function AccountingHubCard() {
         </form>
 
         <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-forge-text-primary">Connection Status</h3>
-              <p className="mt-1 text-sm text-forge-text-secondary">
-                This panel tracks whether the server has the pieces it needs to call Zoho Books safely.
-              </p>
-            </div>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusStyles(integration?.last_test_status ?? null)}`}>
-              {statusLabel(integration?.last_test_status ?? null)}
-            </span>
+          <div>
+            <h3 className="text-sm font-semibold text-forge-text-primary">Connection Status</h3>
+            <p className="mt-1 text-sm text-forge-text-secondary">This tracks whether the server has what it needs to talk to Zoho Books reliably.</p>
           </div>
 
           <div className="space-y-3 rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-            <div>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Saved Config</p>
-              <p className="mt-2 text-sm text-forge-text-primary">{integration?.display_name || 'FORGE CSS Zoho Books'}</p>
-              <p className="mt-1 text-sm text-forge-text-secondary">{integration?.base_url || 'No base URL saved yet'}</p>
-            </div>
-
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
-                {integration?.is_enabled ? 'Enabled' : 'Disabled'}
-              </span>
-              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
-                {integration?.client_id ? 'Client ID saved' : 'Client ID missing'}
-              </span>
-              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
-                {integration?.has_client_secret ? 'Client secret saved' : 'Client secret missing'}
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusStyles(integration?.last_test_status ?? null)}`}>
+                {statusLabel(integration?.last_test_status ?? null)}
               </span>
               <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
                 {integration?.has_refresh_token ? 'Refresh token saved' : 'Refresh token missing'}
@@ -486,8 +614,9 @@ export default function AccountingHubCard() {
             </div>
 
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Organization</p>
-              <p className="mt-2 text-sm text-forge-text-primary">{integration?.organization_id || 'No organization ID saved yet'}</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Last Test</p>
+              <p className="mt-2 text-sm text-forge-text-primary">{formatDateTime(integration?.last_tested_at ?? null)}</p>
+              <p className="mt-1 text-sm text-forge-text-secondary">{integration?.last_test_message || 'No connection test recorded yet.'}</p>
             </div>
 
             <div>
@@ -496,43 +625,26 @@ export default function AccountingHubCard() {
             </div>
 
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Last Test</p>
-              <p className="mt-2 text-sm text-forge-text-primary">{formatDateTime(integration?.last_tested_at ?? null)}</p>
-              <p className="mt-1 text-sm text-forge-text-secondary">{integration?.last_test_message || 'No connection test recorded yet.'}</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Organization</p>
+              <p className="mt-2 text-sm text-forge-text-primary">{integration?.organization_id || 'No organization ID saved yet'}</p>
             </div>
           </div>
 
           <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
             <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Finance Sync Plan</p>
             <div className="mt-3 space-y-3">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
-                <p className="text-sm text-forge-text-secondary">
-                  <span className="font-medium text-forge-text-primary">Ledger owner:</span>{' '}
-                  {integration?.finance_scope.primary_ledger ?? 'Zoho Books'}
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
-                <p className="text-sm text-forge-text-secondary">
-                  <span className="font-medium text-forge-text-primary">First sync event:</span>{' '}
-                  {integration?.finance_scope.first_sync_event ?? 'package sale or invoice creation'}
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
-                <p className="text-sm text-forge-text-secondary">
-                  <span className="font-medium text-forge-text-primary">Inbound sources:</span>{' '}
-                  {(integration?.finance_scope.inbound_sources ?? []).join(', ') || 'Stripe, Venmo, PayPal, manual invoices'}
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
-                <p className="text-sm text-forge-text-secondary">
-                  <span className="font-medium text-forge-text-primary">Goal:</span>{' '}
-                  {integration?.finance_scope.reconciliation_goal ?? 'single accounting source of truth'}
-                </p>
-              </div>
+              <p className="text-sm text-forge-text-secondary">
+                <span className="font-medium text-forge-text-primary">Ledger owner:</span> {integration?.finance_scope.primary_ledger ?? 'Zoho Books'}
+              </p>
+              <p className="text-sm text-forge-text-secondary">
+                <span className="font-medium text-forge-text-primary">First sync event:</span> {integration?.finance_scope.first_sync_event ?? 'package sale or invoice creation'}
+              </p>
+              <p className="text-sm text-forge-text-secondary">
+                <span className="font-medium text-forge-text-primary">Inbound sources:</span> {(integration?.finance_scope.inbound_sources ?? []).join(', ') || 'Stripe, Venmo, PayPal, manual invoices'}
+              </p>
+              <p className="text-sm text-forge-text-secondary">
+                <span className="font-medium text-forge-text-primary">Goal:</span> {integration?.finance_scope.reconciliation_goal ?? 'single accounting source of truth'}
+              </p>
             </div>
           </div>
         </div>
