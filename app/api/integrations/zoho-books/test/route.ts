@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, requireRole } from '@/lib/auth'
-import { getIntegrationSetting, recordIntegrationTestResult } from '@/lib/integration-settings'
+import { recordIntegrationTestResult } from '@/lib/integration-settings'
+import { getZohoBooksConfig, refreshZohoAccessToken } from '@/lib/zoho-books'
 
 export async function POST(request: NextRequest) {
   const session = await getSession(request)
@@ -13,33 +14,41 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const setting = await getIntegrationSetting('zoho_books')
-    const config = (setting?.config ?? {}) as { organization_id?: string | null }
+    const config = await getZohoBooksConfig()
 
-    if (!setting?.base_url) {
-      return NextResponse.json({ error: 'Add the Zoho Books base URL first' }, { status: 400 })
+    if (!config.clientId) {
+      return NextResponse.json({ error: 'Add the Zoho client ID first' }, { status: 400 })
     }
 
-    if (!setting.api_key) {
-      return NextResponse.json({ error: 'Add the Zoho Books API key first' }, { status: 400 })
+    if (!config.clientSecret) {
+      return NextResponse.json({ error: 'Add the Zoho client secret first' }, { status: 400 })
     }
 
-    const testUrl = config.organization_id
-      ? `${setting.base_url}/organizations/${config.organization_id}`
-      : setting.base_url
+    if (!config.organizationId) {
+      return NextResponse.json({ error: 'Add the Zoho organization ID first' }, { status: 400 })
+    }
 
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${setting.api_key}`,
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
-    })
+    if (!config.refreshToken) {
+      return NextResponse.json({ error: 'Authorize Zoho Books first to generate a refresh token' }, { status: 400 })
+    }
+
+    const token = await refreshZohoAccessToken(config)
+
+    const response = await fetch(
+      `${token.apiDomain.replace(/\/$/, '')}/books/v3/contacts?organization_id=${encodeURIComponent(config.organizationId)}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token.accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      }
+    )
 
     const message = response.ok
       ? `Connected successfully (${response.status})`
-      : `Connection reached Zoho Books but returned ${response.status}`
+      : `Zoho Books responded with ${response.status}`
 
     await recordIntegrationTestResult({
       providerKey: 'zoho_books',

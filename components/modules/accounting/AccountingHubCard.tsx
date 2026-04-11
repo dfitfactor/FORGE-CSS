@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   Calculator,
   CheckCircle2,
@@ -17,14 +18,22 @@ type IntegrationState = {
   provider_key: string
   display_name: string
   integration_type: string
-  api_key_masked: string
-  has_api_key: boolean
+  client_id: string
+  has_client_secret: boolean
+  client_secret_masked: string
+  has_refresh_token: boolean
+  refresh_token_masked: string
+  accounts_url: string
   base_url: string
   is_enabled: boolean
   organization_id: string
   last_test_status: string | null
   last_test_message: string | null
   last_tested_at: string | null
+  oauth: {
+    redirect_uri: string
+    scopes: string
+  }
   finance_scope: {
     primary_ledger: string
     inbound_sources: string[]
@@ -36,7 +45,9 @@ type IntegrationState = {
 type FormState = {
   display_name: string
   integration_type: string
-  api_key: string
+  client_id: string
+  client_secret: string
+  accounts_url: string
   base_url: string
   organization_id: string
   is_enabled: boolean
@@ -79,14 +90,8 @@ function formatDateTime(value: string | null) {
 }
 
 function statusStyles(status: string | null) {
-  if (status === 'connected') {
-    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-  }
-
-  if (status === 'failed') {
-    return 'border-red-500/30 bg-red-500/10 text-red-300'
-  }
-
+  if (status === 'connected') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  if (status === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-300'
   return 'border-forge-border bg-forge-surface-2 text-forge-text-muted'
 }
 
@@ -96,13 +101,36 @@ function statusLabel(status: string | null) {
   return 'Not tested'
 }
 
+function oauthMessage(status: string | null) {
+  switch (status) {
+    case 'oauth-connected':
+      return { type: 'success' as const, text: 'Zoho Books OAuth connected successfully. Refresh token saved.' }
+    case 'oauth-denied':
+      return { type: 'error' as const, text: 'Zoho authorization was denied before completion.' }
+    case 'invalid-state':
+      return { type: 'error' as const, text: 'Zoho OAuth state validation failed. Start the authorization again.' }
+    case 'missing-client-config':
+      return { type: 'error' as const, text: 'Save the Zoho client ID and client secret before authorizing.' }
+    case 'oauth-start-failed':
+    case 'oauth-failed':
+      return { type: 'error' as const, text: 'Zoho OAuth did not complete. Check the configuration and try again.' }
+    case 'unauthorized':
+      return { type: 'error' as const, text: 'You must be signed in as coach or admin to connect Zoho Books.' }
+    default:
+      return null
+  }
+}
+
 export default function AccountingHubCard() {
+  const searchParams = useSearchParams()
   const [integration, setIntegration] = useState<IntegrationState | null>(null)
   const [form, setForm] = useState<FormState>({
     display_name: 'FORGE CSS Zoho Books',
     integration_type: 'accounting',
-    api_key: '',
-    base_url: '',
+    client_id: '',
+    client_secret: '',
+    accounts_url: 'https://accounts.zoho.com',
+    base_url: 'https://www.zohoapis.com/books/v3',
     organization_id: '',
     is_enabled: false,
   })
@@ -113,11 +141,24 @@ export default function AccountingHubCard() {
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
+    const zohoStatus = searchParams.get('zoho')
+    const message = oauthMessage(zohoStatus)
+    if (!message) return
+
+    if (message.type === 'success') {
+      setSuccess(message.text)
+      setError('')
+    } else {
+      setError(message.text)
+      setSuccess('')
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     let active = true
 
     async function loadIntegration() {
       setLoading(true)
-      setError('')
 
       try {
         const res = await fetch('/api/integrations/zoho-books', { cache: 'no-store' })
@@ -134,8 +175,10 @@ export default function AccountingHubCard() {
         setForm({
           display_name: nextIntegration.display_name,
           integration_type: nextIntegration.integration_type,
-          api_key: '',
-          base_url: nextIntegration.base_url ?? '',
+          client_id: nextIntegration.client_id ?? '',
+          client_secret: '',
+          accounts_url: nextIntegration.accounts_url ?? 'https://accounts.zoho.com',
+          base_url: nextIntegration.base_url ?? 'https://www.zohoapis.com/books/v3',
           organization_id: nextIntegration.organization_id ?? '',
           is_enabled: nextIntegration.is_enabled,
         })
@@ -143,9 +186,7 @@ export default function AccountingHubCard() {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Failed to load Zoho Books integration')
       } finally {
-        if (active) {
-          setLoading(false)
-        }
+        if (active) setLoading(false)
       }
     }
 
@@ -178,9 +219,10 @@ export default function AccountingHubCard() {
       setIntegration(nextIntegration)
       setForm((current) => ({
         ...current,
-        api_key: '',
-        base_url: nextIntegration.base_url ?? '',
-        organization_id: nextIntegration.organization_id ?? '',
+        client_secret: '',
+        accounts_url: nextIntegration.accounts_url ?? current.accounts_url,
+        base_url: nextIntegration.base_url ?? current.base_url,
+        organization_id: nextIntegration.organization_id ?? current.organization_id,
         is_enabled: nextIntegration.is_enabled,
       }))
       setSuccess('Zoho Books configuration saved')
@@ -241,22 +283,17 @@ export default function AccountingHubCard() {
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Accounting</p>
           <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Zoho Books Workspace</h2>
           <p className="mt-2 text-sm text-forge-text-secondary">
-            Set up the accounting shell now so invoice sync, reconciliation, and financial reporting have a clean place to grow when you are ready.
+            This is now shaped for Zoho OAuth, not just a generic token field, so you can register the app properly and complete a live server-based connection.
           </p>
         </div>
       </div>
 
       <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-100">
-        Finance rule: <span className="font-medium">Zoho Books becomes the accounting source of truth</span> while FORGE CSS remains the operations system for services, bookings, and coaching delivery.
+        Finance rule: <span className="font-medium">Zoho Books becomes the accounting source of truth</span> while FORGE CSS remains the operations system for bookings, services, and coaching delivery.
       </div>
 
-      {error ? (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
-      ) : null}
-
-      {success ? (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{success}</div>
-      ) : null}
+      {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div> : null}
+      {success ? <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{success}</div> : null}
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <form onSubmit={handleSave} className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
@@ -265,9 +302,9 @@ export default function AccountingHubCard() {
               <Landmark className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-forge-text-primary">Connection Settings</h3>
+              <h3 className="text-sm font-semibold text-forge-text-primary">OAuth Configuration</h3>
               <p className="mt-1 text-sm text-forge-text-secondary">
-                Save the Zoho Books connection details now, then we can wire invoice and payment mapping without rebuilding the accounting workspace.
+                Save the Zoho app credentials here, then use the authorize button to generate the refresh token on the server.
               </p>
             </div>
           </div>
@@ -296,23 +333,47 @@ export default function AccountingHubCard() {
           </div>
 
           <div>
-            <label className="forge-label">API Key / Token</label>
+            <label className="forge-label">Client ID</label>
+            <input
+              className="forge-input"
+              value={form.client_id}
+              onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
+              placeholder="Zoho OAuth client ID"
+            />
+          </div>
+
+          <div>
+            <label className="forge-label">Client Secret</label>
             <input
               type="password"
               className="forge-input"
-              value={form.api_key}
-              onChange={(event) => setForm((current) => ({ ...current, api_key: event.target.value }))}
-              placeholder={integration?.has_api_key ? integration.api_key_masked || 'Saved token on file' : 'Paste the Zoho Books API token'}
+              value={form.client_secret}
+              onChange={(event) => setForm((current) => ({ ...current, client_secret: event.target.value }))}
+              placeholder={integration?.has_client_secret ? integration.client_secret_masked || 'Saved secret on file' : 'Zoho OAuth client secret'}
             />
             <p className="mt-2 text-xs text-forge-text-muted">
-              {integration?.has_api_key
-                ? `Saved token on file: ${integration.api_key_masked || 'masked'}`
-                : 'No API key saved yet.'}
+              {integration?.has_client_secret
+                ? `Saved secret on file: ${integration.client_secret_masked || 'masked'}`
+                : 'No client secret saved yet.'}
             </p>
           </div>
 
           <div>
-            <label className="forge-label">Base URL</label>
+            <label className="forge-label">Accounts URL</label>
+            <input
+              type="url"
+              className="forge-input"
+              value={form.accounts_url}
+              onChange={(event) => setForm((current) => ({ ...current, accounts_url: event.target.value }))}
+              placeholder="https://accounts.zoho.com"
+            />
+            <p className="mt-2 text-xs text-forge-text-muted">
+              Use the Zoho accounts domain for your data center if it differs from the U.S. default.
+            </p>
+          </div>
+
+          <div>
+            <label className="forge-label">API Base URL</label>
             <input
               type="url"
               className="forge-input"
@@ -330,16 +391,20 @@ export default function AccountingHubCard() {
               onChange={(event) => setForm((current) => ({ ...current, organization_id: event.target.value }))}
               placeholder="Zoho Books organization ID"
             />
-            <p className="mt-2 text-xs text-forge-text-muted">
-              Optional now, but helpful once invoice and ledger mapping starts.
-            </p>
+          </div>
+
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Redirect URI To Register In Zoho</p>
+            <p className="mt-2 break-all text-sm text-forge-text-primary">{integration?.oauth.redirect_uri}</p>
+            <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Scopes</p>
+            <p className="mt-2 break-all text-xs text-forge-text-secondary">{integration?.oauth.scopes}</p>
           </div>
 
           <div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-2 px-4 py-3">
             <div>
               <p className="text-sm font-medium text-forge-text-primary">Enable this integration</p>
               <p className="mt-1 text-xs text-forge-text-muted">
-                Enabling marks Zoho Books as the intended ledger destination for finance workflows.
+                Enable after the OAuth setup and organization mapping are in place.
               </p>
             </div>
             <button
@@ -355,11 +420,19 @@ export default function AccountingHubCard() {
             </button>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button type="submit" disabled={saving} className="forge-btn-gold inline-flex items-center justify-center gap-2 disabled:opacity-50">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {saving ? 'Saving...' : 'Save Configuration'}
             </button>
+
+            <a
+              href="/api/integrations/zoho-books/oauth/start"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface-2"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Authorize Zoho Books
+            </a>
 
             <button
               type="button"
@@ -367,7 +440,7 @@ export default function AccountingHubCard() {
               disabled={testing}
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface-2 disabled:opacity-50"
             >
-              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {testing ? 'Testing...' : 'Test Connection'}
             </button>
           </div>
@@ -378,7 +451,7 @@ export default function AccountingHubCard() {
             <div>
               <h3 className="text-sm font-semibold text-forge-text-primary">Connection Status</h3>
               <p className="mt-1 text-sm text-forge-text-secondary">
-                This keeps the finance shell ready while the exact Zoho Books sync rules come together.
+                This panel tracks whether the server has the pieces it needs to call Zoho Books safely.
               </p>
             </div>
             <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusStyles(integration?.last_test_status ?? null)}`}>
@@ -398,11 +471,19 @@ export default function AccountingHubCard() {
                 {integration?.is_enabled ? 'Enabled' : 'Disabled'}
               </span>
               <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
-                {integration?.has_api_key ? 'API key saved' : 'API key missing'}
+                {integration?.client_id ? 'Client ID saved' : 'Client ID missing'}
               </span>
               <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
-                {integration?.organization_id ? `Org ${integration.organization_id}` : 'Org ID not set'}
+                {integration?.has_client_secret ? 'Client secret saved' : 'Client secret missing'}
               </span>
+              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
+                {integration?.has_refresh_token ? 'Refresh token saved' : 'Refresh token missing'}
+              </span>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Organization</p>
+              <p className="mt-2 text-sm text-forge-text-primary">{integration?.organization_id || 'No organization ID saved yet'}</p>
             </div>
 
             <div>
@@ -451,7 +532,6 @@ export default function AccountingHubCard() {
       <div className="grid gap-4 lg:grid-cols-3">
         {ACCOUNTING_SURFACES.map((surface) => {
           const Icon = surface.icon
-
           return (
             <div key={surface.label} className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
