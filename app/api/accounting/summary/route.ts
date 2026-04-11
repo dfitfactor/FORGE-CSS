@@ -19,6 +19,15 @@ type EnrollmentRevenueRow = {
   grace_period_count: string | null
 }
 
+type MonthlyRevenueRow = {
+  month_label: string
+  sort_month: string
+  booking_paid_cents: string | null
+  booking_pending_cents: string | null
+  package_paid_cents: string | null
+  package_pending_cents: string | null
+}
+
 function toNumber(value: string | null | undefined) {
   return Number(value ?? '0')
 }
@@ -33,7 +42,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [bookingRevenue, enrollmentRevenue, zohoSetting] = await Promise.all([
+    const [bookingRevenue, enrollmentRevenue, monthlyRevenue, zohoSetting] = await Promise.all([
       db.queryOne<BookingRevenueRow>(
         `SELECT
            COALESCE(SUM(
@@ -83,6 +92,68 @@ export async function GET(request: NextRequest) {
            COALESCE(SUM(CASE WHEN subscription_status = 'active' THEN 1 ELSE 0 END), 0)::text AS active_subscription_count,
            COALESCE(SUM(CASE WHEN subscription_status = 'grace_period' THEN 1 ELSE 0 END), 0)::text AS grace_period_count
          FROM package_enrollments`
+      ),
+      db.query<MonthlyRevenueRow>(
+        `WITH months AS (
+           SELECT generate_series(
+             date_trunc('month', CURRENT_DATE) - interval '5 months',
+             date_trunc('month', CURRENT_DATE),
+             interval '1 month'
+           )::date AS month_start
+         ),
+         booking_totals AS (
+           SELECT
+             date_trunc('month', booking_date)::date AS month_start,
+             COALESCE(SUM(
+               CASE
+                 WHEN payment_status = 'paid'
+                 THEN COALESCE(amount_cents, s.price_cents, p.price_cents, 0)
+                 ELSE 0
+               END
+             ), 0)::text AS booking_paid_cents,
+             COALESCE(SUM(
+               CASE
+                 WHEN payment_status = 'unpaid'
+                 THEN COALESCE(amount_cents, s.price_cents, p.price_cents, 0)
+                 ELSE 0
+               END
+             ), 0)::text AS booking_pending_cents
+           FROM bookings b
+           LEFT JOIN services s ON b.service_id = s.id
+           LEFT JOIN packages p ON b.package_id = p.id
+           GROUP BY 1
+         ),
+         package_totals AS (
+           SELECT
+             date_trunc('month', COALESCE(last_renewed_at, billing_cycle_start, created_at))::date AS month_start,
+             COALESCE(SUM(
+               CASE
+                 WHEN COALESCE(payment_status, 'unpaid') = 'paid'
+                 THEN COALESCE(amount_cents, 0)
+                 ELSE 0
+               END
+             ), 0)::text AS package_paid_cents,
+             COALESCE(SUM(
+               CASE
+                 WHEN COALESCE(payment_status, 'unpaid') <> 'paid'
+                 THEN COALESCE(amount_cents, 0)
+                 ELSE 0
+               END
+             ), 0)::text AS package_pending_cents
+           FROM package_enrollments
+           GROUP BY 1
+         )
+         SELECT
+           to_char(months.month_start, 'Mon YYYY') AS month_label,
+           to_char(months.month_start, 'YYYY-MM') AS sort_month,
+           COALESCE(booking_totals.booking_paid_cents, '0') AS booking_paid_cents,
+           COALESCE(booking_totals.booking_pending_cents, '0') AS booking_pending_cents,
+           COALESCE(package_totals.package_paid_cents, '0') AS package_paid_cents,
+           COALESCE(package_totals.package_pending_cents, '0') AS package_pending_cents
+         FROM months
+         LEFT JOIN booking_totals ON booking_totals.month_start = months.month_start
+         LEFT JOIN package_totals ON package_totals.month_start = months.month_start
+         ORDER BY months.month_start`
       ),
       getIntegrationSetting('zoho_books'),
     ])
@@ -135,6 +206,18 @@ export async function GET(request: NextRequest) {
           'Money out and profit/loss stay unavailable until Zoho expense or bill data is wired.',
           'Current revenue totals reflect FORGE-recorded bookings and package enrollments only.',
         ],
+      },
+      charts: {
+        monthly_revenue: monthlyRevenue.map((row) => ({
+          month: row.month_label,
+          sort_month: row.sort_month,
+          booking_paid_cents: toNumber(row.booking_paid_cents),
+          booking_pending_cents: toNumber(row.booking_pending_cents),
+          package_paid_cents: toNumber(row.package_paid_cents),
+          package_pending_cents: toNumber(row.package_pending_cents),
+          total_paid_cents: toNumber(row.booking_paid_cents) + toNumber(row.package_paid_cents),
+          total_pending_cents: toNumber(row.booking_pending_cents) + toNumber(row.package_pending_cents),
+        })),
       },
     }
 
