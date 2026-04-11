@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     const code = request.nextUrl.searchParams.get('code')
     const state = request.nextUrl.searchParams.get('state')
     const error = request.nextUrl.searchParams.get('error')
+    const location = request.nextUrl.searchParams.get('location')
+    const accountsServer = request.nextUrl.searchParams.get('accounts-server')
     const cookieState = request.cookies.get(ZOHO_STATE_COOKIE)?.value
 
     if (error) {
@@ -46,6 +48,9 @@ export async function GET(request: NextRequest) {
 
     const existing = await getIntegrationSetting('zoho_books')
     const existingConfig = (existing?.config ?? {}) as Record<string, unknown>
+    const normalizedAccountsUrl = accountsServer?.trim()
+      ? accountsServer.trim().replace(/\/$/, '')
+      : config.accountsUrl
     const nextBaseUrl = tokens.api_domain
       ? `${tokens.api_domain.replace(/\/$/, '')}/books/v3`
       : config.baseUrl
@@ -59,11 +64,12 @@ export async function GET(request: NextRequest) {
       isEnabled: config.isEnabled,
       config: {
         ...existingConfig,
-        accounts_url: config.accountsUrl,
+        accounts_url: normalizedAccountsUrl,
         client_id: config.clientId,
         client_secret: config.clientSecret,
         organization_id: config.organizationId || existingConfig.organization_id || null,
         refresh_token: tokens.refresh_token || config.refreshToken || existingConfig.refresh_token || null,
+        location: location || tokens.location || existingConfig.location || null,
       },
       actorId: actor.id,
     })

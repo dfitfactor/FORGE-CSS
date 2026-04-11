@@ -10,6 +10,7 @@ export type ZohoBooksConfig = {
   organizationId: string
   accountsUrl: string
   baseUrl: string
+  location: string
   isEnabled: boolean
 }
 
@@ -19,6 +20,8 @@ type ZohoTokenResponse = {
   api_domain?: string
   token_type?: string
   expires_in?: number
+  location?: string
+  accounts_server?: string
   error?: string
   error_description?: string
 }
@@ -44,6 +47,7 @@ export async function getZohoBooksConfig() {
     refresh_token?: string | null
     organization_id?: string | null
     accounts_url?: string | null
+    location?: string | null
   }
 
   return {
@@ -55,6 +59,7 @@ export async function getZohoBooksConfig() {
     organizationId: config.organization_id?.trim() ?? '',
     accountsUrl: config.accounts_url?.trim() || 'https://accounts.zoho.com',
     baseUrl: setting?.base_url?.trim() || 'https://www.zohoapis.com/books/v3',
+    location: config.location?.trim() ?? '',
     isEnabled: setting?.is_enabled ?? false,
   } satisfies ZohoBooksConfig
 }

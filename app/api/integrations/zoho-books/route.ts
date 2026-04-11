@@ -22,6 +22,7 @@ function serializeSetting(setting: Awaited<ReturnType<typeof getIntegrationSetti
     client_id?: string | null
     client_secret?: string | null
     refresh_token?: string | null
+    location?: string | null
   }
 
   return {
@@ -37,6 +38,7 @@ function serializeSetting(setting: Awaited<ReturnType<typeof getIntegrationSetti
     base_url: setting?.base_url ?? 'https://www.zohoapis.com/books/v3',
     is_enabled: setting?.is_enabled ?? false,
     organization_id: config.organization_id ?? '',
+    location: config.location ?? '',
     last_test_status: setting?.last_test_status ?? null,
     last_test_message: setting?.last_test_message ?? null,
     last_tested_at: setting?.last_tested_at ?? null,
@@ -102,6 +104,7 @@ export async function PATCH(request: NextRequest) {
     const existingConfig = (existing?.config ?? {}) as {
       refresh_token?: string | null
       client_secret?: string | null
+      location?: string | null
     }
 
     const setting = await upsertIntegrationSetting({
@@ -117,6 +120,7 @@ export async function PATCH(request: NextRequest) {
         client_id: data.client_id?.trim() || null,
         client_secret: data.client_secret?.trim() || existingConfig.client_secret || null,
         refresh_token: existingConfig.refresh_token || null,
+        location: existingConfig.location || null,
         sync_scope: 'finance_reconciliation_and_invoicing',
       },
       actorId: actor.id,

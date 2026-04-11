@@ -27,6 +27,7 @@ type IntegrationState = {
   base_url: string
   is_enabled: boolean
   organization_id: string
+  location: string
   last_test_status: string | null
   last_test_message: string | null
   last_tested_at: string | null
@@ -479,11 +480,19 @@ export default function AccountingHubCard() {
               <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
                 {integration?.has_refresh_token ? 'Refresh token saved' : 'Refresh token missing'}
               </span>
+              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
+                {integration?.location ? `DC ${integration.location}` : 'DC not detected yet'}
+              </span>
             </div>
 
             <div>
               <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Organization</p>
               <p className="mt-2 text-sm text-forge-text-primary">{integration?.organization_id || 'No organization ID saved yet'}</p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Accounts Server</p>
+              <p className="mt-2 text-sm text-forge-text-primary">{integration?.accounts_url || 'No accounts server saved yet'}</p>
             </div>
 
             <div>
