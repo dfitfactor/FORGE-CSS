@@ -68,11 +68,12 @@ const INTEGRATIONS: IntegrationItem[] = [
   {
     name: 'Zoho Books',
     category: 'Accounting',
-    description: 'Placeholder for invoicing, bookkeeping sync, reconciliation, and financial reporting workflows.',
+    description: 'Accounting workspace for invoicing, bookkeeping sync, reconciliation, and financial reporting workflows.',
     status: 'planned',
     requirements: ['Zoho Books organization', 'OAuth credentials', 'Invoice and payment mapping'],
     notes: 'Best fit for accounting visibility once package sales, invoice flows, and alternate payment methods need to reconcile into a single ledger.',
     icon: Calculator,
+    href: '/accounting',
   },
   {
     name: 'Fullscript',

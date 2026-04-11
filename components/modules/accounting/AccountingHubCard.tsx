@@ -1,37 +1,236 @@
 'use client'
 
-import { ArrowUpRight, Calculator, CreditCard, FileSpreadsheet, Landmark, Receipt } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  Calculator,
+  CheckCircle2,
+  CreditCard,
+  FileSpreadsheet,
+  Landmark,
+  Loader2,
+  Receipt,
+  Save,
+  ShieldCheck,
+} from 'lucide-react'
 
-type AccountingStatus = 'planned' | 'connected'
-
-type AccountingProvider = {
-  name: string
-  status: AccountingStatus
-  description: string
-  capabilities: string[]
-  notes: string
+type IntegrationState = {
+  provider_key: string
+  display_name: string
+  integration_type: string
+  api_key_masked: string
+  has_api_key: boolean
+  base_url: string
+  is_enabled: boolean
+  organization_id: string
+  last_test_status: string | null
+  last_test_message: string | null
+  last_tested_at: string | null
+  finance_scope: {
+    primary_ledger: string
+    inbound_sources: string[]
+    first_sync_event: string
+    reconciliation_goal: string
+  }
 }
 
-const PROVIDERS: AccountingProvider[] = [
+type FormState = {
+  display_name: string
+  integration_type: string
+  api_key: string
+  base_url: string
+  organization_id: string
+  is_enabled: boolean
+}
+
+type AccountingSurface = {
+  label: string
+  description: string
+  icon: typeof Receipt
+}
+
+const ACCOUNTING_SURFACES: AccountingSurface[] = [
   {
-    name: 'Zoho Books',
-    status: 'planned',
-    description: 'Primary accounting placeholder for invoices, bookkeeping sync, payment reconciliation, and reporting.',
-    capabilities: ['Invoice sync', 'Payment reconciliation', 'Ledger mapping', 'Financial reporting'],
-    notes: 'Best fit for a future accounting system of record once package sales, Stripe payments, Venmo, PayPal, and manual invoices need one clean destination.',
+    label: 'Invoices',
+    description: 'Future home for package invoices, manual finance workflows, and billable service tracking.',
+    icon: Receipt,
+  },
+  {
+    label: 'Reconciliation',
+    description: 'Compare Stripe, Venmo, PayPal, and manual collections against one accounting destination.',
+    icon: CreditCard,
+  },
+  {
+    label: 'Reporting',
+    description: 'Reserve space for revenue summaries, payout visibility, and export-ready bookkeeping views.',
+    icon: FileSpreadsheet,
   },
 ]
 
-function statusClasses(status: AccountingStatus) {
-  if (status === 'connected') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-  return 'border-forge-gold/30 bg-forge-gold/10 text-forge-gold'
+function formatDateTime(value: string | null) {
+  if (!value) return 'Never tested'
+
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
-function statusLabel(status: AccountingStatus) {
-  return status === 'connected' ? 'Connected' : 'Placeholder'
+function statusStyles(status: string | null) {
+  if (status === 'connected') {
+    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  }
+
+  if (status === 'failed') {
+    return 'border-red-500/30 bg-red-500/10 text-red-300'
+  }
+
+  return 'border-forge-border bg-forge-surface-2 text-forge-text-muted'
+}
+
+function statusLabel(status: string | null) {
+  if (status === 'connected') return 'Connected'
+  if (status === 'failed') return 'Needs attention'
+  return 'Not tested'
 }
 
 export default function AccountingHubCard() {
+  const [integration, setIntegration] = useState<IntegrationState | null>(null)
+  const [form, setForm] = useState<FormState>({
+    display_name: 'FORGE CSS Zoho Books',
+    integration_type: 'accounting',
+    api_key: '',
+    base_url: '',
+    organization_id: '',
+    is_enabled: false,
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    async function loadIntegration() {
+      setLoading(true)
+      setError('')
+
+      try {
+        const res = await fetch('/api/integrations/zoho-books', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          throw new Error(data.error ?? 'Failed to load Zoho Books integration')
+        }
+
+        if (!active) return
+
+        const nextIntegration = data.integration as IntegrationState
+        setIntegration(nextIntegration)
+        setForm({
+          display_name: nextIntegration.display_name,
+          integration_type: nextIntegration.integration_type,
+          api_key: '',
+          base_url: nextIntegration.base_url ?? '',
+          organization_id: nextIntegration.organization_id ?? '',
+          is_enabled: nextIntegration.is_enabled,
+        })
+      } catch (err: unknown) {
+        if (!active) return
+        setError(err instanceof Error ? err.message : 'Failed to load Zoho Books integration')
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadIntegration()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await fetch('/api/integrations/zoho-books', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Failed to save Zoho Books integration')
+      }
+
+      const nextIntegration = data.integration as IntegrationState
+      setIntegration(nextIntegration)
+      setForm((current) => ({
+        ...current,
+        api_key: '',
+        base_url: nextIntegration.base_url ?? '',
+        organization_id: nextIntegration.organization_id ?? '',
+        is_enabled: nextIntegration.is_enabled,
+      }))
+      setSuccess('Zoho Books configuration saved')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save Zoho Books integration')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTestConnection() {
+    setTesting(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await fetch('/api/integrations/zoho-books/test', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Connection test failed')
+      }
+
+      setIntegration((current) =>
+        current
+          ? {
+              ...current,
+              last_test_status: data.status ?? (data.success ? 'connected' : 'failed'),
+              last_test_message: data.message ?? '',
+              last_tested_at: new Date().toISOString(),
+            }
+          : current
+      )
+      setSuccess(data.message ?? 'Connection test completed')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Connection test failed')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <section className="rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-10 text-center text-forge-text-muted">
+        <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
+        Loading Zoho Books workspace...
+      </section>
+    )
+  }
+
   return (
     <section className="space-y-5 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
       <div className="flex items-start gap-3">
@@ -40,96 +239,229 @@ export default function AccountingHubCard() {
         </div>
         <div>
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Accounting</p>
-          <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Accounting Hub</h2>
+          <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Zoho Books Workspace</h2>
           <p className="mt-2 text-sm text-forge-text-secondary">
-            Centralize invoicing, bookkeeping, reconciliation, payouts, and reporting here. This page is ready for provider-specific accounting logic when you are.
+            Set up the accounting shell now so invoice sync, reconciliation, and financial reporting have a clean place to grow when you are ready.
           </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-100">
+        Finance rule: <span className="font-medium">Zoho Books becomes the accounting source of truth</span> while FORGE CSS remains the operations system for services, bookings, and coaching delivery.
+      </div>
+
+      {error ? (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+      ) : null}
+
+      {success ? (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{success}</div>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <form onSubmit={handleSave} className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-2 text-forge-gold">
+              <Landmark className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-forge-text-primary">Connection Settings</h3>
+              <p className="mt-1 text-sm text-forge-text-secondary">
+                Save the Zoho Books connection details now, then we can wire invoice and payment mapping without rebuilding the accounting workspace.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="forge-label">Integration Name</label>
+            <input
+              className="forge-input"
+              value={form.display_name}
+              onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))}
+              placeholder="FORGE CSS Zoho Books"
+            />
+          </div>
+
+          <div>
+            <label className="forge-label">Integration Type</label>
+            <select
+              className="forge-input"
+              value={form.integration_type}
+              onChange={(event) => setForm((current) => ({ ...current, integration_type: event.target.value }))}
+            >
+              <option value="accounting">Accounting</option>
+              <option value="finance">Finance</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="forge-label">API Key / Token</label>
+            <input
+              type="password"
+              className="forge-input"
+              value={form.api_key}
+              onChange={(event) => setForm((current) => ({ ...current, api_key: event.target.value }))}
+              placeholder={integration?.has_api_key ? integration.api_key_masked || 'Saved token on file' : 'Paste the Zoho Books API token'}
+            />
+            <p className="mt-2 text-xs text-forge-text-muted">
+              {integration?.has_api_key
+                ? `Saved token on file: ${integration.api_key_masked || 'masked'}`
+                : 'No API key saved yet.'}
+            </p>
+          </div>
+
+          <div>
+            <label className="forge-label">Base URL</label>
+            <input
+              type="url"
+              className="forge-input"
+              value={form.base_url}
+              onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
+              placeholder="https://www.zohoapis.com/books/v3"
+            />
+          </div>
+
+          <div>
+            <label className="forge-label">Organization ID</label>
+            <input
+              className="forge-input"
+              value={form.organization_id}
+              onChange={(event) => setForm((current) => ({ ...current, organization_id: event.target.value }))}
+              placeholder="Zoho Books organization ID"
+            />
+            <p className="mt-2 text-xs text-forge-text-muted">
+              Optional now, but helpful once invoice and ledger mapping starts.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-forge-border/70 bg-forge-surface-2 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-forge-text-primary">Enable this integration</p>
+              <p className="mt-1 text-xs text-forge-text-muted">
+                Enabling marks Zoho Books as the intended ledger destination for finance workflows.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForm((current) => ({ ...current, is_enabled: !current.is_enabled }))}
+              className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${
+                form.is_enabled
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-forge-border bg-forge-surface-3 text-forge-text-muted'
+              }`}
+            >
+              {form.is_enabled ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button type="submit" disabled={saving} className="forge-btn-gold inline-flex items-center justify-center gap-2 disabled:opacity-50">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? 'Saving...' : 'Save Configuration'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleTestConnection()}
+              disabled={testing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface-2 disabled:opacity-50"
+            >
+              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              {testing ? 'Testing...' : 'Test Connection'}
+            </button>
+          </div>
+        </form>
+
+        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-forge-text-primary">Connection Status</h3>
+              <p className="mt-1 text-sm text-forge-text-secondary">
+                This keeps the finance shell ready while the exact Zoho Books sync rules come together.
+              </p>
+            </div>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusStyles(integration?.last_test_status ?? null)}`}>
+              {statusLabel(integration?.last_test_status ?? null)}
+            </span>
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Saved Config</p>
+              <p className="mt-2 text-sm text-forge-text-primary">{integration?.display_name || 'FORGE CSS Zoho Books'}</p>
+              <p className="mt-1 text-sm text-forge-text-secondary">{integration?.base_url || 'No base URL saved yet'}</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
+                {integration?.is_enabled ? 'Enabled' : 'Disabled'}
+              </span>
+              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
+                {integration?.has_api_key ? 'API key saved' : 'API key missing'}
+              </span>
+              <span className="rounded-full border border-forge-border bg-forge-surface-3 px-2.5 py-1 text-xs text-forge-text-secondary">
+                {integration?.organization_id ? `Org ${integration.organization_id}` : 'Org ID not set'}
+              </span>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Last Test</p>
+              <p className="mt-2 text-sm text-forge-text-primary">{formatDateTime(integration?.last_tested_at ?? null)}</p>
+              <p className="mt-1 text-sm text-forge-text-secondary">{integration?.last_test_message || 'No connection test recorded yet.'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Finance Sync Plan</p>
+            <div className="mt-3 space-y-3">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
+                <p className="text-sm text-forge-text-secondary">
+                  <span className="font-medium text-forge-text-primary">Ledger owner:</span>{' '}
+                  {integration?.finance_scope.primary_ledger ?? 'Zoho Books'}
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
+                <p className="text-sm text-forge-text-secondary">
+                  <span className="font-medium text-forge-text-primary">First sync event:</span>{' '}
+                  {integration?.finance_scope.first_sync_event ?? 'package sale or invoice creation'}
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
+                <p className="text-sm text-forge-text-secondary">
+                  <span className="font-medium text-forge-text-primary">Inbound sources:</span>{' '}
+                  {(integration?.finance_scope.inbound_sources ?? []).join(', ') || 'Stripe, Venmo, PayPal, manual invoices'}
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-forge-gold" />
+                <p className="text-sm text-forge-text-secondary">
+                  <span className="font-medium text-forge-text-primary">Goal:</span>{' '}
+                  {integration?.finance_scope.reconciliation_goal ?? 'single accounting source of truth'}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
-            <Receipt className="h-4 w-4" />
-          </div>
-          <h3 className="text-sm font-semibold text-forge-text-primary">Invoices</h3>
-          <p className="mt-2 text-sm text-forge-text-secondary">
-            Future home for invoice creation, package billing visibility, and manual invoice posting.
-          </p>
-        </div>
+        {ACCOUNTING_SURFACES.map((surface) => {
+          const Icon = surface.icon
 
-        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
-            <CreditCard className="h-4 w-4" />
-          </div>
-          <h3 className="text-sm font-semibold text-forge-text-primary">Reconciliation</h3>
-          <p className="mt-2 text-sm text-forge-text-secondary">
-            Compare Stripe, Venmo, PayPal, and manual payments against the accounting ledger in one view.
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
-            <FileSpreadsheet className="h-4 w-4" />
-          </div>
-          <h3 className="text-sm font-semibold text-forge-text-primary">Reporting</h3>
-          <p className="mt-2 text-sm text-forge-text-secondary">
-            Reserve space for revenue summaries, outstanding balances, and export-ready finance views.
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-forge-border/70 bg-forge-surface-3/60 px-4 py-3 text-sm text-forge-text-secondary">
-        This area is intentionally separate from the general integrations page so finance workflows can grow without cluttering settings.
-      </div>
-
-      <div className="space-y-4">
-        {PROVIDERS.map((provider) => (
-          <article key={provider.name} className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-2 text-forge-gold">
-                    <Landmark className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-forge-text-primary">{provider.name}</h3>
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusClasses(provider.status)}`}>
-                        {statusLabel(provider.status)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-forge-text-secondary">{provider.description}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {provider.capabilities.map((capability) => (
-                    <span
-                      key={capability}
-                      className="rounded-full border border-forge-border bg-forge-surface-2 px-2.5 py-1 text-xs text-forge-text-secondary"
-                    >
-                      {capability}
-                    </span>
-                  ))}
-                </div>
-
-                <p className="mt-4 text-xs leading-6 text-forge-text-muted">{provider.notes}</p>
+          return (
+            <div key={surface.label} className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
+                <Icon className="h-4 w-4" />
               </div>
-
-              <div className="flex w-full lg:w-auto lg:justify-end">
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface-2 px-4 py-2 text-sm text-forge-text-muted opacity-70 lg:w-auto"
-                >
-                  Configure
-                  <ArrowUpRight className="h-4 w-4" />
-                </button>
-              </div>
+              <h3 className="text-sm font-semibold text-forge-text-primary">{surface.label}</h3>
+              <p className="mt-2 text-sm text-forge-text-secondary">{surface.description}</p>
             </div>
-          </article>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
