@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import {
   ArrowUpRight,
   BadgeDollarSign,
@@ -23,6 +24,7 @@ type IntegrationItem = {
   requirements: string[]
   notes: string
   icon: React.ComponentType<{ className?: string }>
+  href?: string
 }
 
 const INTEGRATIONS: IntegrationItem[] = [
@@ -61,6 +63,7 @@ const INTEGRATIONS: IntegrationItem[] = [
     requirements: ['API key', 'Lead endpoint mapping', 'Conversion handoff rule'],
     notes: 'Recommended split: AI-SHA CRM owns prospects and nurture, then FORGE CSS becomes the system of record after conversion.',
     icon: BriefcaseBusiness,
+    href: '/crm',
   },
   {
     name: 'Zoho Books',
@@ -188,14 +191,24 @@ export default function IntegrationsHubCard() {
                 </div>
 
                 <div className="flex w-full sm:w-auto sm:justify-end">
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface-2 px-4 py-2 text-sm text-forge-text-muted opacity-70 sm:w-auto"
-                  >
-                    Configure
-                    <ArrowUpRight className="h-4 w-4" />
-                  </button>
+                  {integration.href ? (
+                    <Link
+                      href={integration.href}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface-2 px-4 py-2 text-sm text-forge-text-primary transition-all hover:bg-forge-surface sm:w-auto"
+                    >
+                      Configure
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-forge-border bg-forge-surface-2 px-4 py-2 text-sm text-forge-text-muted opacity-70 sm:w-auto"
+                    >
+                      Configure
+                      <ArrowUpRight className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </article>
