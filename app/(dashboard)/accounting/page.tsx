@@ -7,7 +7,7 @@ export default function AccountingPage() {
         <div>
           <h1 className="text-2xl font-semibold text-forge-text-primary">Accounting</h1>
           <p className="mt-1 text-sm text-forge-text-muted">
-            Manage finance system connections, invoice workflows, reconciliation, and reporting from one dedicated workspace.
+            Manage accounting integrations, OAuth credentials, organization mapping, and ledger connection health from one dedicated workspace.
           </p>
         </div>
 

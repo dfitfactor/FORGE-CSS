@@ -21,6 +21,7 @@ import {
   Smartphone,
   Sparkles,
   Tablet,
+  TrendingUp,
   Users,
   X,
 } from 'lucide-react'
@@ -29,6 +30,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/finance', label: 'Finance', icon: TrendingUp },
   { href: '/crm', label: 'CRM', icon: Network },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/services', label: 'Services', icon: LayoutGrid },

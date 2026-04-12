@@ -35,6 +35,7 @@ export function getZohoScopeList() {
     'ZohoBooks.contacts.ALL',
     'ZohoBooks.invoices.ALL',
     'ZohoBooks.customerpayments.ALL',
+    'ZohoBooks.banktransactions.READ',
     'ZohoBooks.settings.READ',
   ].join(',')
 }
