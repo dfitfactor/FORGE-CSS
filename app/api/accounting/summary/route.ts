@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, requireRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { getIntegrationSetting } from '@/lib/integration-settings'
+import { getStripe } from '@/lib/stripe'
 import { fetchZohoBooksJson, getZohoBooksConfig } from '@/lib/zoho-books'
 
 type BookingRevenueRow = {
@@ -47,6 +48,11 @@ type ZohoBankTransactionsResponse = {
   }
 }
 
+type StripeRevenuePoint = {
+  paidCents: number
+  pendingCents: number
+}
+
 type MonthlyFinancePoint = {
   month: string
   sort_month: string
@@ -61,8 +67,31 @@ type MonthlyFinancePoint = {
   profit_cents: number
 }
 
+let cachedBookingColumns: Set<string> | null = null
+let cachedEnrollmentColumns: Set<string> | null = null
+
 function toNumber(value: string | null | undefined) {
   return Number(value ?? '0')
+}
+
+async function getTableColumns(tableName: 'bookings' | 'package_enrollments') {
+  if (tableName === 'bookings' && cachedBookingColumns) return cachedBookingColumns
+  if (tableName === 'package_enrollments' && cachedEnrollmentColumns) return cachedEnrollmentColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = $1`,
+    [tableName]
+  )
+
+  const columns = new Set(rows.map((row) => row.column_name))
+
+  if (tableName === 'bookings') cachedBookingColumns = columns
+  if (tableName === 'package_enrollments') cachedEnrollmentColumns = columns
+
+  return columns
 }
 
 function parseZohoAmount(value: number | string | null | undefined) {
@@ -183,6 +212,77 @@ async function loadZohoBankTransactions() {
   }
 }
 
+async function loadStripeRevenue() {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return {
+      connected: false,
+      paidCents: 0,
+      pendingCents: 0,
+      monthly: new Map<string, StripeRevenuePoint>(),
+      note: 'Stripe secret key is missing, so live Stripe revenue is unavailable.',
+    }
+  }
+
+  const stripe = getStripe()
+  const startDate = new Date()
+  startDate.setMonth(startDate.getMonth() - 5)
+  startDate.setDate(1)
+  startDate.setHours(0, 0, 0, 0)
+
+  const monthly = new Map<string, StripeRevenuePoint>()
+  let paidCents = 0
+  let pendingCents = 0
+  let startingAfter: string | undefined
+  let pageCount = 0
+
+  while (pageCount < 5) {
+    const response = await stripe.paymentIntents.list({
+      limit: 100,
+      created: {
+        gte: Math.floor(startDate.getTime() / 1000),
+      },
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    })
+
+    for (const paymentIntent of response.data) {
+      const createdDate = new Date(paymentIntent.created * 1000)
+      const sortMonth = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`
+      const monthBucket = monthly.get(sortMonth) ?? { paidCents: 0, pendingCents: 0 }
+
+      if (paymentIntent.status === 'succeeded') {
+        paidCents += paymentIntent.amount
+        monthBucket.paidCents += paymentIntent.amount
+      } else if (
+        paymentIntent.status === 'processing' ||
+        paymentIntent.status === 'requires_payment_method' ||
+        paymentIntent.status === 'requires_action' ||
+        paymentIntent.status === 'requires_confirmation'
+      ) {
+        pendingCents += paymentIntent.amount
+        monthBucket.pendingCents += paymentIntent.amount
+      }
+
+      monthly.set(sortMonth, monthBucket)
+    }
+
+    if (!response.has_more || !response.data.length) break
+
+    startingAfter = response.data[response.data.length - 1]?.id
+    pageCount += 1
+  }
+
+  return {
+    connected: true,
+    paidCents,
+    pendingCents,
+    monthly,
+    note:
+      paidCents || pendingCents
+        ? 'Stripe totals are live from recent payment intents.'
+        : 'Stripe is connected, but no recent payment intents were returned for the current six-month window.',
+  }
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession(request)
 
@@ -193,33 +293,72 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [bookingRevenue, enrollmentRevenue, monthlyRevenue, zohoSetting, zohoBanking] = await Promise.all([
+    const [bookingColumns, enrollmentColumns] = await Promise.all([
+      getTableColumns('bookings'),
+      getTableColumns('package_enrollments'),
+    ])
+
+    const bookingAmountSql = bookingColumns.has('amount_cents')
+      ? 'COALESCE(b.amount_cents, s.price_cents, p.price_cents, 0)'
+      : 'COALESCE(s.price_cents, p.price_cents, 0)'
+
+    const bookingPaymentStatusSql = bookingColumns.has('payment_status')
+      ? "COALESCE(b.payment_status, 'unpaid')"
+      : "'unpaid'"
+
+    const bookingMonthSql = bookingColumns.has('booking_date')
+      ? 'date_trunc(\'month\', b.booking_date)::date'
+      : bookingColumns.has('scheduled_at')
+        ? 'date_trunc(\'month\', b.scheduled_at)::date'
+        : 'date_trunc(\'month\', NOW())::date'
+
+    const enrollmentAmountSql = enrollmentColumns.has('amount_cents')
+      ? 'COALESCE(amount_cents, 0)'
+      : '0'
+
+    const enrollmentPaymentStatusSql = enrollmentColumns.has('payment_status')
+      ? "COALESCE(payment_status, 'unpaid')"
+      : "'unpaid'"
+
+    const enrollmentSubscriptionStatusSql = enrollmentColumns.has('subscription_status')
+      ? "COALESCE(subscription_status, 'active')"
+      : "'active'"
+
+    const enrollmentMonthSql = enrollmentColumns.has('last_renewed_at')
+      ? 'date_trunc(\'month\', COALESCE(last_renewed_at, billing_cycle_start, created_at))::date'
+      : enrollmentColumns.has('billing_cycle_start')
+        ? 'date_trunc(\'month\', COALESCE(billing_cycle_start, created_at))::date'
+        : enrollmentColumns.has('created_at')
+          ? 'date_trunc(\'month\', created_at)::date'
+          : 'date_trunc(\'month\', NOW())::date'
+
+    const [bookingRevenue, enrollmentRevenue, monthlyRevenue, zohoSetting, zohoBanking, stripeRevenue] = await Promise.all([
       db.queryOne<BookingRevenueRow>(
         `SELECT
            COALESCE(SUM(
              CASE
-               WHEN b.payment_status = 'paid'
-               THEN COALESCE(b.amount_cents, s.price_cents, p.price_cents, 0)
+               WHEN ${bookingPaymentStatusSql} = 'paid'
+               THEN ${bookingAmountSql}
                ELSE 0
              END
            ), 0)::text AS paid_revenue_cents,
            COALESCE(SUM(
              CASE
-               WHEN b.payment_status = 'unpaid'
-               THEN COALESCE(b.amount_cents, s.price_cents, p.price_cents, 0)
+               WHEN ${bookingPaymentStatusSql} = 'unpaid'
+               THEN ${bookingAmountSql}
                ELSE 0
              END
            ), 0)::text AS pending_revenue_cents,
            COALESCE(SUM(
              CASE
-               WHEN b.payment_status = 'waived'
-               THEN COALESCE(b.amount_cents, s.price_cents, p.price_cents, 0)
+               WHEN ${bookingPaymentStatusSql} = 'waived'
+               THEN ${bookingAmountSql}
                ELSE 0
              END
            ), 0)::text AS waived_revenue_cents,
-           COALESCE(SUM(CASE WHEN b.payment_status = 'paid' THEN 1 ELSE 0 END), 0)::text AS paid_booking_count,
-           COALESCE(SUM(CASE WHEN b.payment_status = 'unpaid' THEN 1 ELSE 0 END), 0)::text AS pending_booking_count,
-           COALESCE(SUM(CASE WHEN b.payment_status = 'waived' THEN 1 ELSE 0 END), 0)::text AS waived_booking_count
+           COALESCE(SUM(CASE WHEN ${bookingPaymentStatusSql} = 'paid' THEN 1 ELSE 0 END), 0)::text AS paid_booking_count,
+           COALESCE(SUM(CASE WHEN ${bookingPaymentStatusSql} = 'unpaid' THEN 1 ELSE 0 END), 0)::text AS pending_booking_count,
+           COALESCE(SUM(CASE WHEN ${bookingPaymentStatusSql} = 'waived' THEN 1 ELSE 0 END), 0)::text AS waived_booking_count
          FROM bookings b
          LEFT JOIN services s ON b.service_id = s.id
          LEFT JOIN packages p ON b.package_id = p.id`
@@ -228,20 +367,20 @@ export async function GET(request: NextRequest) {
         `SELECT
            COALESCE(SUM(
              CASE
-               WHEN COALESCE(payment_status, 'unpaid') = 'paid'
-               THEN COALESCE(amount_cents, 0)
+               WHEN ${enrollmentPaymentStatusSql} = 'paid'
+               THEN ${enrollmentAmountSql}
                ELSE 0
              END
            ), 0)::text AS paid_revenue_cents,
            COALESCE(SUM(
              CASE
-               WHEN COALESCE(payment_status, 'unpaid') <> 'paid'
-               THEN COALESCE(amount_cents, 0)
+               WHEN ${enrollmentPaymentStatusSql} <> 'paid'
+               THEN ${enrollmentAmountSql}
                ELSE 0
              END
            ), 0)::text AS pending_revenue_cents,
-           COALESCE(SUM(CASE WHEN subscription_status = 'active' THEN 1 ELSE 0 END), 0)::text AS active_subscription_count,
-           COALESCE(SUM(CASE WHEN subscription_status = 'grace_period' THEN 1 ELSE 0 END), 0)::text AS grace_period_count
+           COALESCE(SUM(CASE WHEN ${enrollmentSubscriptionStatusSql} = 'active' THEN 1 ELSE 0 END), 0)::text AS active_subscription_count,
+           COALESCE(SUM(CASE WHEN ${enrollmentSubscriptionStatusSql} = 'grace_period' THEN 1 ELSE 0 END), 0)::text AS grace_period_count
          FROM package_enrollments`
       ),
       db.query<MonthlyRevenueRow>(
@@ -254,18 +393,18 @@ export async function GET(request: NextRequest) {
          ),
          booking_totals AS (
            SELECT
-             date_trunc('month', booking_date)::date AS month_start,
+             ${bookingMonthSql} AS month_start,
              COALESCE(SUM(
                CASE
-                 WHEN payment_status = 'paid'
-                 THEN COALESCE(amount_cents, s.price_cents, p.price_cents, 0)
+                 WHEN ${bookingPaymentStatusSql.replaceAll('b.', '')} = 'paid'
+                 THEN ${bookingAmountSql.replaceAll('b.', '')}
                  ELSE 0
                END
              ), 0)::text AS booking_paid_cents,
              COALESCE(SUM(
                CASE
-                 WHEN payment_status = 'unpaid'
-                 THEN COALESCE(amount_cents, s.price_cents, p.price_cents, 0)
+                 WHEN ${bookingPaymentStatusSql.replaceAll('b.', '')} = 'unpaid'
+                 THEN ${bookingAmountSql.replaceAll('b.', '')}
                  ELSE 0
                END
              ), 0)::text AS booking_pending_cents
@@ -276,18 +415,18 @@ export async function GET(request: NextRequest) {
          ),
          package_totals AS (
            SELECT
-             date_trunc('month', COALESCE(last_renewed_at, billing_cycle_start, created_at))::date AS month_start,
+             ${enrollmentMonthSql} AS month_start,
              COALESCE(SUM(
                CASE
-                 WHEN COALESCE(payment_status, 'unpaid') = 'paid'
-                 THEN COALESCE(amount_cents, 0)
+                 WHEN ${enrollmentPaymentStatusSql} = 'paid'
+                 THEN ${enrollmentAmountSql}
                  ELSE 0
                END
              ), 0)::text AS package_paid_cents,
              COALESCE(SUM(
                CASE
-                 WHEN COALESCE(payment_status, 'unpaid') <> 'paid'
-                 THEN COALESCE(amount_cents, 0)
+                 WHEN ${enrollmentPaymentStatusSql} <> 'paid'
+                 THEN ${enrollmentAmountSql}
                  ELSE 0
                END
              ), 0)::text AS package_pending_cents
@@ -318,6 +457,17 @@ export async function GET(request: NextRequest) {
           note: 'Zoho Books could not be read right now, so accounting-side cashflow is temporarily unavailable.',
         }
       }),
+      loadStripeRevenue().catch((error) => {
+        console.error('[accounting/summary] Stripe revenue sync error:', error)
+
+        return {
+          connected: false,
+          paidCents: 0,
+          pendingCents: 0,
+          monthly: new Map<string, StripeRevenuePoint>(),
+          note: 'Stripe could not be read right now, so live Stripe totals are temporarily unavailable.',
+        }
+      }),
     ])
 
     const zohoConfig = (zohoSetting?.config ?? {}) as {
@@ -328,6 +478,7 @@ export async function GET(request: NextRequest) {
 
     const monthlyFinancials: MonthlyFinancePoint[] = monthlyRevenue.map((row) => {
       const zohoMonthly = zohoBanking.monthly.get(row.sort_month) ?? { moneyInCents: 0, moneyOutCents: 0 }
+      const stripeMonthly = stripeRevenue.monthly.get(row.sort_month) ?? { paidCents: 0, pendingCents: 0 }
       const bookingPaid = toNumber(row.booking_paid_cents)
       const packagePaid = toNumber(row.package_paid_cents)
       const bookingPending = toNumber(row.booking_pending_cents)
@@ -340,8 +491,8 @@ export async function GET(request: NextRequest) {
         booking_pending_cents: bookingPending,
         package_paid_cents: packagePaid,
         package_pending_cents: packagePending,
-        total_paid_cents: bookingPaid + packagePaid,
-        total_pending_cents: bookingPending + packagePending,
+        total_paid_cents: stripeMonthly.paidCents || bookingPaid + packagePaid,
+        total_pending_cents: stripeMonthly.pendingCents || bookingPending + packagePending,
         zoho_money_in_cents: zohoMonthly.moneyInCents,
         zoho_money_out_cents: zohoMonthly.moneyOutCents,
         profit_cents: zohoMonthly.moneyInCents - zohoMonthly.moneyOutCents,
@@ -350,8 +501,8 @@ export async function GET(request: NextRequest) {
 
     const summary = {
       revenue: {
-        stripe_paid_cents: toNumber(bookingRevenue?.paid_revenue_cents),
-        stripe_pending_cents: toNumber(bookingRevenue?.pending_revenue_cents),
+        stripe_paid_cents: stripeRevenue.paidCents || toNumber(bookingRevenue?.paid_revenue_cents),
+        stripe_pending_cents: stripeRevenue.pendingCents || toNumber(bookingRevenue?.pending_revenue_cents),
         waived_cents: toNumber(bookingRevenue?.waived_revenue_cents),
         package_paid_cents: toNumber(enrollmentRevenue?.paid_revenue_cents),
         package_pending_cents: toNumber(enrollmentRevenue?.pending_revenue_cents),
@@ -372,8 +523,8 @@ export async function GET(request: NextRequest) {
       },
       integrations: {
         stripe: {
-          configured: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET),
-          label: process.env.STRIPE_SECRET_KEY ? 'Connected' : 'Missing credentials',
+          configured: Boolean(process.env.STRIPE_SECRET_KEY),
+          label: stripeRevenue.connected ? 'Connected' : 'Missing credentials',
         },
         zoho_books: {
           configured: Boolean(zohoSetting),
@@ -390,7 +541,8 @@ export async function GET(request: NextRequest) {
         expenses_available: zohoBanking.connected,
         profit_loss_available: zohoBanking.connected,
         notes: [
-          'Current revenue totals reflect FORGE-recorded bookings and package enrollments only.',
+          'Finance now combines live Stripe totals with FORGE booking/package context and Zoho Books cashflow when available.',
+          stripeRevenue.note,
           zohoBanking.note,
           zohoBanking.connected
             ? 'Profit/Loss is currently based on Zoho Books bank transaction cashflow, not a full accrual accounting close.'

@@ -141,7 +141,7 @@ function ProfitLossHeroCard({
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Profit & Loss</p>
           <h3 className="mt-2 text-lg font-semibold text-forge-text-primary">Topline profitability</h3>
           <p className="mt-2 max-w-2xl text-sm text-forge-text-secondary">
-            This gives you a cashflow-based read on the business using Zoho Books transactions for money in and money out.
+            This gives you a combined finance view with live Stripe revenue and Zoho Books cashflow for money in, money out, and net business movement.
           </p>
         </div>
         <span
@@ -164,7 +164,7 @@ function ProfitLossHeroCard({
           <p className="mt-2 text-sm text-forge-text-secondary">
             {available
               ? 'Calculated from Zoho Books money in minus money out for the current six-month reporting window.'
-              : 'Revenue is already flowing in. We still need a readable Zoho Books cashflow connection before this number becomes trustworthy.'}
+              : 'Stripe revenue is already flowing in. We still need a readable Zoho Books cashflow connection before this number becomes trustworthy.'}
           </p>
         </div>
 
@@ -278,7 +278,7 @@ export default function FinanceDashboardCard() {
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Finance</p>
           <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Revenue And Profitability Dashboard</h2>
           <p className="mt-2 text-sm text-forge-text-secondary">
-            This page is the business view: money in, pending collections, revenue trends, and profitability readiness across FORGE and connected systems.
+            This page is the business view: live Stripe revenue, Zoho Books cashflow, pending collections, revenue trends, and profitability readiness.
           </p>
         </div>
       </div>
@@ -318,7 +318,7 @@ export default function FinanceDashboardCard() {
             <div>
               <h3 className="text-sm font-semibold text-forge-text-primary">Financial Visibility</h3>
               <p className="mt-1 text-sm text-forge-text-secondary">
-                Revenue is live from FORGE-recorded transactions. Profit and money-out remain intentionally blocked until expense data is wired.
+                Stripe and FORGE revenue can be viewed immediately. Profit stays conservative until Zoho Books provides money-out data.
               </p>
             </div>
             <span className="rounded-full border border-forge-border bg-forge-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-forge-text-muted">
@@ -388,7 +388,7 @@ export default function FinanceDashboardCard() {
                 </span>
               </div>
               <p className="mt-3 text-sm text-forge-text-secondary">
-                Revenue tracked in FORGE: {formatMoney(summary?.revenue.stripe_paid_cents ?? 0)}
+                Revenue tracked from live Stripe payments: {formatMoney(summary?.revenue.stripe_paid_cents ?? 0)}
               </p>
               <p className="mt-2 text-sm text-forge-text-secondary">
                 Pending Stripe-side collections: {formatMoney(summary?.revenue.stripe_pending_cents ?? 0)}
