@@ -115,6 +115,59 @@ function StatCard({
   )
 }
 
+function ProfitLossHeroCard({
+  available,
+  revenueCents,
+}: {
+  available: boolean
+  revenueCents: number
+}) {
+  return (
+    <div className="rounded-2xl border border-forge-gold/20 bg-gradient-to-br from-forge-surface-3 via-forge-surface-2 to-forge-surface-3 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Profit & Loss</p>
+          <h3 className="mt-2 text-lg font-semibold text-forge-text-primary">Topline profitability</h3>
+          <p className="mt-2 max-w-2xl text-sm text-forge-text-secondary">
+            This is where net business performance belongs. It will turn live as soon as Zoho money-out data is connected and categorized.
+          </p>
+        </div>
+        <span
+          className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-wide ${
+            available
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              : 'border-forge-gold/30 bg-forge-gold/10 text-forge-gold'
+          }`}
+        >
+          {available ? 'Live' : 'Awaiting expenses'}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Net Profit / Loss</p>
+          <p className="mt-3 text-3xl font-semibold text-forge-text-primary">
+            {available ? '$0.00' : 'Unavailable'}
+          </p>
+          <p className="mt-2 text-sm text-forge-text-secondary">
+            {available
+              ? 'Expense sync is live and profitability is being calculated.'
+              : 'Revenue is already flowing in. We still need Zoho expenses or transaction outflows before this number becomes trustworthy.'}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Revenue Base</p>
+          <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{formatMoney(revenueCents)}</p>
+          <p className="mt-2 text-sm text-forge-text-secondary">
+            Current known money in gives us the top half of the P&L equation.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ChartTooltip({
   active,
   payload,
@@ -188,6 +241,11 @@ export default function FinanceDashboardCard() {
 
   return (
     <section className="space-y-6 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
+      <ProfitLossHeroCard
+        available={summary?.reporting.profit_loss_available ?? false}
+        revenueCents={summary?.revenue.known_money_in_cents ?? 0}
+      />
+
       <div className="flex items-start gap-3">
         <div className="rounded-2xl border border-forge-gold/20 bg-forge-gold/10 p-3 text-forge-gold">
           <Calculator className="h-5 w-5" />
