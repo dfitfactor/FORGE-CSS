@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, requireRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { getIntegrationSetting } from '@/lib/integration-settings'
+import { fetchZohoBooksJson, getZohoBooksConfig } from '@/lib/zoho-books'
 
 type BookingRevenueRow = {
   paid_revenue_cents: string | null
@@ -28,8 +29,158 @@ type MonthlyRevenueRow = {
   package_pending_cents: string | null
 }
 
+type ZohoBankTransaction = {
+  date?: string | null
+  amount?: number | string | null
+  debit_or_credit?: string | null
+  transaction_type?: string | null
+  type?: string | null
+  status?: string | null
+  is_internal_transfer?: boolean | null
+}
+
+type ZohoBankTransactionsResponse = {
+  banktransactions?: ZohoBankTransaction[]
+  page_context?: {
+    has_more_page?: boolean
+    page?: number
+  }
+}
+
+type MonthlyFinancePoint = {
+  month: string
+  sort_month: string
+  booking_paid_cents: number
+  booking_pending_cents: number
+  package_paid_cents: number
+  package_pending_cents: number
+  total_paid_cents: number
+  total_pending_cents: number
+  zoho_money_in_cents: number
+  zoho_money_out_cents: number
+  profit_cents: number
+}
+
 function toNumber(value: string | null | undefined) {
   return Number(value ?? '0')
+}
+
+function parseZohoAmount(value: number | string | null | undefined) {
+  if (typeof value === 'number') return Math.round(value * 100)
+  if (typeof value === 'string') return Math.round(Number(value || '0') * 100)
+  return 0
+}
+
+function classifyZohoTransaction(transaction: ZohoBankTransaction) {
+  const rawType = (transaction.transaction_type || transaction.type || '').toLowerCase().replace(/\s+/g, '_')
+  const direction = (transaction.debit_or_credit || '').toLowerCase()
+  const amountCents = Math.abs(parseZohoAmount(transaction.amount))
+
+  const moneyOutTypes = new Set([
+    'expense',
+    'card_payment',
+    'vendor_payment',
+    'owner_drawings',
+    'bill_payment',
+    'refund',
+    'purchase',
+    'debit',
+    'withdrawal',
+    'service_charge',
+  ])
+
+  const moneyInTypes = new Set([
+    'deposit',
+    'credit',
+    'customer_payment',
+    'sales_without_invoices',
+    'owner_contribution',
+    'interest_income',
+    'other_income',
+    'income',
+  ])
+
+  if (transaction.is_internal_transfer || rawType.includes('transfer')) {
+    return { moneyInCents: 0, moneyOutCents: 0 }
+  }
+
+  if (moneyOutTypes.has(rawType) || direction === 'debit') {
+    return { moneyInCents: 0, moneyOutCents: amountCents }
+  }
+
+  if (moneyInTypes.has(rawType) || direction === 'credit') {
+    return { moneyInCents: amountCents, moneyOutCents: 0 }
+  }
+
+  return { moneyInCents: 0, moneyOutCents: 0 }
+}
+
+async function loadZohoBankTransactions() {
+  const config = await getZohoBooksConfig()
+
+  if (!config.isEnabled || !config.clientId || !config.clientSecret || !config.refreshToken || !config.organizationId) {
+    return {
+      connected: false,
+      moneyInCents: 0,
+      moneyOutCents: 0,
+      monthly: new Map<string, { moneyInCents: number; moneyOutCents: number }>(),
+      note: 'Zoho Books connection is incomplete, so accounting-side cashflow is not available yet.',
+    }
+  }
+
+  const startDate = new Date()
+  startDate.setMonth(startDate.getMonth() - 5)
+  startDate.setDate(1)
+
+  const monthly = new Map<string, { moneyInCents: number; moneyOutCents: number }>()
+  let moneyInCents = 0
+  let moneyOutCents = 0
+  let page = 1
+  let hasMore = true
+
+  while (hasMore && page <= 5) {
+    const response = await fetchZohoBooksJson<ZohoBankTransactionsResponse>(config, '/banktransactions', {
+      page,
+      per_page: 200,
+      date_start: startDate.toISOString().slice(0, 10),
+      date_end: new Date().toISOString().slice(0, 10),
+    })
+
+    const transactions = response.banktransactions ?? []
+
+    for (const transaction of transactions) {
+      const date = transaction.date ? new Date(transaction.date) : null
+      const sortMonth =
+        date && !Number.isNaN(date.getTime())
+          ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+          : null
+
+      const classified = classifyZohoTransaction(transaction)
+      moneyInCents += classified.moneyInCents
+      moneyOutCents += classified.moneyOutCents
+
+      if (sortMonth) {
+        const existing = monthly.get(sortMonth) ?? { moneyInCents: 0, moneyOutCents: 0 }
+        existing.moneyInCents += classified.moneyInCents
+        existing.moneyOutCents += classified.moneyOutCents
+        monthly.set(sortMonth, existing)
+      }
+    }
+
+    hasMore = Boolean(response.page_context?.has_more_page)
+    page += 1
+  }
+
+  return {
+    connected: true,
+    moneyInCents,
+    moneyOutCents,
+    monthly,
+    note:
+      moneyInCents || moneyOutCents
+        ? 'Zoho Books cashflow is live from bank transactions.'
+        : 'Zoho Books is connected, but no recent bank transactions were returned for the current six-month window.',
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -42,7 +193,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [bookingRevenue, enrollmentRevenue, monthlyRevenue, zohoSetting] = await Promise.all([
+    const [bookingRevenue, enrollmentRevenue, monthlyRevenue, zohoSetting, zohoBanking] = await Promise.all([
       db.queryOne<BookingRevenueRow>(
         `SELECT
            COALESCE(SUM(
@@ -156,6 +307,17 @@ export async function GET(request: NextRequest) {
          ORDER BY months.month_start`
       ),
       getIntegrationSetting('zoho_books'),
+      loadZohoBankTransactions().catch((error) => {
+        console.error('[accounting/summary] Zoho banking sync error:', error)
+
+        return {
+          connected: false,
+          moneyInCents: 0,
+          moneyOutCents: 0,
+          monthly: new Map<string, { moneyInCents: number; moneyOutCents: number }>(),
+          note: 'Zoho Books could not be read right now, so accounting-side cashflow is temporarily unavailable.',
+        }
+      }),
     ])
 
     const zohoConfig = (zohoSetting?.config ?? {}) as {
@@ -163,6 +325,28 @@ export async function GET(request: NextRequest) {
       refresh_token?: string | null
       location?: string | null
     }
+
+    const monthlyFinancials: MonthlyFinancePoint[] = monthlyRevenue.map((row) => {
+      const zohoMonthly = zohoBanking.monthly.get(row.sort_month) ?? { moneyInCents: 0, moneyOutCents: 0 }
+      const bookingPaid = toNumber(row.booking_paid_cents)
+      const packagePaid = toNumber(row.package_paid_cents)
+      const bookingPending = toNumber(row.booking_pending_cents)
+      const packagePending = toNumber(row.package_pending_cents)
+
+      return {
+        month: row.month_label,
+        sort_month: row.sort_month,
+        booking_paid_cents: bookingPaid,
+        booking_pending_cents: bookingPending,
+        package_paid_cents: packagePaid,
+        package_pending_cents: packagePending,
+        total_paid_cents: bookingPaid + packagePaid,
+        total_pending_cents: bookingPending + packagePending,
+        zoho_money_in_cents: zohoMonthly.moneyInCents,
+        zoho_money_out_cents: zohoMonthly.moneyOutCents,
+        profit_cents: zohoMonthly.moneyInCents - zohoMonthly.moneyOutCents,
+      }
+    })
 
     const summary = {
       revenue: {
@@ -175,6 +359,9 @@ export async function GET(request: NextRequest) {
           toNumber(bookingRevenue?.paid_revenue_cents) + toNumber(enrollmentRevenue?.paid_revenue_cents),
         known_pending_cents:
           toNumber(bookingRevenue?.pending_revenue_cents) + toNumber(enrollmentRevenue?.pending_revenue_cents),
+        zoho_money_in_cents: zohoBanking.moneyInCents,
+        zoho_money_out_cents: zohoBanking.moneyOutCents,
+        zoho_net_cents: zohoBanking.moneyInCents - zohoBanking.moneyOutCents,
       },
       activity: {
         paid_booking_count: toNumber(bookingRevenue?.paid_booking_count),
@@ -200,24 +387,18 @@ export async function GET(request: NextRequest) {
         },
       },
       reporting: {
-        expenses_available: false,
-        profit_loss_available: false,
+        expenses_available: zohoBanking.connected,
+        profit_loss_available: zohoBanking.connected,
         notes: [
-          'Money out and profit/loss stay unavailable until Zoho expense or bill data is wired.',
           'Current revenue totals reflect FORGE-recorded bookings and package enrollments only.',
+          zohoBanking.note,
+          zohoBanking.connected
+            ? 'Profit/Loss is currently based on Zoho Books bank transaction cashflow, not a full accrual accounting close.'
+            : 'Connect and test Zoho Books to unlock accounting-side money in, money out, and profit/loss.',
         ],
       },
       charts: {
-        monthly_revenue: monthlyRevenue.map((row) => ({
-          month: row.month_label,
-          sort_month: row.sort_month,
-          booking_paid_cents: toNumber(row.booking_paid_cents),
-          booking_pending_cents: toNumber(row.booking_pending_cents),
-          package_paid_cents: toNumber(row.package_paid_cents),
-          package_pending_cents: toNumber(row.package_pending_cents),
-          total_paid_cents: toNumber(row.booking_paid_cents) + toNumber(row.package_paid_cents),
-          total_pending_cents: toNumber(row.booking_pending_cents) + toNumber(row.package_pending_cents),
-        })),
+        monthly_revenue: monthlyFinancials,
       },
     }
 

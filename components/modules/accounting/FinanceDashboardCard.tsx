@@ -29,6 +29,9 @@ type AccountingSummary = {
     package_pending_cents: number
     known_money_in_cents: number
     known_pending_cents: number
+    zoho_money_in_cents: number
+    zoho_money_out_cents: number
+    zoho_net_cents: number
   }
   activity: {
     paid_booking_count: number
@@ -68,6 +71,9 @@ type AccountingSummary = {
       package_pending_cents: number
       total_paid_cents: number
       total_pending_cents: number
+      zoho_money_in_cents: number
+      zoho_money_out_cents: number
+      profit_cents: number
     }>
   }
 }
@@ -117,11 +123,17 @@ function StatCard({
 
 function ProfitLossHeroCard({
   available,
+  profitCents,
   revenueCents,
+  expenseCents,
 }: {
   available: boolean
+  profitCents: number
   revenueCents: number
+  expenseCents: number
 }) {
+  const isProfit = profitCents >= 0
+
   return (
     <div className="rounded-2xl border border-forge-gold/20 bg-gradient-to-br from-forge-surface-3 via-forge-surface-2 to-forge-surface-3 p-5">
       <div className="flex items-start justify-between gap-4">
@@ -129,7 +141,7 @@ function ProfitLossHeroCard({
           <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Profit & Loss</p>
           <h3 className="mt-2 text-lg font-semibold text-forge-text-primary">Topline profitability</h3>
           <p className="mt-2 max-w-2xl text-sm text-forge-text-secondary">
-            This is where net business performance belongs. It will turn live as soon as Zoho money-out data is connected and categorized.
+            This gives you a cashflow-based read on the business using Zoho Books transactions for money in and money out.
           </p>
         </div>
         <span
@@ -139,29 +151,39 @@ function ProfitLossHeroCard({
               : 'border-forge-gold/30 bg-forge-gold/10 text-forge-gold'
           }`}
         >
-          {available ? 'Live' : 'Awaiting expenses'}
+          {available ? 'Live' : 'Awaiting Zoho cashflow'}
         </span>
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
           <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Net Profit / Loss</p>
-          <p className="mt-3 text-3xl font-semibold text-forge-text-primary">
-            {available ? '$0.00' : 'Unavailable'}
+          <p className={`mt-3 text-3xl font-semibold ${available ? (isProfit ? 'text-emerald-300' : 'text-red-300') : 'text-forge-text-primary'}`}>
+            {available ? formatMoney(profitCents) : 'Unavailable'}
           </p>
           <p className="mt-2 text-sm text-forge-text-secondary">
             {available
-              ? 'Expense sync is live and profitability is being calculated.'
-              : 'Revenue is already flowing in. We still need Zoho expenses or transaction outflows before this number becomes trustworthy.'}
+              ? 'Calculated from Zoho Books money in minus money out for the current six-month reporting window.'
+              : 'Revenue is already flowing in. We still need a readable Zoho Books cashflow connection before this number becomes trustworthy.'}
           </p>
         </div>
 
-        <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Revenue Base</p>
-          <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{formatMoney(revenueCents)}</p>
-          <p className="mt-2 text-sm text-forge-text-secondary">
-            Current known money in gives us the top half of the P&L equation.
-          </p>
+        <div className="grid gap-4">
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Zoho Money In</p>
+            <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{formatMoney(revenueCents)}</p>
+            <p className="mt-2 text-sm text-forge-text-secondary">
+              Accounting-side inflows from Zoho Books bank transactions.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Zoho Money Out</p>
+            <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{formatMoney(expenseCents)}</p>
+            <p className="mt-2 text-sm text-forge-text-secondary">
+              Accounting-side outflows and expense activity from Zoho Books.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -243,7 +265,9 @@ export default function FinanceDashboardCard() {
     <section className="space-y-6 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
       <ProfitLossHeroCard
         available={summary?.reporting.profit_loss_available ?? false}
-        revenueCents={summary?.revenue.known_money_in_cents ?? 0}
+        profitCents={summary?.revenue.zoho_net_cents ?? 0}
+        revenueCents={summary?.revenue.zoho_money_in_cents ?? 0}
+        expenseCents={summary?.revenue.zoho_money_out_cents ?? 0}
       />
 
       <div className="flex items-start gap-3">
@@ -275,14 +299,14 @@ export default function FinanceDashboardCard() {
           icon={Receipt}
         />
         <StatCard
-          label="Stripe Revenue"
-          value={formatMoney(summary?.revenue.stripe_paid_cents ?? 0)}
-          detail={summary?.integrations.stripe.label ?? 'Stripe status unavailable'}
+          label="Zoho Money In"
+          value={formatMoney(summary?.revenue.zoho_money_in_cents ?? 0)}
+          detail={summary?.integrations.zoho_books.last_test_status === 'connected' ? 'Live from Zoho Books' : 'Waiting on Zoho data'}
           icon={CreditCard}
         />
         <StatCard
-          label="Package Revenue"
-          value={formatMoney(summary?.revenue.package_paid_cents ?? 0)}
+          label="Zoho Money Out"
+          value={formatMoney(summary?.revenue.zoho_money_out_cents ?? 0)}
           detail={`${summary?.activity.grace_period_count ?? 0} accounts in grace period`}
           icon={Activity}
         />
@@ -305,16 +329,30 @@ export default function FinanceDashboardCard() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
               <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Money Out</p>
-              <p className="mt-3 text-2xl font-semibold text-forge-text-primary">Unavailable</p>
+              <p className="mt-3 text-2xl font-semibold text-forge-text-primary">
+                {summary?.reporting.expenses_available ? formatMoney(summary?.revenue.zoho_money_out_cents ?? 0) : 'Unavailable'}
+              </p>
               <p className="mt-2 text-sm text-forge-text-secondary">
-                Zoho expense, bill, or vendor spend data is not connected yet.
+                {summary?.reporting.expenses_available
+                  ? 'Pulled from Zoho Books bank transaction outflows.'
+                  : 'Zoho expense, bill, or bank transaction data is not connected yet.'}
               </p>
             </div>
             <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
               <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Profit / Loss</p>
-              <p className="mt-3 text-2xl font-semibold text-forge-text-primary">Unavailable</p>
+              <p className={`mt-3 text-2xl font-semibold ${
+                summary?.reporting.profit_loss_available
+                  ? (summary?.revenue.zoho_net_cents ?? 0) >= 0
+                    ? 'text-emerald-300'
+                    : 'text-red-300'
+                  : 'text-forge-text-primary'
+              }`}>
+                {summary?.reporting.profit_loss_available ? formatMoney(summary?.revenue.zoho_net_cents ?? 0) : 'Unavailable'}
+              </p>
               <p className="mt-2 text-sm text-forge-text-secondary">
-                Profit requires both money-in and money-out. We only have reliable money-in right now.
+                {summary?.reporting.profit_loss_available
+                  ? 'Calculated from Zoho Books cash inflows minus outflows.'
+                  : 'Profit requires both money-in and money-out. We only have reliable money-in right now.'}
               </p>
             </div>
           </div>
@@ -373,6 +411,9 @@ export default function FinanceDashboardCard() {
               <p className="mt-2 text-sm text-forge-text-secondary">
                 DC: {summary?.integrations.zoho_books.location || 'Not detected yet'}
               </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Cashflow tracked: {formatMoney(summary?.revenue.zoho_money_in_cents ?? 0)} in / {formatMoney(summary?.revenue.zoho_money_out_cents ?? 0)} out
+              </p>
             </div>
           </div>
         </div>
@@ -395,6 +436,10 @@ export default function FinanceDashboardCard() {
                     <stop offset="5%" stopColor="#d9b12f" stopOpacity={0.4} />
                     <stop offset="95%" stopColor="#d9b12f" stopOpacity={0.02} />
                   </linearGradient>
+                  <linearGradient id="profitFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#28c76f" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#28c76f" stopOpacity={0.02} />
+                  </linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(125, 104, 197, 0.12)" vertical={false} />
                 <XAxis dataKey="month" stroke="#8f7bb8" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
@@ -407,6 +452,14 @@ export default function FinanceDashboardCard() {
                   stroke="#d9b12f"
                   strokeWidth={2.5}
                   fill="url(#paidRevenueFill)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="profit_cents"
+                  name="Zoho profit"
+                  stroke="#28c76f"
+                  strokeWidth={2}
+                  fill="url(#profitFill)"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -429,7 +482,7 @@ export default function FinanceDashboardCard() {
                 <YAxis stroke="#8f7bb8" tickFormatter={formatAxisMoney} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                 <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="total_paid_cents" name="Paid" fill="#d9b12f" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="total_pending_cents" name="Pending" fill="#6d5ca5" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="zoho_money_out_cents" name="Zoho out" fill="#ef4444" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

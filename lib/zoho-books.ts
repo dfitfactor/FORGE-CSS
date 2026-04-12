@@ -125,3 +125,44 @@ export async function refreshZohoAccessToken(config: ZohoBooksConfig) {
     expiresIn: data.expires_in ?? 3600,
   }
 }
+
+export async function fetchZohoBooksJson<T>(
+  config: ZohoBooksConfig,
+  path: string,
+  query: Record<string, string | number | null | undefined> = {}
+) {
+  const token = await refreshZohoAccessToken(config)
+  const baseUrl = `${token.apiDomain.replace(/\/$/, '')}/books/v3`
+  const searchParams = new URLSearchParams()
+
+  searchParams.set('organization_id', config.organizationId)
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === null || value === undefined || value === '') continue
+    searchParams.set(key, String(value))
+  }
+
+  const response = await fetch(`${baseUrl}${path}?${searchParams.toString()}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token.accessToken}`,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  })
+
+  const data = (await response.json().catch(() => ({}))) as T & {
+    message?: string
+    code?: number
+  }
+
+  if (!response.ok) {
+    throw new Error(data.message || `Zoho Books request failed with ${response.status}`)
+  }
+
+  if (typeof data.code === 'number' && data.code !== 0) {
+    throw new Error(data.message || 'Zoho Books request failed')
+  }
+
+  return data
+}
