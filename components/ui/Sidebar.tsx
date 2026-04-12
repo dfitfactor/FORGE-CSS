@@ -30,9 +30,9 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/finance', label: 'Finance', icon: TrendingUp },
   { href: '/crm', label: 'CRM', icon: Network },
   { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/finance', label: 'Finance', icon: TrendingUp },
   { href: '/services', label: 'Services', icon: LayoutGrid },
   { href: '/bookings', label: 'Bookings', icon: Calendar },
   { href: '/availability', label: 'Availability', icon: Clock3 },
