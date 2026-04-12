@@ -32,6 +32,23 @@ const stripe = getStripe()
 
 let cachedBookingColumns: Set<string> | null = null
 
+function buildWebhookDebugContext(request: NextRequest, body: string, signature: string | null) {
+  return {
+    method: request.method,
+    pathname: request.nextUrl.pathname,
+    contentLength: request.headers.get('content-length'),
+    userAgent: request.headers.get('user-agent'),
+    vercelId: request.headers.get('x-vercel-id'),
+    stripeSignaturePresent: Boolean(signature),
+    stripeSignaturePrefix: signature ? signature.slice(0, 24) : null,
+    webhookSecretPresent: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+    webhookSecretPrefix: process.env.STRIPE_WEBHOOK_SECRET
+      ? process.env.STRIPE_WEBHOOK_SECRET.slice(0, 12)
+      : null,
+    bodyLength: body.length,
+  }
+}
+
 async function getBookingColumns() {
   if (cachedBookingColumns) return cachedBookingColumns
 
@@ -648,19 +665,36 @@ async function handlePaymentIntentPaymentFailed(paymentIntent: Stripe.PaymentInt
 export async function POST(request: NextRequest) {
   const body = await request.text()
   const sig = request.headers.get('stripe-signature')
+  const debugContext = buildWebhookDebugContext(request, body, sig)
 
   if (!sig) {
+    console.error('[webhook] missing stripe-signature header:', debugContext)
     return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
+  }
+
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error('[webhook] STRIPE_WEBHOOK_SECRET is missing in runtime environment:', debugContext)
+    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
   }
 
   let event: Stripe.Event
 
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!)
+    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET)
   } catch (err: any) {
-    console.error('[webhook] signature verification failed:', err.message)
+    console.error('[webhook] signature verification failed:', {
+      ...debugContext,
+      message: err?.message ?? 'Unknown signature verification error',
+    })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
+
+  console.info('[webhook] event received:', {
+    eventId: event.id,
+    eventType: event.type,
+    livemode: event.livemode,
+    apiVersion: event.api_version,
+  })
 
   try {
     switch (event.type) {
@@ -702,10 +736,18 @@ export async function POST(request: NextRequest) {
         await handlePaymentIntentPaymentFailed(event.data.object as Stripe.PaymentIntent)
         break
       default:
+        console.info('[webhook] event ignored:', {
+          eventId: event.id,
+          eventType: event.type,
+        })
         break
     }
   } catch (err) {
-    console.error('[webhook] processing failed:', err)
+    console.error('[webhook] processing failed:', {
+      eventId: event.id,
+      eventType: event.type,
+      error: err,
+    })
   }
 
   return NextResponse.json({ received: true })
