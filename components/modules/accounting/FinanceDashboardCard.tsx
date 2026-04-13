@@ -1,12 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
-  Calculator,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
   CreditCard,
+  DollarSign,
   Receipt,
-  Wallet,
+  TrendingUp,
+  Users,
 } from 'lucide-react'
 import {
   Area,
@@ -14,31 +18,63 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 
-type AccountingSummary = {
-  revenue: {
-    stripe_paid_cents: number
+type RangeKey =
+  | 'today'
+  | 'this_week'
+  | 'this_month'
+  | 'this_quarter'
+  | 'this_year'
+  | 'year_to_date'
+  | 'last_4_weeks'
+
+type ComparisonMetric = {
+  current: number
+  previous: number
+  delta: number
+  delta_percent: number | null
+}
+
+type FinanceSummary = {
+  filters: {
+    range: RangeKey
+    label: string
+    start: string
+    end: string
+    compare_start: string | null
+    compare_end: string | null
+    granularity: 'hour' | 'day' | 'week' | 'month'
+    compare_enabled: boolean
+  }
+  metrics: {
+    stripe_gross_cents: number
     stripe_pending_cents: number
-    waived_cents: number
-    package_paid_cents: number
-    package_pending_cents: number
-    known_money_in_cents: number
-    known_pending_cents: number
     zoho_money_in_cents: number
     zoho_money_out_cents: number
-    zoho_net_cents: number
+    profit_cents: number
+    known_pending_cents: number
+    paid_booking_count: number
+    active_subscription_count: number
+  }
+  comparisons: {
+    stripe_gross_cents: ComparisonMetric
+    stripe_pending_cents: ComparisonMetric
+    zoho_money_in_cents: ComparisonMetric
+    zoho_money_out_cents: ComparisonMetric
+    profit_cents: ComparisonMetric
+    paid_booking_count: ComparisonMetric
+    active_subscription_count: ComparisonMetric
   }
   activity: {
     paid_booking_count: number
-    pending_booking_count: number
-    waived_booking_count: number
     active_subscription_count: number
-    grace_period_count: number
+    failed_payment_count: number
   }
   integrations: {
     stripe: {
@@ -49,8 +85,6 @@ type AccountingSummary = {
       configured: boolean
       enabled: boolean
       last_test_status: string | null
-      last_test_message: string | null
-      last_tested_at: string | null
       organization_id: string
       has_refresh_token: boolean
       location: string
@@ -62,130 +96,129 @@ type AccountingSummary = {
     notes: string[]
   }
   charts: {
-    monthly_revenue: Array<{
-      month: string
-      sort_month: string
-      booking_paid_cents: number
-      booking_pending_cents: number
-      package_paid_cents: number
-      package_pending_cents: number
-      total_paid_cents: number
-      total_pending_cents: number
+    timeline: Array<{
+      label: string
+      sort_key: string
+      stripe_paid_cents: number
+      stripe_pending_cents: number
       zoho_money_in_cents: number
       zoho_money_out_cents: number
       profit_cents: number
+      previous_stripe_paid_cents: number
+      previous_profit_cents: number
     }>
   }
+  top_customers: Array<{
+    name: string
+    email: string
+    paid_total_cents: number
+  }>
 }
+
+const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: 'this_week', label: 'This Week' },
+  { value: 'this_month', label: 'This Month' },
+  { value: 'this_quarter', label: 'This Quarter' },
+  { value: 'this_year', label: 'This Year' },
+  { value: 'year_to_date', label: 'Year To Date' },
+  { value: 'last_4_weeks', label: 'Last 4 Weeks' },
+]
 
 function formatMoney(cents: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
+function formatCompactMoney(cents: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(cents / 100)
+}
+
 function formatAxisMoney(value: number) {
-  return `$${Math.round(value / 100)}`
+  return formatCompactMoney(value)
 }
 
-function statusStyles(status: string | null) {
-  if (status === 'connected') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-  if (status === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-300'
-  return 'border-forge-border bg-forge-surface-2 text-forge-text-muted'
+function formatPercent(value: number | null) {
+  if (value === null) return 'New'
+  const rounded = Math.abs(value).toFixed(1)
+  return `${value >= 0 ? '+' : '-'}${rounded}%`
 }
 
-function statusLabel(status: string | null) {
-  if (status === 'connected') return 'Connected'
-  if (status === 'failed') return 'Needs attention'
-  return 'Not tested'
+function deltaTone(value: number | null) {
+  if (value === null) return 'text-forge-gold'
+  if (value > 0) return 'text-emerald-300'
+  if (value < 0) return 'text-red-300'
+  return 'text-forge-text-muted'
 }
 
-function StatCard({
+function MetricCard({
   label,
   value,
+  compare,
   detail,
   icon: Icon,
 }: {
   label: string
   value: string
+  compare: ComparisonMetric
   detail: string
-  icon: typeof Wallet
+  icon: typeof DollarSign
 }) {
+  const isUp = compare.delta >= 0
+
   return (
     <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
-        <Icon className="h-4 w-4" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className={`flex items-center gap-1 text-xs font-medium ${deltaTone(compare.delta_percent)}`}>
+          {isUp ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+          {formatPercent(compare.delta_percent)}
+        </div>
       </div>
-      <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{value}</p>
+      <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-forge-text-primary">{value}</p>
       <p className="mt-2 text-sm text-forge-text-secondary">{detail}</p>
+      <p className="mt-1 text-xs text-forge-text-muted">Previous period: {typeof compare.previous === 'number' ? formatMoney(compare.previous) : '$0.00'}</p>
     </div>
   )
 }
 
-function ProfitLossHeroCard({
-  available,
-  profitCents,
-  revenueCents,
-  expenseCents,
+function CountCard({
+  label,
+  current,
+  compare,
+  detail,
+  icon: Icon,
 }: {
-  available: boolean
-  profitCents: number
-  revenueCents: number
-  expenseCents: number
+  label: string
+  current: number
+  compare: ComparisonMetric
+  detail: string
+  icon: typeof Users
 }) {
-  const isProfit = profitCents >= 0
+  const isUp = compare.delta >= 0
 
   return (
-    <div className="rounded-2xl border border-forge-gold/20 bg-gradient-to-br from-forge-surface-3 via-forge-surface-2 to-forge-surface-3 p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Profit & Loss</p>
-          <h3 className="mt-2 text-lg font-semibold text-forge-text-primary">Topline profitability</h3>
-          <p className="mt-2 max-w-2xl text-sm text-forge-text-secondary">
-            This gives you a combined finance view with live Stripe revenue and Zoho Books cashflow for money in, money out, and net business movement.
-          </p>
+    <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-forge-border/70 bg-forge-surface-2 text-forge-gold">
+          <Icon className="h-4 w-4" />
         </div>
-        <span
-          className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-wide ${
-            available
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-              : 'border-forge-gold/30 bg-forge-gold/10 text-forge-gold'
-          }`}
-        >
-          {available ? 'Live' : 'Awaiting Zoho cashflow'}
-        </span>
-      </div>
-
-      <div className="mt-5 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Net Profit / Loss</p>
-          <p className={`mt-3 text-3xl font-semibold ${available ? (isProfit ? 'text-emerald-300' : 'text-red-300') : 'text-forge-text-primary'}`}>
-            {available ? formatMoney(profitCents) : 'Unavailable'}
-          </p>
-          <p className="mt-2 text-sm text-forge-text-secondary">
-            {available
-              ? 'Calculated from Zoho Books money in minus money out for the current six-month reporting window.'
-              : 'Stripe revenue is already flowing in. We still need a readable Zoho Books cashflow connection before this number becomes trustworthy.'}
-          </p>
-        </div>
-
-        <div className="grid gap-4">
-          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Zoho Money In</p>
-            <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{formatMoney(revenueCents)}</p>
-            <p className="mt-2 text-sm text-forge-text-secondary">
-              Accounting-side inflows from Zoho Books bank transactions.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2/90 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Zoho Money Out</p>
-            <p className="mt-3 text-2xl font-semibold text-forge-text-primary">{formatMoney(expenseCents)}</p>
-            <p className="mt-2 text-sm text-forge-text-secondary">
-              Accounting-side outflows and expense activity from Zoho Books.
-            </p>
-          </div>
+        <div className={`flex items-center gap-1 text-xs font-medium ${deltaTone(compare.delta_percent)}`}>
+          {isUp ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+          {formatPercent(compare.delta_percent)}
         </div>
       </div>
+      <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-forge-text-primary">{current}</p>
+      <p className="mt-2 text-sm text-forge-text-secondary">{detail}</p>
+      <p className="mt-1 text-xs text-forge-text-muted">Previous period: {compare.previous}</p>
     </div>
   )
 }
@@ -220,24 +253,30 @@ function ChartTooltip({
 }
 
 export default function FinanceDashboardCard() {
-  const [summary, setSummary] = useState<AccountingSummary | null>(null)
+  const [summary, setSummary] = useState<FinanceSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [range, setRange] = useState<RangeKey>('year_to_date')
+  const [compare, setCompare] = useState(true)
 
   useEffect(() => {
     let active = true
 
     async function loadData() {
       setLoading(true)
+      setError('')
 
       try {
-        const summaryRes = await fetch('/api/accounting/summary', { cache: 'no-store' })
-        const summaryData = await summaryRes.json().catch(() => ({}))
+        const params = new URLSearchParams({
+          range,
+          compare: compare ? 'true' : 'false',
+        })
 
-        if (!summaryRes.ok) throw new Error(summaryData.error ?? 'Failed to load finance dashboard')
+        const response = await fetch(`/api/accounting/summary?${params.toString()}`, { cache: 'no-store' })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error ?? 'Failed to load finance dashboard')
         if (!active) return
-
-        setSummary(summaryData.summary as AccountingSummary)
+        setSummary(data.summary as FinanceSummary)
       } catch (err: unknown) {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Failed to load finance dashboard')
@@ -251,7 +290,14 @@ export default function FinanceDashboardCard() {
     return () => {
       active = false
     }
-  }, [])
+  }, [range, compare])
+
+  const currentWindowLabel = useMemo(() => {
+    if (!summary) return ''
+    const start = new Date(summary.filters.start)
+    const end = new Date(summary.filters.end)
+    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  }, [summary])
 
   if (loading) {
     return (
@@ -263,228 +309,235 @@ export default function FinanceDashboardCard() {
 
   return (
     <section className="space-y-6 rounded-2xl border border-forge-border/70 bg-forge-surface-2 p-5">
-      <ProfitLossHeroCard
-        available={summary?.reporting.profit_loss_available ?? false}
-        profitCents={summary?.revenue.zoho_net_cents ?? 0}
-        revenueCents={summary?.revenue.zoho_money_in_cents ?? 0}
-        expenseCents={summary?.revenue.zoho_money_out_cents ?? 0}
-      />
-
-      <div className="flex items-start gap-3">
-        <div className="rounded-2xl border border-forge-gold/20 bg-forge-gold/10 p-3 text-forge-gold">
-          <Calculator className="h-5 w-5" />
-        </div>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Finance</p>
-          <h2 className="mt-2 text-sm font-semibold text-forge-text-primary">Revenue And Profitability Dashboard</h2>
+          <p className="text-xs font-mono uppercase tracking-widest text-forge-text-muted">Business Overview</p>
+          <h2 className="mt-2 text-xl font-semibold text-forge-text-primary">Finance Reporting</h2>
           <p className="mt-2 text-sm text-forge-text-secondary">
-            This page is the business view: live Stripe revenue, Zoho Books cashflow, pending collections, revenue trends, and profitability readiness.
+            Review Stripe revenue, Zoho Books cashflow, profitability, and client spend across a selected reporting window.
           </p>
+          {summary ? <p className="mt-2 text-xs text-forge-text-muted">{currentWindowLabel}</p> : null}
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label className="flex items-center gap-2 rounded-xl border border-forge-border bg-forge-surface-3 px-3 py-2 text-sm text-forge-text-secondary">
+            <span>Date Range</span>
+            <select
+              value={range}
+              onChange={(event) => setRange(event.target.value as RangeKey)}
+              className="bg-transparent text-forge-text-primary outline-none"
+            >
+              {RANGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-forge-surface text-forge-text-primary">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setCompare((current) => !current)}
+            className={`rounded-xl border px-3 py-2 text-sm transition ${
+              compare
+                ? 'border-forge-gold/40 bg-forge-gold/10 text-forge-gold'
+                : 'border-forge-border bg-forge-surface-3 text-forge-text-secondary'
+            }`}
+          >
+            Compare: {compare ? 'Previous Period' : 'Off'}
+          </button>
         </div>
       </div>
 
       {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Known Money In"
-          value={formatMoney(summary?.revenue.known_money_in_cents ?? 0)}
-          detail={`${summary?.activity.paid_booking_count ?? 0} paid bookings + ${summary?.activity.active_subscription_count ?? 0} active subscriptions`}
-          icon={Wallet}
-        />
-        <StatCard
-          label="Pending Collections"
-          value={formatMoney(summary?.revenue.known_pending_cents ?? 0)}
-          detail={`${summary?.activity.pending_booking_count ?? 0} unpaid bookings and package balances still outstanding`}
-          icon={Receipt}
-        />
-        <StatCard
-          label="Zoho Money In"
-          value={formatMoney(summary?.revenue.zoho_money_in_cents ?? 0)}
-          detail={summary?.integrations.zoho_books.last_test_status === 'connected' ? 'Live from Zoho Books' : 'Waiting on Zoho data'}
-          icon={CreditCard}
-        />
-        <StatCard
-          label="Zoho Money Out"
-          value={formatMoney(summary?.revenue.zoho_money_out_cents ?? 0)}
-          detail={`${summary?.activity.grace_period_count ?? 0} accounts in grace period`}
-          icon={Activity}
-        />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-forge-text-primary">Financial Visibility</h3>
+              <h3 className="text-sm font-semibold text-forge-text-primary">Revenue And Profit Trend</h3>
               <p className="mt-1 text-sm text-forge-text-secondary">
-                Stripe and FORGE revenue can be viewed immediately. Profit stays conservative until Zoho Books provides money-out data.
+                Current period versus previous period, with Stripe gross volume and Zoho-based profit tracking.
               </p>
             </div>
-            <span className="rounded-full border border-forge-border bg-forge-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-forge-text-muted">
-              Honest mode
-            </span>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Money Out</p>
-              <p className="mt-3 text-2xl font-semibold text-forge-text-primary">
-                {summary?.reporting.expenses_available ? formatMoney(summary?.revenue.zoho_money_out_cents ?? 0) : 'Unavailable'}
-              </p>
-              <p className="mt-2 text-sm text-forge-text-secondary">
-                {summary?.reporting.expenses_available
-                  ? 'Pulled from Zoho Books bank transaction outflows.'
-                  : 'Zoho expense, bill, or bank transaction data is not connected yet.'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Profit / Loss</p>
-              <p className={`mt-3 text-2xl font-semibold ${
-                summary?.reporting.profit_loss_available
-                  ? (summary?.revenue.zoho_net_cents ?? 0) >= 0
-                    ? 'text-emerald-300'
-                    : 'text-red-300'
-                  : 'text-forge-text-primary'
-              }`}>
-                {summary?.reporting.profit_loss_available ? formatMoney(summary?.revenue.zoho_net_cents ?? 0) : 'Unavailable'}
-              </p>
-              <p className="mt-2 text-sm text-forge-text-secondary">
-                {summary?.reporting.profit_loss_available
-                  ? 'Calculated from Zoho Books cash inflows minus outflows.'
-                  : 'Profit requires both money-in and money-out. We only have reliable money-in right now.'}
-              </p>
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-2 text-forge-gold">
+              <TrendingUp className="h-4 w-4" />
             </div>
           </div>
 
-          <div className="space-y-2 rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Reporting Notes</p>
-            {summary?.reporting.notes.map((note) => (
-              <p key={note} className="text-sm text-forge-text-secondary">
-                {note}
-              </p>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div>
-            <h3 className="text-sm font-semibold text-forge-text-primary">Reconciliation Readiness</h3>
-            <p className="mt-1 text-sm text-forge-text-secondary">
-              This gives you the split between operational revenue in FORGE and ledger readiness in Zoho Books.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-forge-text-primary">Stripe</p>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${
-                  summary?.integrations.stripe.configured
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                    : 'border-red-500/30 bg-red-500/10 text-red-300'
-                }`}>
-                  {summary?.integrations.stripe.label ?? 'Unknown'}
-                </span>
-              </div>
-              <p className="mt-3 text-sm text-forge-text-secondary">
-                Revenue tracked from live Stripe payments: {formatMoney(summary?.revenue.stripe_paid_cents ?? 0)}
-              </p>
-              <p className="mt-2 text-sm text-forge-text-secondary">
-                Pending Stripe-side collections: {formatMoney(summary?.revenue.stripe_pending_cents ?? 0)}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-forge-text-primary">Zoho Books</p>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusStyles(summary?.integrations.zoho_books.last_test_status ?? null)}`}>
-                  {statusLabel(summary?.integrations.zoho_books.last_test_status ?? null)}
-                </span>
-              </div>
-              <p className="mt-3 text-sm text-forge-text-secondary">
-                {summary?.integrations.zoho_books.has_refresh_token ? 'Refresh token saved' : 'Refresh token missing'}
-              </p>
-              <p className="mt-2 text-sm text-forge-text-secondary">
-                Organization: {summary?.integrations.zoho_books.organization_id || 'Not set'}
-              </p>
-              <p className="mt-2 text-sm text-forge-text-secondary">
-                DC: {summary?.integrations.zoho_books.location || 'Not detected yet'}
-              </p>
-              <p className="mt-2 text-sm text-forge-text-secondary">
-                Cashflow tracked: {formatMoney(summary?.revenue.zoho_money_in_cents ?? 0)} in / {formatMoney(summary?.revenue.zoho_money_out_cents ?? 0)} out
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div>
-            <h3 className="text-sm font-semibold text-forge-text-primary">Revenue Over Time</h3>
-            <p className="mt-1 text-sm text-forge-text-secondary">
-              Six-month trend of paid revenue captured inside FORGE from bookings and package enrollments.
-            </p>
-          </div>
-
-          <div className="mt-4 h-[280px]">
+          <div className="mt-4 h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={summary?.charts.monthly_revenue ?? []} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+              <AreaChart data={summary?.charts.timeline ?? []} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="paidRevenueFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#d9b12f" stopOpacity={0.4} />
+                  <linearGradient id="stripeFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#d9b12f" stopOpacity={0.35} />
                     <stop offset="95%" stopColor="#d9b12f" stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="profitFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#28c76f" stopOpacity={0.35} />
+                    <stop offset="5%" stopColor="#28c76f" stopOpacity={0.28} />
                     <stop offset="95%" stopColor="#28c76f" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(125, 104, 197, 0.12)" vertical={false} />
-                <XAxis dataKey="month" stroke="#8f7bb8" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+                <XAxis dataKey="label" stroke="#8f7bb8" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                 <YAxis stroke="#8f7bb8" tickFormatter={formatAxisMoney} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                 <Tooltip content={<ChartTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="total_paid_cents"
-                  name="Total paid"
-                  stroke="#d9b12f"
-                  strokeWidth={2.5}
-                  fill="url(#paidRevenueFill)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="profit_cents"
-                  name="Zoho profit"
-                  stroke="#28c76f"
-                  strokeWidth={2}
-                  fill="url(#profitFill)"
-                />
+                <Legend />
+                <Area type="monotone" dataKey="stripe_paid_cents" name="Stripe gross" stroke="#d9b12f" strokeWidth={2.5} fill="url(#stripeFill)" />
+                <Area type="monotone" dataKey="previous_stripe_paid_cents" name="Previous stripe" stroke="#6d5ca5" strokeDasharray="5 5" strokeWidth={2} fill="transparent" />
+                <Area type="monotone" dataKey="profit_cents" name="Profit" stroke="#28c76f" strokeWidth={2.2} fill="url(#profitFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
-          <div>
-            <h3 className="text-sm font-semibold text-forge-text-primary">Collections Breakdown</h3>
-            <p className="mt-1 text-sm text-forge-text-secondary">
-              Paid versus pending totals by month. Profitability remains locked until expense sync is live.
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-forge-text-primary">Cashflow Mix</h3>
+              <p className="mt-1 text-sm text-forge-text-secondary">
+                Money in versus money out across the same selected period.
+              </p>
+            </div>
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-2 text-forge-gold">
+              <BarChart3 className="h-4 w-4" />
+            </div>
           </div>
 
-          <div className="mt-4 h-[280px]">
+          <div className="mt-4 h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={summary?.charts.monthly_revenue ?? []} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+              <BarChart data={summary?.charts.timeline ?? []} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
                 <CartesianGrid stroke="rgba(125, 104, 197, 0.12)" vertical={false} />
-                <XAxis dataKey="month" stroke="#8f7bb8" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+                <XAxis dataKey="label" stroke="#8f7bb8" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                 <YAxis stroke="#8f7bb8" tickFormatter={formatAxisMoney} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                 <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="total_paid_cents" name="Paid" fill="#d9b12f" radius={[6, 6, 0, 0]} />
+                <Legend />
+                <Bar dataKey="zoho_money_in_cents" name="Zoho in" fill="#3b82f6" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="zoho_money_out_cents" name="Zoho out" fill="#ef4444" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <MetricCard
+          label="Stripe Gross Volume"
+          value={formatMoney(summary?.metrics.stripe_gross_cents ?? 0)}
+          compare={summary?.comparisons.stripe_gross_cents ?? { current: 0, previous: 0, delta: 0, delta_percent: 0 }}
+          detail="Successful Stripe revenue in the selected window."
+          icon={CreditCard}
+        />
+        <MetricCard
+          label="Profit & Loss"
+          value={formatMoney(summary?.metrics.profit_cents ?? 0)}
+          compare={summary?.comparisons.profit_cents ?? { current: 0, previous: 0, delta: 0, delta_percent: 0 }}
+          detail="Zoho money in minus Zoho money out."
+          icon={DollarSign}
+        />
+        <MetricCard
+          label="Pending Collections"
+          value={formatMoney(summary?.metrics.stripe_pending_cents ?? 0)}
+          compare={summary?.comparisons.stripe_pending_cents ?? { current: 0, previous: 0, delta: 0, delta_percent: 0 }}
+          detail="Stripe payment intents still pending completion."
+          icon={Receipt}
+        />
+        <MetricCard
+          label="Zoho Money In"
+          value={formatMoney(summary?.metrics.zoho_money_in_cents ?? 0)}
+          compare={summary?.comparisons.zoho_money_in_cents ?? { current: 0, previous: 0, delta: 0, delta_percent: 0 }}
+          detail="Bank-transaction inflows from Zoho Books."
+          icon={TrendingUp}
+        />
+        <MetricCard
+          label="Zoho Money Out"
+          value={formatMoney(summary?.metrics.zoho_money_out_cents ?? 0)}
+          compare={summary?.comparisons.zoho_money_out_cents ?? { current: 0, previous: 0, delta: 0, delta_percent: 0 }}
+          detail="Expenses and cash outflows from Zoho Books."
+          icon={Activity}
+        />
+        <CountCard
+          label="Active Subscribers"
+          current={summary?.metrics.active_subscription_count ?? 0}
+          compare={summary?.comparisons.active_subscription_count ?? { current: 0, previous: 0, delta: 0, delta_percent: 0 }}
+          detail="Active package/subscription enrollments in FORGE."
+          icon={Users}
+        />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-forge-text-primary">Top Customers By Spend</h3>
+            <p className="mt-1 text-sm text-forge-text-secondary">
+              Highest paid booking totals inside FORGE for the selected range.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {(summary?.top_customers ?? []).length ? (
+              summary?.top_customers.map((customer) => (
+                <div key={`${customer.email}-${customer.name}`} className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-forge-text-primary">{customer.name}</p>
+                      <p className="mt-1 text-xs text-forge-text-muted">{customer.email || 'Email unavailable'}</p>
+                    </div>
+                    <p className="text-sm font-semibold text-forge-gold">{formatMoney(customer.paid_total_cents)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface-2 p-4 text-sm text-forge-text-muted">
+                No paid customer activity found in this range yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-forge-border/70 bg-forge-surface-3/60 p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-forge-text-primary">Reporting Health</h3>
+            <p className="mt-1 text-sm text-forge-text-secondary">
+              A quick read on which systems are feeding the dashboard and how trustworthy the current numbers are.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Stripe</p>
+              <p className="mt-3 text-lg font-semibold text-forge-text-primary">{summary?.integrations.stripe.label ?? 'Unknown'}</p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Gross volume: {formatMoney(summary?.metrics.stripe_gross_cents ?? 0)}
+              </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Failed payments: {summary?.activity.failed_payment_count ?? 0}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Zoho Books</p>
+              <p className="mt-3 text-lg font-semibold text-forge-text-primary">
+                {summary?.integrations.zoho_books.last_test_status === 'connected' ? 'Connected' : 'Needs attention'}
+              </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                Org: {summary?.integrations.zoho_books.organization_id || 'Not set'}
+              </p>
+              <p className="mt-2 text-sm text-forge-text-secondary">
+                DC: {summary?.integrations.zoho_books.location || 'Unknown'}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-forge-border/70 bg-forge-surface-2 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Reporting Notes</p>
+            <div className="mt-3 space-y-2">
+              {summary?.reporting.notes.map((note) => (
+                <p key={note} className="text-sm text-forge-text-secondary">
+                  {note}
+                </p>
+              ))}
+            </div>
           </div>
         </div>
       </div>
