@@ -573,3 +573,27 @@ export async function sendCoachPaymentIntentFailedEmail({
     }),
   })
 }
+
+export async function sendLeadWelcomeEmail({
+  clientEmail,
+  clientName,
+  bookingUrl,
+}: {
+  clientEmail: string
+  clientName: string
+  bookingUrl: string
+}) {
+  await sendEmail({
+    to: clientEmail,
+    subject: "Welcome to FORGE - Let's Get Started",
+    html: baseTemplate({
+      heading: 'Welcome to FORGE',
+      intro: `Hi ${clientName},`,
+      details: [
+        "We're excited to get you started inside FORGE CSS.",
+        `<strong>Next step:</strong> Book your intake session here: <a href="${bookingUrl}">${bookingUrl}</a>`,
+      ],
+      footer: 'Once your intake session is booked, your coach can map out the next best steps with you.',
+    }),
+  })
+}

@@ -70,6 +70,12 @@ type RecentActivityRow = {
   event_date: string
 }
 
+type LeadIntelligenceRow = {
+  new_leads_this_week: string
+  pending_discovery_call: string
+  conversion_rate_this_month: string | null
+}
+
 const tableColumnCache = new Map<string, Set<string>>()
 
 async function getTableColumnSet(tableName: string) {
@@ -172,7 +178,7 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
     const protocolTimestampExpression = await getProtocolTimestampExpression()
     const snapshotConfig = await getBehavioralSnapshotConfig()
 
-    const [clientRows, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue] = await Promise.all([
+    const [clientRows, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue, leadIntelligence] = await Promise.all([
       db.query<DashboardClientRow>(`
         SELECT
           c.id,
@@ -353,6 +359,25 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
           )
         ORDER BY latest_protocol.last_protocol_review_at ASC NULLS FIRST, c.full_name ASC
       `, params).catch(() => []),
+
+      db.queryOne<LeadIntelligenceRow>(
+        `SELECT
+           COUNT(*) FILTER (WHERE created_at >= date_trunc('week', now()))::text AS new_leads_this_week,
+           COUNT(*) FILTER (WHERE status IN ('new', 'contacted', 'nurture'))::text AS pending_discovery_call,
+           ROUND(
+             COUNT(*) FILTER (
+               WHERE status = 'won'
+                 AND created_at >= date_trunc('month', now())
+             )::numeric /
+             NULLIF(COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now())), 0) * 100,
+             1
+           )::text AS conversion_rate_this_month
+         FROM leads`
+      ).catch(() => ({
+        new_leads_this_week: '0',
+        pending_discovery_call: '0',
+        conversion_rate_this_month: '0',
+      })),
     ])
 
     const clients = dedupeSparseClientRows(clientRows)
@@ -367,6 +392,11 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
 
     return {
       clientStats,
+      leadIntelligence: {
+        newLeadsThisWeek: Number(leadIntelligence?.new_leads_this_week ?? '0'),
+        pendingDiscoveryCall: Number(leadIntelligence?.pending_discovery_call ?? '0'),
+        conversionRateThisMonth: Number(leadIntelligence?.conversion_rate_this_month ?? '0'),
+      },
       alerts,
       recentActivity: dedupeRecentActivityRows(recentActivity),
       pendingReviews,
@@ -377,6 +407,11 @@ async function getDashboardStats(userId: string, role: 'admin' | 'coach' | 'clie
     console.error('[dashboard] getDashboardStats failed:', err)
     return {
       clientStats: null,
+      leadIntelligence: {
+        newLeadsThisWeek: 0,
+        pendingDiscoveryCall: 0,
+        conversionRateThisMonth: 0,
+      },
       alerts: [] as AlertRow[],
       recentActivity: [] as RecentActivityRow[],
       pendingReviews: [] as PendingReviewRow[],
@@ -390,7 +425,7 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/auth/login')
 
-  const { clientStats, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue } = await getDashboardStats(session.id, session.role)
+  const { clientStats, leadIntelligence, alerts, recentActivity, pendingReviews, staleClients, protocolReviewsDue } = await getDashboardStats(session.id, session.role)
 
   const stats = clientStats ?? {
     total: 0,
@@ -425,6 +460,36 @@ export default async function DashboardPage() {
         <StatCard label="Stale 7+ Days" value={stats.stale_clients} icon={<Clock3 className="w-5 h-5" />} color="state-simplified" urgent={stats.stale_clients > 0} />
         <StatCard label="Protocol Reviews Due" value={stats.protocol_reviews_due} icon={<ClipboardCheck className="w-5 h-5" />} color="forge-gold" urgent={stats.protocol_reviews_due > 0} />
         <StatCard label="Paused" value={stats.paused} icon={<Minus className="w-5 h-5" />} color="state-simplified" />
+      </div>
+
+      <div className="forge-card space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="forge-section-title flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-forge-gold" />
+            Lead Intelligence
+          </h2>
+          <Link href="/leads" className="text-xs text-forge-text-muted transition-colors hover:text-forge-gold">
+            Open leads dashboard
+          </Link>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">New Leads This Week</p>
+            <p className="mt-2 text-3xl font-semibold text-forge-text-primary">{leadIntelligence.newLeadsThisWeek}</p>
+            <p className="mt-2 text-xs text-forge-text-secondary">Fresh demand entering the pre-client pipeline.</p>
+          </div>
+          <div className="rounded-xl border border-forge-gold/20 bg-forge-gold/5 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Pending Discovery Call</p>
+            <p className="mt-2 text-3xl font-semibold text-forge-text-primary">{leadIntelligence.pendingDiscoveryCall}</p>
+            <p className="mt-2 text-xs text-forge-text-secondary">Leads still waiting for discovery booking or contact follow-up.</p>
+          </div>
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-forge-text-muted">Conversion Rate This Month</p>
+            <p className="mt-2 text-3xl font-semibold text-forge-text-primary">{leadIntelligence.conversionRateThisMonth}%</p>
+            <p className="mt-2 text-xs text-forge-text-secondary">Monthly lead-to-won conversion across the current funnel.</p>
+          </div>
+        </div>
       </div>
 
       <div className="forge-card space-y-4">

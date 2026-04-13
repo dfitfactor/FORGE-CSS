@@ -22,6 +22,7 @@ import {
   Sparkles,
   Tablet,
   TrendingUp,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/leads', label: 'Leads', icon: UserPlus },
   { href: '/crm', label: 'CRM', icon: Network },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/finance', label: 'Finance', icon: TrendingUp },

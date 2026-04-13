@@ -1,7 +1,8 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { publicBookingSchema } from '@/lib/booking'
 import { sendBookingConfirmation } from '@/lib/email'
+import { createAishaLead } from '@/lib/aisha'
 
 type BookingTarget = {
   duration_minutes: number
@@ -73,6 +74,83 @@ export async function POST(request: NextRequest) {
         data.notes ?? null,
       ]
     )
+
+    try {
+      const [firstName, ...restName] = data.client_name.trim().split(/\s+/)
+      const lastName = restName.join(' ')
+      const leadGoal = `Requested booking for ${bookingName}`
+
+      const existingLead = await db.queryOne<{ id: string }>(
+        `SELECT id
+         FROM leads
+         WHERE LOWER(email) = LOWER($1)
+         LIMIT 1`,
+        [data.client_email]
+      )
+
+      if (existingLead) {
+        await db.query(
+          `UPDATE leads
+           SET first_name = COALESCE(first_name, $2),
+               last_name = COALESCE(last_name, $3),
+               phone = COALESCE(phone, $4),
+               source = COALESCE(source, 'website'),
+               notes = COALESCE(notes, $5),
+               next_action = COALESCE(next_action, 'Review booking request'),
+               goal = COALESCE(goal, $6),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [existingLead.id, firstName || null, lastName || null, data.client_phone, data.notes ?? null, leadGoal]
+        )
+      } else {
+        await db.query(
+          `INSERT INTO leads (
+             first_name,
+             last_name,
+             email,
+             phone,
+             source,
+             status,
+             notes,
+             next_action,
+             goal,
+             raw_payload
+           ) VALUES (
+             $1, $2, $3, $4, 'website', 'new', $5, 'Review booking request', $6, $7::jsonb
+           )`,
+          [
+            firstName || null,
+            lastName || null,
+            data.client_email,
+            data.client_phone,
+            data.notes ?? null,
+            leadGoal,
+            JSON.stringify({
+              event_type: 'lead.created',
+              email: data.client_email,
+              first_name: firstName || null,
+              last_name: lastName || null,
+              phone: data.client_phone,
+              source: 'website',
+              notes: data.notes ?? null,
+              goal: leadGoal,
+            }),
+          ]
+        )
+      }
+
+      await createAishaLead({
+        email: data.client_email,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        phone: data.client_phone,
+        source: 'website',
+        notes: data.notes ?? null,
+        goal: leadGoal,
+      })
+    } catch (leadError) {
+      console.error('Failed to create or sync lead from public booking', leadError)
+    }
 
     try {
       await sendBookingConfirmation({
