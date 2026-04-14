@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import Anthropic from '@anthropic-ai/sdk'
+import { buildCoachInsightTemplateInstructions } from '@/lib/ai/coach-insight-template'
+import { formatHealthPhaseForPrompt, resolveHealthCoachingPhase } from '@/lib/ai/phase-rules'
+import { buildUnifiedForgeSystemPrompt } from '@/lib/ai/system-prompt'
 import {
   computeBAR,
   computeGenerationState,
   computePPS,
   extractSignalsFromCheckIn,
+  type ForgeStage,
+  type GenerationState,
 } from '@/lib/bie-engine'
 import { getGPSLabel } from '@/lib/bie-calculator'
 import { selectExercisesForSession, type ExerciseBlock as SelectedExerciseBlock } from '@/lib/exercise-selector'
@@ -116,6 +121,15 @@ type GeneratedProtocolCompat = {
     oversights?: string[]
     riskFlags?: string[]
     nextIterationStrategy?: string[]
+    healthCoachingLens?: {
+      redFlagsMedicalBaseline?: string[]
+      workingAssessment?: string[]
+      phaseAndIntent?: string
+      minimalInterventionSet?: string[]
+      monitoringPlan?: string[]
+      decisionRules?: string[]
+      disclaimer?: string
+    }
   }
 }
 
@@ -433,6 +447,9 @@ function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedPr
       input.coachIntelligence.oversights?.length ? `Oversights: ${input.coachIntelligence.oversights.join('; ')}` : '',
       input.coachIntelligence.riskFlags?.length ? `Risk Flags: ${input.coachIntelligence.riskFlags.join('; ')}` : '',
       input.coachIntelligence.nextIterationStrategy?.length ? `Next Iteration: ${input.coachIntelligence.nextIterationStrategy.join('; ')}` : '',
+      input.coachIntelligence.healthCoachingLens?.phaseAndIntent ? `Phase: ${input.coachIntelligence.healthCoachingLens.phaseAndIntent}` : '',
+      input.coachIntelligence.healthCoachingLens?.redFlagsMedicalBaseline?.length ? `Red Flags: ${input.coachIntelligence.healthCoachingLens.redFlagsMedicalBaseline.join('; ')}` : '',
+      input.coachIntelligence.healthCoachingLens?.workingAssessment?.length ? `Working Assessment: ${input.coachIntelligence.healthCoachingLens.workingAssessment.join('; ')}` : '',
     ].filter(Boolean).join('\n')
   }
 
@@ -447,28 +464,7 @@ function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedPr
   return input
 }
 
-const FORGE_SYSTEM_PROMPT = `You are the FORGË Behavioral Intelligence Engine AI component. You generate adaptive health and fitness protocols for the FORGË platform.
-
-CORE PHILOSOPHY:
-- Behavior drives programming. Behavioral capacity determines protocol complexity, not fitness level alone.
-- Non-punitive adaptation: when behavioral capacity drops, simplify—never withhold progress.
-- Complexity before load: movement coordination progresses before intensity.
-
-FORGE STAGES: Foundations · Optimization · Resilience · Growth · Empowerment
-
-BIE VARIABLES (0-100 scale):
-- BAR: ≥80 progression eligible, 65-79 consolidation, 50-64 maintenance, <50 recovery
-- BLI: <30 sustainable, 30-50 moderate, 50-70 elevated, >70 critical
-- DBI: <30 low, 30-50 moderate, 50-70 high, >70 critical
-- LSI: higher = more stable
-- PPS: ≥70 advancement eligible
-
-BSLDS MEAL STRUCTURE: Breakfast · Snack · Lunch · Dinner · Snack
-- Carbohydrates front-loaded earlier in day
-- Dinner is intentionally carb-reduced or carb-free
-- Evening snack is protein-forward
-
-You must ALWAYS respond with ONLY a valid JSON object. No markdown, no backticks, no explanation. Just raw JSON.`
+const FORGE_SYSTEM_PROMPT = buildUnifiedForgeSystemPrompt()
 
 export async function POST(
   request: NextRequest,
@@ -511,7 +507,13 @@ export async function POST(
 
     const body = await request.json()
     const { protocolType, coachDirectives } = body
-    const currentStage = client.current_stage ?? 'foundations'
+    const currentStage: ForgeStage =
+      client.current_stage === 'optimization' ||
+      client.current_stage === 'resilience' ||
+      client.current_stage === 'growth' ||
+      client.current_stage === 'empowerment'
+        ? client.current_stage
+        : 'foundations'
     const normalizedProtocolType =
       protocolType === 'movement' ||
       protocolType === 'nutrition' ||
@@ -817,12 +819,17 @@ export async function POST(
         value => typeof value === 'number'
       )
     )
-    const generationState =
-      snapshot?.generation_state ??
-      computeGenerationState({
-        ...resolvedBie,
-        cLsi: resolvedBie.lsi,
-      }).state
+    const generationState: GenerationState =
+      snapshot?.generation_state === 'A' ||
+      snapshot?.generation_state === 'B' ||
+      snapshot?.generation_state === 'C' ||
+      snapshot?.generation_state === 'D' ||
+      snapshot?.generation_state === 'E'
+        ? snapshot.generation_state
+        : computeGenerationState({
+            ...resolvedBie,
+            cLsi: resolvedBie.lsi,
+          }).state
     const bieSource = hasStoredSnapshot ? 'snapshot' : 'estimated'
     const physiqueCorpus = buildSearchCorpus([
       client.primary_goal,
@@ -844,6 +851,19 @@ export async function POST(
     const sportSpecificPriorities = isPhysiqueFocused
       ? 'Glute and hamstring density, capped delts, upper-back shaping, waist illusion, performance-supportive carbs, and protective protein.'
       : 'No special physique-sport emphasis detected.'
+    const healthCoachingPhase = resolveHealthCoachingPhase({
+      bie: {
+        bar: resolvedBie.bar,
+        bli: resolvedBie.bli,
+        dbi: resolvedBie.dbi,
+        cdi: resolvedBie.cdi,
+        lsi: resolvedBie.lsi,
+        cLsi: resolvedBie.lsi,
+        pps: resolvedBie.pps,
+      },
+      generationState,
+      currentStage,
+    })
     const complexityCeiling = {
       A: Math.min(resolvedBie.pps >= 70 ? 4 : 3, 5),
       B: 3,
@@ -944,6 +964,7 @@ SPORT CONTEXT:
 Physique athlete focus detected: ${isPhysiqueFocused ? 'yes' : 'no'}
 Sport-specific priorities: ${sportSpecificPriorities}
 If physique athlete focus is detected with unstable adherence, use a Restoration-to-Development bridge instead of a generic Foundations reset.
+${formatHealthPhaseForPrompt(healthCoachingPhase)}
 
 RECENT JOURNALS: ${journalSummary || 'No recent journal entries'}
 RECENT CHECK-INS: ${checkinSummary || 'No recent check-ins'}
@@ -961,6 +982,9 @@ Protocol name must include ${client.full_name.split(' ')[0] || 'the client'}'s f
 Simplify execution by reducing decision burden and recovery cost, not by stripping away physique-specific architecture.
 For physique athletes, macros and meal structure must translate coherently into the meal plan and BSLDS structure.
 Build the session using the exercises listed in SELECTED EXERCISES above.
+Use the DFitFactor hierarchy: Safety -> Feasibility -> Recovery capacity -> Adherence/constraints -> Optimization.
+If the signal does not support Optimization, stay in Regulation or Restoration.
+Before recommending supplements or aggressive nutrition changes, check for contraindications, interactions, pregnancy considerations, and major comorbidities when relevant.
 
 Respond with ONLY this JSON structure (no markdown, no backticks):
 {
@@ -1006,7 +1030,23 @@ Respond with ONLY this JSON structure (no markdown, no backticks):
     "keyRecoveryPractices": ["practice 1", "practice 2", "practice 3"]
   },
   "coachNotes": "Internal coaching notes for coach eyes only",
-  "clientFacingMessage": "Encouraging message for client about this protocol - 3-4 sentences"
+  "clientFacingMessage": "Encouraging message for client about this protocol - 3-4 sentences",
+  "coachIntelligence": {
+    "progressionAssessment": "string",
+    "gapsIdentified": ["string"],
+    "oversights": ["string"],
+    "riskFlags": ["string"],
+    "nextIterationStrategy": ["string"],
+    "healthCoachingLens": {
+      "redFlagsMedicalBaseline": ["string"],
+      "workingAssessment": ["string"],
+      "phaseAndIntent": "string",
+      "minimalInterventionSet": ["string"],
+      "monitoringPlan": ["string"],
+      "decisionRules": ["string"],
+      "disclaimer": "Educational coaching guidance only, not medical advice."
+    }
+  }
 }`
 
     // CALL 1 — Core protocol (no mealPlan)
@@ -1041,12 +1081,18 @@ EXECUTION RULES:
 - If repeated fatigue or recovery flags are present, reduce intensity, complexity, or frequency before adding more load.
 - If adherence issues are present, simplify the structure and reduce decision burden.
 - If consistent progression signals are present, advance load, progression, or complexity cautiously within behavioral capacity.
+- Apply the health coaching phase ladder Regulation -> Restoration -> Optimization and justify the active phase.
+- Use the health coaching output template for coach-facing intelligence: red flags, ranked drivers, phase + intent, minimal intervention set, monitoring plan, decision rules, and disclaimer.
+
+HEALTH COACHING TEMPLATE:
+${buildCoachInsightTemplateInstructions()}
 
 OUTPUT REQUIREMENTS:
 - Deliver a client protocol with protocol rationale, movement, nutrition, meal structure, recovery, monitoring, decision rules, and phase progression criteria.
 - Deliver separate coach intelligence notes including progression assessment, gaps identified, oversights, risk flags, and next iteration strategy.
 - Preserve compatibility fields sessionStructure, nutritionStructure, recoveryStructure, coachNotes, and clientFacingMessage.
 - Also include these richer fields when possible: stateAnalysis, protocolRationale, movementProtocol, nutritionProtocol, recoveryProtocol, monitoringMetrics, decisionRules, phaseProgressionCriteria, coachIntelligence.
+- When coachIntelligence is present, include coachIntelligence.healthCoachingLens using the DFitFactor template.
 - Include "override_summary" and "influenced_by_overrides" in the JSON output.
 
 SOURCE CONTEXT:
@@ -1081,6 +1127,7 @@ ${prompt}`
 
     generated.override_summary = coachAdjustmentSummary
     generated.influenced_by_overrides = overrideIntelligence.hasInfluence
+    generated.health_coaching_phase = healthCoachingPhase.phase
 
     const selectedFoods = await selectFoodsForMealPlan({
       clientId: params.clientId,
@@ -1209,6 +1256,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         bie: resolvedBie,
         bieSource,
         generationState,
+        healthCoachingPhase,
         stage: currentStage,
         protocolFrame,
         physiqueFocus: isPhysiqueFocused,

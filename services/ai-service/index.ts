@@ -6,6 +6,9 @@
 import Anthropic from '@anthropic-ai/sdk'
 import * as XLSX from 'xlsx'
 import { BIEVariables, ForgeStage, GenerationState } from '../../lib/bie-engine'
+import { buildCoachInsightTemplateInstructions } from '../../lib/ai/coach-insight-template'
+import { formatHealthPhaseForPrompt, resolveHealthCoachingPhase } from '../../lib/ai/phase-rules'
+import { buildUnifiedForgeSystemPrompt } from '../../lib/ai/system-prompt'
 import { db } from '../../lib/db'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '../../lib/protocol-overrides'
 
@@ -425,37 +428,7 @@ function ensureExerciseLoads(exercises: ExerciseBlock[] | undefined) {
 
 // â”€â”€â”€ System Prompts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const FORGE_SYSTEM_PROMPT = `You are the FORGÃ‹ Behavioral Intelligence Engine AI component. You generate adaptive health and fitness protocols for the FORGÃ‹ platform.
-
-CORE PHILOSOPHY:
-- Behavior drives programming. Behavioral capacity determines protocol complexity, not fitness level alone.
-- Non-punitive adaptation: when behavioral capacity drops, simplifyâ€”never withhold progress.
-- Complexity before load: movement coordination progresses before intensity.
-- Resilience to disruption: all protocols include swap alternatives.
-
-FORGE STAGES:
-1. Foundations â€” Tier 1-2 complexity, 2-3x/week, pattern mastery
-2. Optimization â€” Tier 1-3 complexity, 3-4x/week, progressive overload  
-3. Resilience â€” Tier 1-4 complexity, 3-4x/week, whole-body adaptation
-4. Growth â€” Tier 1-4 complexity, 4-5x/week, performance development
-5. Empowerment â€” Tier 1-5 complexity, 4-5x/week, autonomous mastery
-
-BIE VARIABLES (0-100 scale):
-- BAR (Behavioral Adherence Rate): â‰¥80 = progression eligible, 65-79 = consolidation, 50-64 = maintenance, <50 = recovery
-- BLI (Behavioral Load Index): <30 = sustainable, 30-50 = moderate, 50-70 = elevated, >70 = critical
-- DBI (Decision Burden Index): <30 = low, 30-50 = moderate, 50-70 = high, >70 = critical  
-- CDI (Cognitive Demand Index): <30 = low, 30-50 = moderate, â‰¥70 = restrict to Tier 1-2
-- LSI (Lifestyle Stability Index): 0-100, higher = more stable
-- PPS (Progression Probability Score): â‰¥70 = advancement eligible
-
-GENERATION STATES:
-- State A (Stable Progression): Full volume, complexity advancement eligible
-- State B (Consolidation): Hold complexity, maintain or slightly reduce volume
-- State C (Simplified Load): Reduce sets 20-30%, remove finisher, reduce complexity
-- State D (Recovery/Disruption): Recovery template, minimum viable, Tier 1-2 only
-- State E (Rebuild/Re-entry): Foundations protocol regardless of previous stage
-
-Always output structured JSON matching the requested schema exactly.`
+const FORGE_SYSTEM_PROMPT = buildUnifiedForgeSystemPrompt()
 
 // â”€â”€â”€ Protocol Generator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -463,6 +436,11 @@ export async function generateProtocol(
   request: ProtocolGenerationRequest
 ): Promise<GeneratedProtocol> {
   const { client, protocolType, equipmentAvailable, previousProtocolSummary, coachDirectives } = request
+  const healthPhase = resolveHealthCoachingPhase({
+    bie: client.currentBIE,
+    generationState: client.generationState,
+    currentStage: client.stage,
+  })
   const priorProtocols = await db.query<{ protocol_payload: Record<string, unknown> | null }>(
     `SELECT protocol_payload
      FROM protocols
@@ -571,6 +549,7 @@ COACH ADJUSTMENT SUMMARY:
 ${coachAdjustmentSummary}
 ${client.recentJournalSummary ? `RECENT JOURNAL SIGNALS: ${client.recentJournalSummary}` : ''}
 ${coachDirectives ? `COACH DIRECTIVES: ${coachDirectives}` : ''}
+${formatHealthPhaseForPrompt(healthPhase)}
 
 CLIENT DOCUMENTS (AI-enabled):
 ${docSummary}
@@ -584,6 +563,9 @@ Generate a complete ${protocolType} protocol. Apply the correct generation state
 - Every exercise must include a load value expressed as intent, not a final prescription.
 - Allowed load values only: "bodyweight", "light", "moderate", "moderate-heavy", "technique", "light dumbbells", "moderate dumbbells", "light band", "moderate band".
 - Do not use pound ranges, percentages, or vague phrasing. Load must never be blank.
+- Use the DFitFactor hierarchy: Safety -> Feasibility -> Recovery capacity -> Adherence/constraints -> Optimization.
+- Honor the active health-coaching phase of Regulation, Restoration, or Optimization while staying aligned with FORGE state logic.
+- Before recommending supplements, training escalation, or nutritional tightening, check for contraindications, interactions, pregnancy considerations, and major comorbidities when relevant.
 Output ONLY valid JSON matching this schema:
 {
   "name": "Protocol name",
@@ -705,6 +687,11 @@ export async function generateWeeklyInsight(
   const documentContext = await fetchAiDocumentContext(client.clientId, 350)
   const docSummary = documentContext.summary
   const pdfDocs = documentContext.pdfDocs
+  const healthPhase = resolveHealthCoachingPhase({
+    bie: client.currentBIE,
+    generationState: client.generationState,
+    currentStage: client.stage,
+  })
 
   const prompt = `Generate a weekly behavioral intelligence insight for this FORGE client.
 
@@ -718,11 +705,13 @@ ${weeklyData.biomarkerChanges ? `Biomarker changes: ${JSON.stringify(weeklyData.
 
 CURRENT BIE:
 BAR: ${client.currentBIE.bar.toFixed(1)}, BLI: ${client.currentBIE.bli.toFixed(1)}, DBI: ${client.currentBIE.dbi.toFixed(1)}, PPS: ${client.currentBIE.pps.toFixed(1)}
+${formatHealthPhaseForPrompt(healthPhase)}
 
 CLIENT DOCUMENTS (AI-enabled):
 ${docSummary}
 
 ${documentContext.hasNutritionLog ? 'A nutrition or food-journal document is present in the AI-enabled documents. Treat it as a primary evidence source for dietary pattern analysis.' : ''}
+${buildCoachInsightTemplateInstructions()}
 
 Output ONLY JSON:
 {
@@ -787,6 +776,11 @@ export async function generateCoachQueryInsight(
   const documentContext = await fetchAiDocumentContext(client.clientId, 350)
   const docSummary = documentContext.summary
   const pdfDocs = documentContext.pdfDocs
+  const healthPhase = resolveHealthCoachingPhase({
+    bie: client.currentBIE,
+    generationState: client.generationState,
+    currentStage: client.stage,
+  })
 
   const prompt = `You are answering a coach's targeted insight request for a FORGE client.
 
@@ -798,6 +792,7 @@ ${insightRequest.query}
 
 CURRENT BIE:
 BAR: ${client.currentBIE.bar.toFixed(1)}, BLI: ${client.currentBIE.bli.toFixed(1)}, DBI: ${client.currentBIE.dbi.toFixed(1)}, CDI: ${client.currentBIE.cdi.toFixed(1)}, LSI: ${client.currentBIE.lsi.toFixed(1)}, PPS: ${client.currentBIE.pps.toFixed(1)}
+${formatHealthPhaseForPrompt(healthPhase)}
 
 RECENT JOURNAL HIGHLIGHTS:
 ${insightRequest.journalHighlights.length > 0 ? insightRequest.journalHighlights.join(' | ') : 'None'}
@@ -812,6 +807,7 @@ CLIENT DOCUMENTS (AI-enabled):
 ${docSummary}
 
 ${documentContext.hasNutritionLog ? 'A nutrition or food-journal document is present. Prioritize it when answering food-intake, meal-pattern, protein-target, calorie-sufficiency, and nutrition-adherence questions.' : ''}
+${buildCoachInsightTemplateInstructions()}
 
 Return a focused coach-facing answer. Be specific about food-pattern gaps, under-target intake, journal themes, and what should be addressed next when the evidence supports it. If nutrition-log evidence is available, reference it before broader inference.
 - Always give a clear decision.
