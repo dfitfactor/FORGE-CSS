@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { ClientDocumentInsightPanel } from '@/components/modules/clients/ClientDocumentInsightPanel'
 import {
   ArrowLeft, Upload, FileText, File, Trash2, Brain, Eye,
   Loader2, CheckCircle, AlertCircle, X, Plus
@@ -242,6 +243,8 @@ export default function DocumentsPage() {
             </div>
           </div>
         )}
+
+        <ClientDocumentInsightPanel clientId={clientId} aiDocCount={aiDocs.length} />
 
         {/* Document list */}
         {loading ? (
