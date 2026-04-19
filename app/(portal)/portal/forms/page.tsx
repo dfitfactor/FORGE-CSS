@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
+import PortalCompletedFormsSection from '@/components/modules/portal/PortalCompletedFormsSection'
 import { getPortalClientOrRedirect, getPortalForms } from '@/lib/client-portal'
 
 const FORM_ROUTES: Record<string, string> = {
@@ -234,28 +235,7 @@ export default async function PortalFormsPage({
         })}
       </section>
 
-      {completedArchive.length > 0 ? (
-        <section style={{ background: 'var(--app-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24 }}>
-          <div style={{ color: 'var(--app-gold)', fontWeight: 700, fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 16 }}>
-            Completed Form Archive
-          </div>
-          {completedArchive.map((submission, index) => (
-            <div key={submission.id} style={{ borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)', padding: '14px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ color: 'var(--app-text)', fontWeight: 600 }}>{submission.name}</div>
-                  <div style={{ color: 'var(--app-text-muted)', fontSize: 13, marginTop: 4 }}>
-                    Submitted {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'recently'}
-                  </div>
-                </div>
-                <Link href={`/portal/forms/completed/${submission.id}`} style={{ color: 'var(--app-gold)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
-                  Open PDF View {'->'}
-                </Link>
-              </div>
-            </div>
-          ))}
-        </section>
-      ) : null}
+      <PortalCompletedFormsSection completedArchive={completedArchive} />
     </div>
   )
 }
