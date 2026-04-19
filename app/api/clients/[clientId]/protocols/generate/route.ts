@@ -44,6 +44,10 @@ type GeneratedProtocolCompat = {
     proteinG?: number
     carbG?: number
     fatG?: number
+    dailyCaloriesDisplay?: string
+    proteinDisplay?: string
+    carbDisplay?: string
+    fatDisplay?: string
     mealFrequency?: number
     mealTiming?: string
     complexityLevel?: string
@@ -89,6 +93,10 @@ type GeneratedProtocolCompat = {
     proteinG?: number
     carbG?: number
     fatG?: number
+    dailyCaloriesDisplay?: string
+    proteinDisplay?: string
+    carbDisplay?: string
+    fatDisplay?: string
     mealFrequency?: number
     caloriePhase?: string
     macroJustification?: string
@@ -196,6 +204,40 @@ function sumMealPlanNutrition(mealPlan: MealPlanRow[]) {
 function isRestrictedNutritionPhase(parts: Array<string | null | undefined>) {
   const text = parts.filter(Boolean).join('\n').toLowerCase()
   return /(elimination|reintroduction|re-introduction|test food|testing phase|restricted phase|symptom|gi|low fodmap|fasting|ramadan|medical restriction|allergy|intolerance)/i.test(text)
+}
+
+function formatNutritionDisplays(args: {
+  calories: number
+  proteinG: number
+  carbG: number
+  fatG: number
+  restrictedPhase: boolean
+  optimizationPhase: boolean
+}) {
+  if (args.restrictedPhase) {
+    return {
+      dailyCaloriesDisplay: `${Math.max(0, args.calories - 100)}-${args.calories + 100} kcal estimated`,
+      proteinDisplay: `>= ${Math.max(0, args.proteinG - 5)} g`,
+      carbDisplay: `${Math.max(0, args.carbG - 10)}-${args.carbG + 10} g controlled`,
+      fatDisplay: `${Math.max(0, args.fatG - 5)}-${args.fatG + 5} g`,
+    }
+  }
+
+  if (args.optimizationPhase) {
+    return {
+      dailyCaloriesDisplay: `${args.calories} kcal`,
+      proteinDisplay: `${args.proteinG} g`,
+      carbDisplay: `${args.carbG} g`,
+      fatDisplay: `${args.fatG} g`,
+    }
+  }
+
+  return {
+    dailyCaloriesDisplay: `${Math.max(0, args.calories - 50)}-${args.calories + 50} kcal`,
+    proteinDisplay: `${args.proteinG}-${args.proteinG + 5} g`,
+    carbDisplay: `${Math.max(0, args.carbG - 5)}-${args.carbG + 5} g`,
+    fatDisplay: `${Math.max(0, args.fatG - 3)}-${args.fatG + 3} g`,
+  }
 }
 
 function nutritionTargetsNeedReconciliation(args: {
@@ -523,6 +565,10 @@ Return ONLY raw JSON in this shape:
     "proteinG": 0,
     "carbG": 0,
     "fatG": 0,
+    "dailyCaloriesDisplay": "",
+    "proteinDisplay": "",
+    "carbDisplay": "",
+    "fatDisplay": "",
     "mealFrequency": 0,
     "mealTiming": "",
     "complexityLevel": "",
@@ -535,6 +581,10 @@ Return ONLY raw JSON in this shape:
     "proteinG": 0,
     "carbG": 0,
     "fatG": 0,
+    "dailyCaloriesDisplay": "",
+    "proteinDisplay": "",
+    "carbDisplay": "",
+    "fatDisplay": "",
     "mealFrequency": 0,
     "caloriePhase": "",
     "macroJustification": "",
@@ -624,6 +674,10 @@ Return ONLY raw JSON:
     "proteinG": 0,
     "carbG": 0,
     "fatG": 0,
+    "dailyCaloriesDisplay": "",
+    "proteinDisplay": "",
+    "carbDisplay": "",
+    "fatDisplay": "",
     "mealFrequency": 0,
     "mealTiming": "",
     "complexityLevel": "",
@@ -636,6 +690,10 @@ Return ONLY raw JSON:
     "proteinG": 0,
     "carbG": 0,
     "fatG": 0,
+    "dailyCaloriesDisplay": "",
+    "proteinDisplay": "",
+    "carbDisplay": "",
+    "fatDisplay": "",
     "mealFrequency": 0,
     "caloriePhase": "",
     "macroJustification": "",
@@ -713,6 +771,10 @@ function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedPr
       proteinG: input.nutritionProtocol.proteinG,
       carbG: input.nutritionProtocol.carbG,
       fatG: input.nutritionProtocol.fatG,
+      dailyCaloriesDisplay: input.nutritionProtocol.dailyCaloriesDisplay,
+      proteinDisplay: input.nutritionProtocol.proteinDisplay,
+      carbDisplay: input.nutritionProtocol.carbDisplay,
+      fatDisplay: input.nutritionProtocol.fatDisplay,
       mealFrequency: input.nutritionProtocol.mealFrequency,
       mealTiming: input.nutritionProtocol.mealTiming,
       complexityLevel: input.nutritionProtocol.complexityLevel,
@@ -1671,11 +1733,25 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
 
       const finalTotals = sumMealPlanNutrition(mealPlan)
       if (finalTotals.countedMeals > 0) {
+        const optimizationPhase = /optimization/i.test([currentStage, protocolFrame, generated.nutritionProtocol?.caloriePhase].filter(Boolean).join(' '))
+        const targetDisplays = formatNutritionDisplays({
+          calories: roundToWhole(finalTotals.calories),
+          proteinG: roundToWhole(finalTotals.proteinG),
+          carbG: roundToWhole(finalTotals.carbG),
+          fatG: roundToWhole(finalTotals.fatG),
+          restrictedPhase: restrictedNutritionPhase,
+          optimizationPhase,
+        })
+
         if (generated.nutritionStructure) {
           generated.nutritionStructure.dailyCalories = roundToWhole(finalTotals.calories)
           generated.nutritionStructure.proteinG = roundToWhole(finalTotals.proteinG)
           generated.nutritionStructure.carbG = roundToWhole(finalTotals.carbG)
           generated.nutritionStructure.fatG = roundToWhole(finalTotals.fatG)
+          generated.nutritionStructure.dailyCaloriesDisplay = targetDisplays.dailyCaloriesDisplay
+          generated.nutritionStructure.proteinDisplay = targetDisplays.proteinDisplay
+          generated.nutritionStructure.carbDisplay = targetDisplays.carbDisplay
+          generated.nutritionStructure.fatDisplay = targetDisplays.fatDisplay
           generated.nutritionStructure.mealPlan = mealPlan
           if (restrictedNutritionPhase) {
             generated.nutritionStructure.keyGuidelines = [
@@ -1689,6 +1765,10 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
           generated.nutritionProtocol.proteinG = roundToWhole(finalTotals.proteinG)
           generated.nutritionProtocol.carbG = roundToWhole(finalTotals.carbG)
           generated.nutritionProtocol.fatG = roundToWhole(finalTotals.fatG)
+          generated.nutritionProtocol.dailyCaloriesDisplay = targetDisplays.dailyCaloriesDisplay
+          generated.nutritionProtocol.proteinDisplay = targetDisplays.proteinDisplay
+          generated.nutritionProtocol.carbDisplay = targetDisplays.carbDisplay
+          generated.nutritionProtocol.fatDisplay = targetDisplays.fatDisplay
           generated.nutritionProtocol.mealPlan = mealPlan
           if (restrictedNutritionPhase) {
             generated.nutritionProtocol.keyGuidelines = [

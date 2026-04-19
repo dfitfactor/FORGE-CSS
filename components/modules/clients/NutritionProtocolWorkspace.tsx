@@ -40,6 +40,11 @@ function macroValue(value: number | undefined) {
   return typeof value === 'number' ? value : '-'
 }
 
+function displayValue(display: string | undefined, value: number | undefined, unit: string) {
+  if (display && display.trim().length > 0) return display
+  return `${macroValue(value)} ${unit}`
+}
+
 export default function NutritionProtocolWorkspace({ clientId, clientName, initialData }: Props) {
   const printRef = useRef<HTMLDivElement>(null)
   const [data, setData] = useState(initialData)
@@ -262,15 +267,31 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-4">
                   {[
-                    { label: 'Calories', original: protocol.nutritionStructure?.dailyCalories, adjusted: protocol.adjustedNutritionStructure?.dailyCalories, unit: 'kcal' },
-                    { label: 'Protein', original: protocol.nutritionStructure?.proteinG, adjusted: protocol.adjustedNutritionStructure?.proteinG, unit: 'g' },
-                    { label: 'Carbs', original: protocol.nutritionStructure?.carbG, adjusted: protocol.adjustedNutritionStructure?.carbG, unit: 'g' },
-                    { label: 'Fats', original: protocol.nutritionStructure?.fatG, adjusted: protocol.adjustedNutritionStructure?.fatG, unit: 'g' },
+                    {
+                      label: 'Calories',
+                      original: displayValue((protocol.nutritionStructure as any)?.dailyCaloriesDisplay, protocol.nutritionStructure?.dailyCalories, 'kcal'),
+                      adjusted: displayValue((protocol.adjustedNutritionStructure as any)?.dailyCaloriesDisplay, protocol.adjustedNutritionStructure?.dailyCalories, 'kcal'),
+                    },
+                    {
+                      label: 'Protein',
+                      original: displayValue((protocol.nutritionStructure as any)?.proteinDisplay, protocol.nutritionStructure?.proteinG, 'g'),
+                      adjusted: displayValue((protocol.adjustedNutritionStructure as any)?.proteinDisplay, protocol.adjustedNutritionStructure?.proteinG, 'g'),
+                    },
+                    {
+                      label: 'Carbs',
+                      original: displayValue((protocol.nutritionStructure as any)?.carbDisplay, protocol.nutritionStructure?.carbG, 'g'),
+                      adjusted: displayValue((protocol.adjustedNutritionStructure as any)?.carbDisplay, protocol.adjustedNutritionStructure?.carbG, 'g'),
+                    },
+                    {
+                      label: 'Fats',
+                      original: displayValue((protocol.nutritionStructure as any)?.fatDisplay, protocol.nutritionStructure?.fatG, 'g'),
+                      adjusted: displayValue((protocol.adjustedNutritionStructure as any)?.fatDisplay, protocol.adjustedNutritionStructure?.fatG, 'g'),
+                    },
                   ].map(item => (
                     <div key={item.label} className="rounded-xl bg-white/4 p-3">
                       <div className="text-[10px] font-mono uppercase tracking-widest text-white/30">{item.label}</div>
-                      <div className="mt-1 text-lg font-semibold text-white">{macroValue(item.original)} {item.unit}</div>
-                      <div className="mt-1 text-xs text-[#D4AF37]">Adjusted: {macroValue(item.adjusted)} {item.unit}</div>
+                      <div className="mt-1 text-lg font-semibold text-white">{item.original}</div>
+                      <div className="mt-1 text-xs text-[#D4AF37]">Adjusted: {item.adjusted}</div>
                     </div>
                   ))}
                 </div>
@@ -461,17 +482,17 @@ export default function NutritionProtocolWorkspace({ clientId, clientName, initi
                 <tbody>
                   <tr>
                     <td className="border border-[#d0d0d0] px-3 py-2 font-medium">Protocol</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.dailyCalories)} kcal</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.proteinG)} g</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.carbG)} g</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.nutritionStructure?.fatG)} g</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.nutritionStructure as any)?.dailyCaloriesDisplay, protocol.nutritionStructure?.dailyCalories, 'kcal')}</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.nutritionStructure as any)?.proteinDisplay, protocol.nutritionStructure?.proteinG, 'g')}</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.nutritionStructure as any)?.carbDisplay, protocol.nutritionStructure?.carbG, 'g')}</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.nutritionStructure as any)?.fatDisplay, protocol.nutritionStructure?.fatG, 'g')}</td>
                   </tr>
                   <tr>
                     <td className="border border-[#d0d0d0] px-3 py-2 font-medium">Adjusted</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.dailyCalories)} kcal</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.proteinG)} g</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.carbG)} g</td>
-                    <td className="border border-[#d0d0d0] px-3 py-2">{macroValue(protocol.adjustedNutritionStructure?.fatG)} g</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.adjustedNutritionStructure as any)?.dailyCaloriesDisplay, protocol.adjustedNutritionStructure?.dailyCalories, 'kcal')}</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.adjustedNutritionStructure as any)?.proteinDisplay, protocol.adjustedNutritionStructure?.proteinG, 'g')}</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.adjustedNutritionStructure as any)?.carbDisplay, protocol.adjustedNutritionStructure?.carbG, 'g')}</td>
+                    <td className="border border-[#d0d0d0] px-3 py-2">{displayValue((protocol.adjustedNutritionStructure as any)?.fatDisplay, protocol.adjustedNutritionStructure?.fatG, 'g')}</td>
                   </tr>
                 </tbody>
               </table>

@@ -33,6 +33,12 @@ type MealPlanRow = {
 
 type MealSlot = { foods: string; protein: string; carbs: string; fats: string; timing: string; notes: string }
 
+function displayNutritionValue(display: unknown, numericValue: unknown, unit: string) {
+  if (typeof display === 'string' && display.trim().length > 0) return display
+  if (typeof numericValue === 'number') return `${numericValue} ${unit}`
+  return '—'
+}
+
 function SectionHeader({ title, color }: { title: string; color: string }) {
   return (
     <div style={{ borderLeft: `4px solid ${color}`, paddingLeft: '12px', marginBottom: '16px' }}>
@@ -628,11 +634,11 @@ export default function ProtocolPDFPage() {
               <SectionHeader title="Nutrition Protocol" color="#b5451b" />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
                 {[
-                  { label: 'Calories', value: String(ns.dailyCalories ?? protocol.calorie_target ?? '—') + ' kcal' },
-                  { label: 'Protein', value: String(ns.proteinG ?? protocol.protein_target_g ?? '—') + 'g' },
-                  { label: 'Carbs', value: String(ns.carbG ?? protocol.carb_target_g ?? '—') + 'g' },
-                  { label: 'Fats', value: String(ns.fatG ?? protocol.fat_target_g ?? '—') + 'g' },
-                ].map(s => (
+                    { label: 'Calories', value: displayNutritionValue((ns as any).dailyCaloriesDisplay, ns.dailyCalories ?? protocol.calorie_target, 'kcal') },
+                    { label: 'Protein', value: displayNutritionValue((ns as any).proteinDisplay, ns.proteinG ?? protocol.protein_target_g, 'g') },
+                    { label: 'Carbs', value: displayNutritionValue((ns as any).carbDisplay, ns.carbG ?? protocol.carb_target_g, 'g') },
+                    { label: 'Fats', value: displayNutritionValue((ns as any).fatDisplay, ns.fatG ?? protocol.fat_target_g, 'g') },
+                  ].map(s => (
                   <div key={s.label} style={{ background: '#fff8f5', border: '1px solid #fde0d0', borderRadius: '6px', padding: '10px', textAlign: 'center' }}>
                     <div style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>{s.label}</div>
                     <div style={{ fontSize: '14px', fontWeight: '700', color: '#b5451b' }}>{s.value}</div>
