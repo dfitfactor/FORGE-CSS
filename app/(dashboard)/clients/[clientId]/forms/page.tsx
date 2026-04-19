@@ -1,6 +1,7 @@
-﻿import Link from 'next/link'
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import ClientCompletedFormsPanel from '@/components/modules/clients/ClientCompletedFormsPanel'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 
@@ -62,32 +63,7 @@ export default async function ClientFormsPage({ params }: { params: { clientId: 
           </div>
         </div>
 
-        <div className="bg-[#111111] border border-white/6 rounded-2xl p-6">
-          <div className="text-xs uppercase tracking-[0.2em] text-[#D4AF37] font-semibold mb-4">Client Form Archive</div>
-          {submissions.length === 0 ? (
-            <div className="text-sm text-white/40">No completed forms have been submitted yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {submissions.map((submission) => (
-                <div key={submission.id} className="rounded-xl border border-white/6 bg-white/[0.02] px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-white font-medium">
-                      <FileText size={15} className="text-[#D4AF37]" />
-                      {submission.name}
-                    </div>
-                    <div className="text-xs text-white/35 mt-1">
-                      Submitted {submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'recently'}
-                      {submission.signature_data ? ` · Signed by ${submission.signature_data}` : ''}
-                    </div>
-                  </div>
-                  <Link href={`/clients/${client.id}/forms/${submission.id}`} className="forge-btn-secondary text-sm whitespace-nowrap">
-                    Open PDF View
-                  </Link>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <ClientCompletedFormsPanel clientId={client.id} submissions={submissions} />
       </div>
     </div>
   )
