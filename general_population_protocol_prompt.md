@@ -34,6 +34,10 @@ This is:
 - protein anchoring
 - calorie awareness without over-complexity
 - real-world flexibility (eating out, work schedule)
+- simplify faster when adherence is weak
+- phase restrictions and clinical food constraints override macro perfection
+- sample meals must match displayed targets or be explicitly labeled as compliance examples
+- nutrition output must pass the governing QA validation layer in `AGENTS.md`
 
 ## RECOVERY PRIORITY
 

@@ -134,7 +134,97 @@ type GeneratedProtocolCompat = {
 }
 
 type ExerciseLike = { exerciseName?: string; loadGuidance?: string }
-type MealPlanRow = { time?: string; meal?: string; foods?: string; notes?: string }
+type MealPlanRow = {
+  time?: string
+  meal?: string
+  foods?: string
+  notes?: string
+  calories?: number
+  proteinG?: number
+  carbG?: number
+  fatG?: number
+  complianceLabel?: string
+}
+type NutritionQaResult = {
+  nutritionStructure?: NonNullable<GeneratedProtocolCompat['nutritionStructure']>
+  nutritionProtocol?: NonNullable<GeneratedProtocolCompat['nutritionProtocol']>
+  mealPlan?: MealPlanRow[]
+  qaSummary?: string
+}
+
+const NUTRITION_QA_RULES = `Mandatory nutrition QA checks:
+1. phase appropriateness
+2. active food and clinical constraints
+3. behavioral realism
+4. macro and calorie alignment
+5. internal consistency across all sections
+
+Do not finalize unless the sample meal plan has been cross-checked against displayed calories, protein, carbohydrate, and fat targets.
+If the sample day does not match targets within reasonable tolerance, revise the meal plan, revise portions, revise the targets, or clearly label it as a phase-constrained compliance example.
+Sample meals must not violate GI reintroduction rules, elimination rules, medical restrictions, religious fasting practices, coach-assigned test foods, or behavioral capacity limitations.
+If the client is in a restricted or testing phase, symptom clarity and compliance take priority over full macro optimization.
+If nutrition adherence is weak, simplify the protocol rather than increasing complexity.
+Priority order: safety, phase compliance, behavioral feasibility, internal consistency, macro accuracy, presentation.`
+
+function roundToWhole(value: number) {
+  return Math.round(value)
+}
+
+function sumMealPlanNutrition(mealPlan: MealPlanRow[]) {
+  return mealPlan.reduce<{
+    calories: number
+    proteinG: number
+    carbG: number
+    fatG: number
+    countedMeals: number
+  }>(
+    (totals, meal) => ({
+      calories: totals.calories + (typeof meal.calories === 'number' ? meal.calories : 0),
+      proteinG: totals.proteinG + (typeof meal.proteinG === 'number' ? meal.proteinG : 0),
+      carbG: totals.carbG + (typeof meal.carbG === 'number' ? meal.carbG : 0),
+      fatG: totals.fatG + (typeof meal.fatG === 'number' ? meal.fatG : 0),
+      countedMeals:
+        totals.countedMeals +
+        (typeof meal.calories === 'number' || typeof meal.proteinG === 'number' || typeof meal.carbG === 'number' || typeof meal.fatG === 'number'
+          ? 1
+          : 0),
+    }),
+    { calories: 0, proteinG: 0, carbG: 0, fatG: 0, countedMeals: 0 }
+  )
+}
+
+function isRestrictedNutritionPhase(parts: Array<string | null | undefined>) {
+  const text = parts.filter(Boolean).join('\n').toLowerCase()
+  return /(elimination|reintroduction|re-introduction|test food|testing phase|restricted phase|symptom|gi|low fodmap|fasting|ramadan|medical restriction|allergy|intolerance)/i.test(text)
+}
+
+function nutritionTargetsNeedReconciliation(args: {
+  mealPlan: MealPlanRow[]
+  dailyCalories?: number
+  proteinG?: number
+  carbG?: number
+  fatG?: number
+  restrictedPhase: boolean
+}) {
+  const totals = sumMealPlanNutrition(args.mealPlan)
+  if (totals.countedMeals === 0) return { needsRepair: true, totals, reason: 'Meal plan has no numeric macro breakdown.' }
+
+  const calorieTolerance = args.restrictedPhase ? Math.max(200, (args.dailyCalories ?? 0) * 0.15) : Math.max(150, (args.dailyCalories ?? 0) * 0.1)
+  const macroTolerance = args.restrictedPhase ? 15 : 10
+
+  const mismatches = [
+    typeof args.dailyCalories === 'number' && Math.abs(totals.calories - args.dailyCalories) > calorieTolerance ? 'calories' : null,
+    typeof args.proteinG === 'number' && Math.abs(totals.proteinG - args.proteinG) > macroTolerance ? 'protein' : null,
+    typeof args.carbG === 'number' && Math.abs(totals.carbG - args.carbG) > macroTolerance ? 'carbs' : null,
+    typeof args.fatG === 'number' && Math.abs(totals.fatG - args.fatG) > macroTolerance ? 'fat' : null,
+  ].filter(Boolean)
+
+  return {
+    needsRepair: mismatches.length > 0,
+    totals,
+    reason: mismatches.length > 0 ? `Mismatch across ${mismatches.join(', ')}.` : null,
+  }
+}
 
 function getAnthropicModel() {
   return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
@@ -375,6 +465,208 @@ ${raw.slice(0, 12000)}`
   })
 
   return collectTextContent(repairResponse.content as Array<{ type: string; text?: string }>)
+}
+
+async function runNutritionQaValidation(args: {
+  clientName: string
+  stage: string
+  protocolFrame: string
+  generationState: string
+  primaryGoal: string
+  nutritionStructure: GeneratedProtocolCompat['nutritionStructure']
+  nutritionProtocol: GeneratedProtocolCompat['nutritionProtocol']
+  mealPlan: MealPlanRow[]
+  coachDirectives?: string | null
+  clientNotes?: string | null
+  journalSummary?: string
+  checkinSummary?: string
+  docSummary?: string
+}) {
+  const prompt = `Run the final FORGE nutrition QA validation and revise the nutrition output if needed.
+
+${NUTRITION_QA_RULES}
+
+Client: ${args.clientName}
+Stage: ${args.stage}
+Protocol framing: ${args.protocolFrame}
+Generation state: ${args.generationState}
+Primary goal: ${args.primaryGoal}
+
+CONSTRAINT SIGNALS:
+Coach directives: ${args.coachDirectives ?? 'None'}
+Client notes: ${args.clientNotes ?? 'None'}
+Recent journals: ${args.journalSummary ?? 'None'}
+Recent check-ins: ${args.checkinSummary ?? 'None'}
+AI document summary: ${args.docSummary ?? 'None'}
+
+CURRENT NUTRITION STRUCTURE:
+${JSON.stringify(args.nutritionStructure ?? {}, null, 2)}
+
+CURRENT NUTRITION PROTOCOL:
+${JSON.stringify(args.nutritionProtocol ?? {}, null, 2)}
+
+CURRENT SAMPLE DAY:
+${JSON.stringify(args.mealPlan ?? [], null, 2)}
+
+Validation requirements:
+- Cross-check the sample day against calories, protein, carbs, and fat targets.
+- Use reasonable tolerance: calories within about 10% and macros within about 10g when the phase is not explicitly restricted or testing.
+- If the phase is restricted, elimination-based, testing-based, or symptom-driven, it is acceptable to prioritize compliance and clarity over perfect macro matching, but the sample day must be explicitly labeled as a compliance example in notes or guidelines.
+- Preserve the overall phase logic and behavioral realism.
+- Reduce complexity if adherence looks weak.
+- Return revised values only when needed, but always return a complete final payload.
+
+Return ONLY raw JSON in this shape:
+{
+  "nutritionStructure": {
+    "dailyCalories": 0,
+    "proteinG": 0,
+    "carbG": 0,
+    "fatG": 0,
+    "mealFrequency": 0,
+    "mealTiming": "",
+    "complexityLevel": "",
+    "keyGuidelines": [],
+    "disruption_protocol": "",
+    "mealPlan": []
+  },
+  "nutritionProtocol": {
+    "dailyCalories": 0,
+    "proteinG": 0,
+    "carbG": 0,
+    "fatG": 0,
+    "mealFrequency": 0,
+    "caloriePhase": "",
+    "macroJustification": "",
+    "adherenceFallback": "",
+    "complexityLevel": "",
+    "keyGuidelines": [],
+    "disruptionProtocol": "",
+    "mealTiming": "",
+    "mealPlan": []
+  },
+  "mealPlan": [],
+  "qaSummary": "One short coach-facing sentence explaining what was verified or revised."
+}`
+
+  const response = await anthropic.messages.create({
+    model: getAnthropicModel(),
+    max_tokens: 2200,
+    system: 'You are the FORGE nutrition QA validator. Return only valid raw JSON.',
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const raw = collectTextContent(response.content as Array<{ type: string; text?: string }>)
+  if (!raw) return null
+
+  let parsed = tryParseJsonObject<NutritionQaResult>(raw)
+  if (!parsed) {
+    const repaired = await repairProtocolJson(raw)
+    parsed = repaired ? tryParseJsonObject<NutritionQaResult>(repaired) : null
+  }
+
+  return parsed
+}
+
+async function repairNutritionCoherence(args: {
+  clientName: string
+  stage: string
+  protocolFrame: string
+  restrictedPhase: boolean
+  nutritionStructure: GeneratedProtocolCompat['nutritionStructure']
+  nutritionProtocol: GeneratedProtocolCompat['nutritionProtocol']
+  mealPlan: MealPlanRow[]
+  totals: { calories: number; proteinG: number; carbG: number; fatG: number; countedMeals: number }
+  mismatchReason: string
+  constraintSummary: string
+}) {
+  const prompt = `Repair this FORGE nutrition output so it is internally coherent.
+
+${NUTRITION_QA_RULES}
+
+This is a coherence repair, not a food creativity task.
+Your job is to reconcile:
+- stated macro targets
+- actual meal composition
+- allowed food rules
+- phase-specific restrictions
+- fallback/disruption instructions
+
+Client: ${args.clientName}
+Stage: ${args.stage}
+Protocol framing: ${args.protocolFrame}
+Restricted or testing phase: ${args.restrictedPhase ? 'yes' : 'no'}
+Mismatch detected: ${args.mismatchReason}
+
+Constraint summary:
+${args.constraintSummary}
+
+CURRENT TARGETS:
+${JSON.stringify(args.nutritionStructure ?? {}, null, 2)}
+
+CURRENT SAMPLE DAY:
+${JSON.stringify(args.mealPlan ?? [], null, 2)}
+
+CURRENT SUMMED TOTALS FROM SAMPLE DAY:
+${JSON.stringify(args.totals, null, 2)}
+
+Repair rules:
+- Every meal row must include calories, proteinG, carbG, and fatG.
+- The sum of meal rows must reconcile with displayed daily targets.
+- If phase restrictions prevent exact target matching, revise the displayed targets and clearly label the sample day as a phase-constrained compliance example.
+- Keep the plan behaviorally realistic.
+- Do not leave targets that the sample day cannot actually produce.
+
+Return ONLY raw JSON:
+{
+  "nutritionStructure": {
+    "dailyCalories": 0,
+    "proteinG": 0,
+    "carbG": 0,
+    "fatG": 0,
+    "mealFrequency": 0,
+    "mealTiming": "",
+    "complexityLevel": "",
+    "keyGuidelines": [],
+    "disruption_protocol": "",
+    "mealPlan": []
+  },
+  "nutritionProtocol": {
+    "dailyCalories": 0,
+    "proteinG": 0,
+    "carbG": 0,
+    "fatG": 0,
+    "mealFrequency": 0,
+    "caloriePhase": "",
+    "macroJustification": "",
+    "adherenceFallback": "",
+    "complexityLevel": "",
+    "keyGuidelines": [],
+    "disruptionProtocol": "",
+    "mealTiming": "",
+    "mealPlan": []
+  },
+  "mealPlan": [],
+  "qaSummary": "Short explanation of how coherence was repaired."
+}`
+
+  const response = await anthropic.messages.create({
+    model: getAnthropicModel(),
+    max_tokens: 2200,
+    system: 'You repair FORGE nutrition coherence. Return only valid raw JSON.',
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const raw = collectTextContent(response.content as Array<{ type: string; text?: string }>)
+  if (!raw) return null
+
+  let parsed = tryParseJsonObject<NutritionQaResult>(raw)
+  if (!parsed) {
+    const repaired = await repairProtocolJson(raw)
+    parsed = repaired ? tryParseJsonObject<NutritionQaResult>(repaired) : null
+  }
+
+  return parsed
 }
 
 function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedProtocolCompat {
@@ -981,6 +1273,7 @@ Protocol name must include ${client.full_name.split(' ')[0] || 'the client'}'s f
 
 Simplify execution by reducing decision burden and recovery cost, not by stripping away physique-specific architecture.
 For physique athletes, macros and meal structure must translate coherently into the meal plan and BSLDS structure.
+${NUTRITION_QA_RULES}
 Build the session using the exercises listed in SELECTED EXERCISES above.
 Use the DFitFactor hierarchy: Safety -> Feasibility -> Recovery capacity -> Adherence/constraints -> Optimization.
 If the signal does not support Optimization, stay in Regulation or Restoration.
@@ -1083,6 +1376,7 @@ EXECUTION RULES:
 - If consistent progression signals are present, advance load, progression, or complexity cautiously within behavioral capacity.
 - Apply the health coaching phase ladder Regulation -> Restoration -> Optimization and justify the active phase.
 - Use the health coaching output template for coach-facing intelligence: red flags, ranked drivers, phase + intent, minimal intervention set, monitoring plan, decision rules, and disclaimer.
+- Nutrition must pass the mandatory QA layer before finalization. Do not leave meal-plan macros, targets, phase rules, or restriction logic internally inconsistent.
 
 HEALTH COACHING TEMPLATE:
 ${buildCoachInsightTemplateInstructions()}
@@ -1167,7 +1461,11 @@ Return ONLY a JSON array (no markdown, no wrapper object):
     "time": "8:00-9:00 a.m.",
     "meal": "Breakfast",
     "foods": "Specific foods with exact portions for this client",
-    "notes": ""
+    "notes": "",
+    "calories": 400,
+    "proteinG": 35,
+    "carbG": 40,
+    "fatG": 12
   }
 ]
 
@@ -1180,6 +1478,9 @@ If meal timing says dinner is carb-free or carb-reduced, do not place starches o
 For carb-free dinner, dinner must be protein + non-starchy vegetables only.
 Breakfast and lunch should hold the majority of structured carbs when front-loading is requested.
 For physique-athlete clients, preserve bodybuilding specificity with performance-supportive carbs, protective protein, and a coherent BSLDS translation that still feels easy to execute.
+Run a QA self-check before returning: phase appropriateness, active food and clinical constraints, behavioral realism, macro and calorie alignment, and internal consistency across all sections.
+If the sample day cannot match targets within reasonable tolerance, revise the portions, revise the meals, revise the targets, or explicitly label the day as a phase-constrained compliance example.
+Every meal row must include calories, proteinG, carbG, and fatG, and the full day must reconcile with the displayed daily targets unless you explicitly label it as a phase-constrained compliance example.
 The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ?? 'General fitness'}".`
 
         const mealPlanResponse = await anthropic.messages.create({
@@ -1247,6 +1548,158 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
 
     if (generated && generated.nutritionStructure) {
       generated.nutritionStructure.mealPlan = mealPlan
+    }
+    if (generated && generated.nutritionProtocol) {
+      generated.nutritionProtocol.mealPlan = mealPlan
+    }
+
+    const restrictedNutritionPhase = isRestrictedNutritionPhase([
+      currentStage,
+      protocolFrame,
+      coachDirectives,
+      client.notes,
+      journalSummary,
+      checkinSummary,
+      docSummary,
+      generated.nutritionStructure?.mealTiming,
+      generated.nutritionProtocol?.mealTiming,
+      generated.nutritionProtocol?.macroJustification,
+      generated.nutritionProtocol?.adherenceFallback,
+    ])
+
+    try {
+      const nutritionQaResult = await runNutritionQaValidation({
+        clientName: client.full_name,
+        stage: currentStage,
+        protocolFrame,
+        generationState,
+        primaryGoal: client.primary_goal ?? 'General fitness',
+        nutritionStructure: generated.nutritionStructure,
+        nutritionProtocol: generated.nutritionProtocol,
+        mealPlan,
+        coachDirectives,
+        clientNotes: client.notes,
+        journalSummary,
+        checkinSummary,
+        docSummary,
+      })
+
+      if (nutritionQaResult?.nutritionStructure) {
+        generated.nutritionStructure = {
+          ...generated.nutritionStructure,
+          ...nutritionQaResult.nutritionStructure,
+        }
+      }
+
+      if (nutritionQaResult?.nutritionProtocol) {
+        generated.nutritionProtocol = {
+          ...generated.nutritionProtocol,
+          ...nutritionQaResult.nutritionProtocol,
+        }
+      }
+
+      if (Array.isArray(nutritionQaResult?.mealPlan) && nutritionQaResult.mealPlan.length > 0) {
+        mealPlan = nutritionQaResult.mealPlan
+      } else if (Array.isArray(nutritionQaResult?.nutritionStructure?.mealPlan) && nutritionQaResult.nutritionStructure.mealPlan.length > 0) {
+        mealPlan = nutritionQaResult.nutritionStructure.mealPlan as MealPlanRow[]
+      } else if (Array.isArray(nutritionQaResult?.nutritionProtocol?.mealPlan) && nutritionQaResult.nutritionProtocol.mealPlan.length > 0) {
+        mealPlan = nutritionQaResult.nutritionProtocol.mealPlan as MealPlanRow[]
+      }
+
+      if (generated.nutritionStructure) {
+        generated.nutritionStructure.mealPlan = mealPlan
+      }
+      if (generated.nutritionProtocol) {
+        generated.nutritionProtocol.mealPlan = mealPlan
+      }
+
+      if (nutritionQaResult?.qaSummary) {
+        generated.coachNotes = [generated.coachNotes, `Nutrition QA: ${nutritionQaResult.qaSummary}`]
+          .filter(Boolean)
+          .join('\n')
+      }
+    } catch (qaError) {
+      console.error('Nutrition QA validation error:', qaError)
+    }
+
+    try {
+      const reconciliation = nutritionTargetsNeedReconciliation({
+        mealPlan,
+        dailyCalories: generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories,
+        proteinG: generated.nutritionStructure?.proteinG ?? generated.nutritionProtocol?.proteinG,
+        carbG: generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG,
+        fatG: generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG,
+        restrictedPhase: restrictedNutritionPhase,
+      })
+
+      if (reconciliation.needsRepair) {
+        const repaired = await repairNutritionCoherence({
+          clientName: client.full_name,
+          stage: currentStage,
+          protocolFrame,
+          restrictedPhase: restrictedNutritionPhase,
+          nutritionStructure: generated.nutritionStructure,
+          nutritionProtocol: generated.nutritionProtocol,
+          mealPlan,
+          totals: reconciliation.totals,
+          mismatchReason: reconciliation.reason ?? 'Nutrition targets and sample day do not reconcile.',
+          constraintSummary: [
+            coachDirectives ? `Coach directives: ${coachDirectives}` : null,
+            client.notes ? `Client notes: ${client.notes}` : null,
+            journalSummary ? `Journals: ${journalSummary}` : null,
+            checkinSummary ? `Check-ins: ${checkinSummary}` : null,
+            docSummary ? `AI docs: ${docSummary}` : null,
+          ].filter(Boolean).join('\n'),
+        })
+
+        if (repaired?.nutritionStructure) {
+          generated.nutritionStructure = {
+            ...generated.nutritionStructure,
+            ...repaired.nutritionStructure,
+          }
+        }
+        if (repaired?.nutritionProtocol) {
+          generated.nutritionProtocol = {
+            ...generated.nutritionProtocol,
+            ...repaired.nutritionProtocol,
+          }
+        }
+        if (Array.isArray(repaired?.mealPlan) && repaired.mealPlan.length > 0) {
+          mealPlan = repaired.mealPlan
+        }
+      }
+
+      const finalTotals = sumMealPlanNutrition(mealPlan)
+      if (finalTotals.countedMeals > 0) {
+        if (generated.nutritionStructure) {
+          generated.nutritionStructure.dailyCalories = roundToWhole(finalTotals.calories)
+          generated.nutritionStructure.proteinG = roundToWhole(finalTotals.proteinG)
+          generated.nutritionStructure.carbG = roundToWhole(finalTotals.carbG)
+          generated.nutritionStructure.fatG = roundToWhole(finalTotals.fatG)
+          generated.nutritionStructure.mealPlan = mealPlan
+          if (restrictedNutritionPhase) {
+            generated.nutritionStructure.keyGuidelines = [
+              ...(generated.nutritionStructure.keyGuidelines ?? []),
+              'Sample day is a phase-constrained compliance example when restriction rules limit full macro optimization.',
+            ].filter((value, index, array) => array.indexOf(value) === index)
+          }
+        }
+        if (generated.nutritionProtocol) {
+          generated.nutritionProtocol.dailyCalories = roundToWhole(finalTotals.calories)
+          generated.nutritionProtocol.proteinG = roundToWhole(finalTotals.proteinG)
+          generated.nutritionProtocol.carbG = roundToWhole(finalTotals.carbG)
+          generated.nutritionProtocol.fatG = roundToWhole(finalTotals.fatG)
+          generated.nutritionProtocol.mealPlan = mealPlan
+          if (restrictedNutritionPhase) {
+            generated.nutritionProtocol.keyGuidelines = [
+              ...(generated.nutritionProtocol.keyGuidelines ?? []),
+              'Sample day is a phase-constrained compliance example when restriction rules limit full macro optimization.',
+            ].filter((value, index, array) => array.indexOf(value) === index)
+          }
+        }
+      }
+    } catch (coherenceError) {
+      console.error('Nutrition coherence reconciliation error:', coherenceError)
     }
 
     return NextResponse.json({

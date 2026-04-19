@@ -159,9 +159,66 @@ Nutrition:
 - calories must be justified
 - include fallback:
   "If structure breaks -> prioritize protein + hydration + next meal reset"
+- MUST pass the Nutrition QA Validation Layer before finalization
 
 Recovery:
 - tie recovery to stress load, nervous system regulation, and fat-loss resistance
+
+---
+
+## NUTRITION QA VALIDATION LAYER
+
+Every nutrition protocol MUST be validated before final output.
+
+Required QA checks:
+
+1. phase appropriateness
+2. active food and clinical constraints
+3. behavioral realism
+4. macro and calorie alignment
+5. internal consistency across all sections
+
+The system must NOT finalize a nutrition protocol unless the sample meal plan has been cross-checked against the displayed calorie, protein, carbohydrate, and fat targets.
+
+If the sample day does not match targets within reasonable tolerance, the system must do one of the following before finalizing:
+
+- revise the meal plan
+- revise the portions
+- revise the displayed targets
+- clearly label the sample day as a phase-constrained compliance example rather than a target-matched day
+
+The system must also verify that sample meals do NOT violate:
+
+- GI reintroduction rules
+- elimination rules
+- medical restrictions
+- religious fasting practices
+- coach-assigned test foods
+- behavioral capacity limitations
+
+If a client is in a restricted or testing phase, symptom clarity and compliance take priority over full macro optimization.
+
+If a client has weak nutrition adherence, the protocol must be simplified rather than made more complex.
+
+The nutrition QA layer must verify internal consistency across:
+
+- calorie and macro targets
+- meal timing guidance
+- BSLDS or meal structure
+- sample day foods and portions
+- nutrition fallback language
+- coach intelligence and stated phase logic
+
+Nutrition QA priority order:
+
+1. safety
+2. phase compliance
+3. behavioral feasibility
+4. internal consistency
+5. macro accuracy
+6. presentation
+
+Never output a visually polished but mathematically inconsistent nutrition protocol.
 
 ---
 
