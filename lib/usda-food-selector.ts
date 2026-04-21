@@ -28,6 +28,9 @@ export interface USDAFoodSelectionParams {
   fatG?: number | null
   mealFrequency?: number | null
   physiqueFocus?: boolean
+  dietaryPattern?: 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan'
+  excludedFoodKeywords?: string[]
+  phaseFocus?: 'general' | 'gut_health' | 'reintroduction' | 'elimination' | 'testing'
 }
 
 type FdcFoodSearchResponse = {
@@ -50,6 +53,19 @@ type SlotDefinition = {
   slot: string
   focus: string
   searches: string[]
+}
+
+function dedupe(items: string[]) {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
+}
+
+function applyExclusions(searches: string[], excludedFoodKeywords: string[]) {
+  if (excludedFoodKeywords.length === 0) return searches
+
+  return searches.filter((search) => {
+    const normalized = search.toLowerCase()
+    return !excludedFoodKeywords.some((keyword) => normalized.includes(keyword))
+  })
 }
 
 const FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search'
@@ -127,21 +143,67 @@ function getSlotDefinitions(params: USDAFoodSelectionParams): SlotDefinition[] {
   const prefersFatLoss = /(fat loss|lose|cut|lean)/.test(goalText)
   const prefersMuscle = /(build|muscle|recomp|size|gain)/.test(goalText) || Boolean(params.physiqueFocus)
 
-  const breakfastSearches = prefersMuscle
-    ? ['greek yogurt berries', 'egg whites oats', 'cottage cheese fruit']
-    : ['oatmeal berries', 'greek yogurt fruit', 'eggs avocado toast']
-  const lunchSearches = prefersFatLoss
-    ? ['chicken breast rice broccoli', 'turkey quinoa vegetables', 'salmon salad sweet potato']
-    : ['lean beef rice vegetables', 'chicken pasta vegetables', 'salmon potato asparagus']
-  const snackSearches = prefersFatLoss
-    ? ['cottage cheese apple almonds', 'tuna rice cakes', 'protein yogurt berries']
-    : ['greek yogurt granola berries', 'turkey wrap fruit', 'protein shake banana peanut butter']
-  const dinnerSearches = prefersMuscle
-    ? ['salmon rice asparagus', 'lean steak potatoes vegetables', 'ground turkey pasta zucchini']
-    : ['white fish vegetables potato', 'chicken vegetables rice', 'shrimp quinoa vegetables']
-  const eveningSnackSearches = prefersMuscle
-    ? ['greek yogurt peanut butter', 'cottage cheese berries', 'casein pudding']
-    : ['greek yogurt cinnamon', 'cottage cheese cucumber', 'protein yogurt']
+  const phaseFocus = params.phaseFocus ?? 'general'
+  const dietaryPattern = params.dietaryPattern ?? 'omnivore'
+  const excludedFoodKeywords = (params.excludedFoodKeywords ?? []).map((keyword) => keyword.toLowerCase())
+
+  const proteinProfiles = {
+    omnivore: {
+      breakfast: prefersMuscle
+        ? ['greek yogurt berries', 'egg whites oats', 'cottage cheese fruit']
+        : ['oatmeal berries', 'greek yogurt fruit', 'eggs avocado toast'],
+      lunch: prefersFatLoss
+        ? ['chicken breast rice broccoli', 'turkey quinoa vegetables', 'salmon salad sweet potato']
+        : ['lean beef rice vegetables', 'chicken pasta vegetables', 'salmon potato asparagus'],
+      snack: prefersFatLoss
+        ? ['cottage cheese apple almonds', 'tuna rice cakes', 'protein yogurt berries']
+        : ['greek yogurt granola berries', 'turkey wrap fruit', 'protein shake banana peanut butter'],
+      dinner: prefersMuscle
+        ? ['salmon rice asparagus', 'lean steak potatoes vegetables', 'ground turkey pasta zucchini']
+        : ['white fish vegetables potato', 'chicken vegetables rice', 'shrimp quinoa vegetables'],
+      evening: prefersMuscle
+        ? ['greek yogurt peanut butter', 'cottage cheese berries', 'casein pudding']
+        : ['greek yogurt cinnamon', 'cottage cheese cucumber', 'protein yogurt'],
+    },
+    pescatarian: {
+      breakfast: ['greek yogurt berries', 'cottage cheese fruit', 'eggs oats', 'tofu scramble oats'],
+      lunch: ['salmon rice broccoli', 'tuna quinoa vegetables', 'tofu rice bowl vegetables'],
+      snack: ['greek yogurt berries', 'cottage cheese apple almonds', 'tuna rice cakes', 'edamame fruit'],
+      dinner: ['salmon potato asparagus', 'white fish rice vegetables', 'tofu quinoa zucchini', 'shrimp rice vegetables'],
+      evening: ['greek yogurt cinnamon', 'cottage cheese berries', 'protein yogurt', 'tofu pudding'],
+    },
+    vegetarian: {
+      breakfast: ['greek yogurt berries', 'cottage cheese fruit', 'egg whites oats', 'tofu scramble oats'],
+      lunch: ['tofu rice bowl vegetables', 'tempeh quinoa vegetables', 'egg salad potato greens'],
+      snack: ['greek yogurt berries', 'cottage cheese apple almonds', 'edamame fruit', 'protein yogurt'],
+      dinner: ['tofu potato vegetables', 'tempeh rice zucchini', 'egg frittata vegetables', 'lentil quinoa bowl'],
+      evening: ['greek yogurt cinnamon', 'cottage cheese berries', 'protein yogurt', 'tofu pudding'],
+    },
+    vegan: {
+      breakfast: ['tofu scramble oats', 'soy yogurt berries', 'protein oats chia', 'overnight oats soy yogurt'],
+      lunch: ['tofu rice bowl vegetables', 'tempeh quinoa vegetables', 'edamame potato greens'],
+      snack: ['soy yogurt berries', 'edamame fruit', 'protein shake banana', 'chia pudding'],
+      dinner: ['tofu potato vegetables', 'tempeh rice zucchini', 'edamame quinoa vegetables', 'lentil rice bowl'],
+      evening: ['soy yogurt cinnamon', 'protein pudding', 'chia pudding', 'tofu pudding'],
+    },
+  }[dietaryPattern]
+
+  const gutHealthOverrides =
+    phaseFocus === 'gut_health' || phaseFocus === 'reintroduction' || phaseFocus === 'elimination' || phaseFocus === 'testing'
+      ? {
+          breakfast: ['greek yogurt blueberries', 'eggs white rice', 'tofu white rice zucchini', 'cottage cheese strawberries'],
+          lunch: ['salmon white rice zucchini', 'white fish potato green beans', 'tofu rice carrots', 'turkey rice zucchini'],
+          snack: ['greek yogurt kiwi', 'cottage cheese berries', 'edamame rice cakes', 'protein yogurt banana'],
+          dinner: ['salmon potato zucchini', 'white fish rice carrots', 'tofu potato spinach', 'shrimp rice green beans'],
+          evening: ['greek yogurt cinnamon', 'cottage cheese kiwi', 'soy yogurt berries', 'protein yogurt'],
+        }
+      : null
+
+  const breakfastSearches = dedupe(applyExclusions(gutHealthOverrides?.breakfast ?? proteinProfiles.breakfast, excludedFoodKeywords))
+  const lunchSearches = dedupe(applyExclusions(gutHealthOverrides?.lunch ?? proteinProfiles.lunch, excludedFoodKeywords))
+  const snackSearches = dedupe(applyExclusions(gutHealthOverrides?.snack ?? proteinProfiles.snack, excludedFoodKeywords))
+  const dinnerSearches = dedupe(applyExclusions(gutHealthOverrides?.dinner ?? proteinProfiles.dinner, excludedFoodKeywords))
+  const eveningSnackSearches = dedupe(applyExclusions(gutHealthOverrides?.evening ?? proteinProfiles.evening, excludedFoodKeywords))
 
   return [
     { slot: 'Breakfast', focus: 'protein + structured carbs', searches: breakfastSearches },

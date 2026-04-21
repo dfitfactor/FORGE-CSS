@@ -162,6 +162,25 @@ type NutritionQaResult = {
   qaSummary?: string
 }
 
+type DietaryPattern = 'omnivore' | 'pescatarian' | 'vegetarian' | 'vegan'
+type CanonicalClientType = 'competitor' | 'general_population'
+type PhaseFocus = 'general' | 'gut_health' | 'reintroduction' | 'elimination' | 'testing'
+type ProtocolGuardrails = {
+  clientTypeProvided: boolean
+  clientType: CanonicalClientType
+  moduleName: string
+  currentPhase: string
+  phaseFocus: PhaseFocus
+  dietaryPattern: DietaryPattern
+  excludedFoodKeywords: string[]
+  approvedFoods: string[]
+  testFoods: string[]
+  movementConstraints: string[]
+  preferredModalities: string[]
+  symptomTrackingRequired: boolean
+  hardConstraintSummary: string[]
+}
+
 const NUTRITION_QA_RULES = `Mandatory nutrition QA checks:
 1. phase appropriateness
 2. active food and clinical constraints
@@ -312,6 +331,223 @@ function buildSearchCorpus(parts: Array<string | null | undefined>) {
 
 function detectPhysiqueFocus(corpus: string) {
   return /(npc|bikini|figure|wellness|physique|show prep|stage lean|posing|glute|hamstring|delts|upper back)/i.test(corpus)
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean)))
+}
+
+function extractTaggedList(corpus: string, labels: string[]) {
+  const results: string[] = []
+
+  for (const label of labels) {
+    const pattern = new RegExp(`${label}\\s*[:\\-]\\s*([^\\n.;]+)`, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(corpus)) !== null) {
+      const raw = match[1] ?? ''
+      raw
+        .split(/,|\/|\||\band\b/gi)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((item) => results.push(item))
+    }
+  }
+
+  return uniqueStrings(results)
+}
+
+function inferDietaryPattern(corpus: string): DietaryPattern {
+  if (/\bvegan\b/i.test(corpus)) return 'vegan'
+  if (/\bvegetarian\b/i.test(corpus)) return 'vegetarian'
+  if (/\bpescatarian\b/i.test(corpus)) return 'pescatarian'
+  return 'omnivore'
+}
+
+function inferPhaseFocus(corpus: string): { currentPhase: string; phaseFocus: PhaseFocus; symptomTrackingRequired: boolean } {
+  if (/\breintroduction|re-introduction\b/i.test(corpus)) {
+    return { currentPhase: 'Gut health reintroduction', phaseFocus: 'reintroduction', symptomTrackingRequired: true }
+  }
+  if (/\belimination\b/i.test(corpus)) {
+    return { currentPhase: 'Gut health elimination', phaseFocus: 'elimination', symptomTrackingRequired: true }
+  }
+  if (/\btesting phase|test food|food testing\b/i.test(corpus)) {
+    return { currentPhase: 'Gut health testing phase', phaseFocus: 'testing', symptomTrackingRequired: true }
+  }
+  if (/\bgut health|gi|digestive|symptom tracking|fodmap\b/i.test(corpus)) {
+    return { currentPhase: 'Gut health support phase', phaseFocus: 'gut_health', symptomTrackingRequired: true }
+  }
+  return { currentPhase: 'General performance phase', phaseFocus: 'general', symptomTrackingRequired: false }
+}
+
+function inferClientType(corpus: string) {
+  const explicitMatch = corpus.match(/client_type\s*[:=]\s*([a-z_]+)/i)
+  const normalizedExplicit = explicitMatch?.[1]?.toLowerCase() === 'lifestyle'
+    ? 'general_population'
+    : explicitMatch?.[1]?.toLowerCase()
+
+  if (normalizedExplicit === 'competitor' || normalizedExplicit === 'general_population') {
+    return {
+      clientTypeProvided: true,
+      clientType: normalizedExplicit,
+      invalidOverride: false,
+    } as const
+  }
+
+  if (explicitMatch) {
+    return {
+      clientTypeProvided: true,
+      clientType: detectPhysiqueFocus(corpus) ? 'competitor' : 'general_population',
+      invalidOverride: true,
+    } as const
+  }
+
+  return {
+    clientTypeProvided: false,
+    clientType: detectPhysiqueFocus(corpus) ? 'competitor' : 'general_population',
+    invalidOverride: false,
+  } as const
+}
+
+function buildProtocolGuardrails(corpus: string): ProtocolGuardrails {
+  const clientTypeResult = inferClientType(corpus)
+  const phaseResult = inferPhaseFocus(corpus)
+  const dietaryPattern = inferDietaryPattern(corpus)
+  const excludedFoodKeywords = uniqueStrings([
+    ...extractTaggedList(corpus, ['avoid', 'avoid foods?', 'excluded foods?', 'eliminate', 'food exclusions?', 'not allowed', 'cannot tolerate']),
+    ...(dietaryPattern === 'pescatarian' ? ['chicken', 'turkey', 'beef', 'pork', 'lamb', 'bacon', 'sausage'] : []),
+    ...(dietaryPattern === 'vegetarian' ? ['chicken', 'turkey', 'beef', 'pork', 'lamb', 'bacon', 'sausage', 'fish', 'salmon', 'tuna', 'shrimp'] : []),
+    ...(dietaryPattern === 'vegan' ? ['chicken', 'turkey', 'beef', 'pork', 'lamb', 'bacon', 'sausage', 'fish', 'salmon', 'tuna', 'shrimp', 'egg', 'eggs', 'milk', 'yogurt', 'cottage cheese', 'cheese', 'whey'] : []),
+    /\bdairy[-\s]?free\b/i.test(corpus) ? 'dairy' : null,
+    /\begg[-\s]?free\b/i.test(corpus) ? 'egg' : null,
+    /\bgluten[-\s]?free\b/i.test(corpus) ? 'gluten' : null,
+    /\bshellfish[-\s]?free\b/i.test(corpus) ? 'shrimp' : null,
+    /\bred meat[-\s]?free\b/i.test(corpus) ? 'beef' : null,
+  ])
+  const approvedFoods = extractTaggedList(corpus, ['approved foods?', 'safe foods?', 'allowed foods?'])
+  const testFoods = extractTaggedList(corpus, ['test foods?', 'reintroduce', 'reintroduction foods?'])
+  const movementConstraints = uniqueStrings([
+    /\blow[-\s]?impact\b/i.test(corpus) ? 'low impact only' : null,
+    /\bbodyweight only\b/i.test(corpus) ? 'bodyweight only' : null,
+    /\bmachine only\b/i.test(corpus) ? 'machine only' : null,
+    /\bwalking only\b/i.test(corpus) ? 'walking only' : null,
+    /\bno running\b/i.test(corpus) ? 'no running' : null,
+    /\bno jumping\b/i.test(corpus) ? 'no jumping' : null,
+    /\bpilates\b/i.test(corpus) ? 'pilates requested' : null,
+    /\byoga\b/i.test(corpus) ? 'yoga requested' : null,
+  ])
+  const preferredModalities = uniqueStrings([
+    /\bstrength training|lift|lifting|resistance\b/i.test(corpus) ? 'strength training' : null,
+    /\bwalking\b/i.test(corpus) ? 'walking' : null,
+    /\bpilates\b/i.test(corpus) ? 'pilates' : null,
+    /\byoga\b/i.test(corpus) ? 'yoga' : null,
+  ])
+
+  return {
+    clientTypeProvided: clientTypeResult.clientTypeProvided,
+    clientType: clientTypeResult.clientType,
+    moduleName: clientTypeResult.clientType === 'competitor' ? 'npc_bikini_protocol_prompt.md' : 'general_population_protocol_prompt.md',
+    currentPhase: clientTypeResult.invalidOverride
+      ? `${phaseResult.currentPhase} | Invalid client_type provided - using inference`
+      : phaseResult.currentPhase,
+    phaseFocus: phaseResult.phaseFocus,
+    dietaryPattern,
+    excludedFoodKeywords,
+    approvedFoods,
+    testFoods,
+    movementConstraints,
+    preferredModalities,
+    symptomTrackingRequired: phaseResult.symptomTrackingRequired,
+    hardConstraintSummary: uniqueStrings([
+      `Client type: ${clientTypeResult.clientType}`,
+      `Module: ${clientTypeResult.clientType === 'competitor' ? 'NPC bikini competitor' : 'General population'}`,
+      `Current phase: ${phaseResult.currentPhase}`,
+      `Dietary pattern: ${dietaryPattern}`,
+      approvedFoods.length > 0 ? `Approved foods: ${approvedFoods.join(', ')}` : null,
+      testFoods.length > 0 ? `Test foods: ${testFoods.join(', ')}` : null,
+      excludedFoodKeywords.length > 0 ? `Excluded foods/proteins: ${excludedFoodKeywords.join(', ')}` : null,
+      movementConstraints.length > 0 ? `Movement constraints: ${movementConstraints.join(', ')}` : null,
+      phaseResult.symptomTrackingRequired ? 'Symptom tracking is required.' : null,
+    ]),
+  }
+}
+
+function summarizePriorProtocol(protocol: {
+  name: string
+  protocol_type: string
+  created_at: string
+  notes: string | null
+  coach_notes: string | null
+  protocol_payload: Record<string, unknown> | null
+}) {
+  const payload = protocol.protocol_payload ?? {}
+  const sessionStructure = typeof payload.sessionStructure === 'object' && payload.sessionStructure ? payload.sessionStructure as Record<string, unknown> : null
+  const nutritionStructure = typeof payload.nutritionStructure === 'object' && payload.nutritionStructure ? payload.nutritionStructure as Record<string, unknown> : null
+  const recoveryStructure = typeof payload.recoveryStructure === 'object' && payload.recoveryStructure ? payload.recoveryStructure as Record<string, unknown> : null
+
+  return [
+    `${protocol.protocol_type} | ${protocol.name} | ${protocol.created_at.slice(0, 10)}`,
+    sessionStructure ? `Movement: ${sessionStructure.sessionType ?? 'n/a'}, ${sessionStructure.sessionsPerWeek ?? 'n/a'}x/week, volume ${sessionStructure.volumeLevel ?? 'n/a'}, complexity ${sessionStructure.complexityCeiling ?? 'n/a'}` : null,
+    nutritionStructure ? `Nutrition: ${nutritionStructure.dailyCalories ?? 'n/a'} kcal, P ${nutritionStructure.proteinG ?? 'n/a'} / C ${nutritionStructure.carbG ?? 'n/a'} / F ${nutritionStructure.fatG ?? 'n/a'}, timing ${nutritionStructure.mealTiming ?? 'n/a'}` : null,
+    recoveryStructure ? `Recovery: sleep ${recoveryStructure.sleepTarget ?? 'n/a'}, mobility ${recoveryStructure.mobilityMinutes ?? 'n/a'} min` : null,
+    protocol.notes ? `Client notes: ${protocol.notes.slice(0, 160)}` : null,
+    protocol.coach_notes ? `Coach notes: ${protocol.coach_notes.slice(0, 160)}` : null,
+  ].filter(Boolean).join(' | ')
+}
+
+function mealPlanText(mealPlan: MealPlanRow[]) {
+  return mealPlan
+    .map((row) => [row.meal, row.foods, row.notes].filter(Boolean).join(' | '))
+    .join('\n')
+    .toLowerCase()
+}
+
+function detectConstraintViolations(args: {
+  generated: GeneratedProtocolCompat
+  mealPlan: MealPlanRow[]
+  guardrails: ProtocolGuardrails
+}) {
+  const violations: string[] = []
+  const nutritionText = [
+    args.generated.rationale,
+    args.generated.clientFacingMessage,
+    args.generated.coachNotes,
+    args.generated.nutritionProtocol?.macroJustification,
+    args.generated.nutritionProtocol?.adherenceFallback,
+    args.generated.nutritionProtocol?.mealTiming,
+    args.generated.nutritionProtocol?.keyGuidelines?.join(' | '),
+    args.generated.nutritionStructure?.mealTiming,
+    args.generated.nutritionStructure?.keyGuidelines?.join(' | '),
+    mealPlanText(args.mealPlan),
+  ].filter(Boolean).join('\n').toLowerCase()
+
+  if (args.guardrails.phaseFocus !== 'general') {
+    const hasPhaseSpecificLanguage =
+      /(reintroduction|re-introduction|elimination|symptom|test food|approved foods|gut health|digestive)/i.test(nutritionText)
+    if (!hasPhaseSpecificLanguage) {
+      violations.push('Phase-specific gut health / reintroduction language is missing from the nutrition protocol.')
+    }
+  }
+
+  const forbiddenHits = args.guardrails.excludedFoodKeywords.filter((keyword) => nutritionText.includes(keyword.toLowerCase()))
+  if (forbiddenHits.length > 0) {
+    violations.push(`Nutrition content references excluded foods or proteins: ${uniqueStrings(forbiddenHits).join(', ')}`)
+  }
+
+  if (args.guardrails.approvedFoods.length > 0) {
+    const approvedMentioned = args.guardrails.approvedFoods.some((food) => nutritionText.includes(food.toLowerCase()))
+    if (!approvedMentioned) {
+      violations.push('Approved foods are available in the record but are not clearly translated into the protocol.')
+    }
+  }
+
+  if (args.guardrails.testFoods.length > 0) {
+    const testFoodMentioned = args.guardrails.testFoods.some((food) => nutritionText.includes(food.toLowerCase()))
+    if (!testFoodMentioned) {
+      violations.push('Test foods / reintroduction foods are available in the record but are not clearly translated into the protocol.')
+    }
+  }
+
+  return uniqueStrings(violations)
 }
 
 function ensureExerciseLoads(exercises: unknown[] | undefined) {
@@ -729,6 +965,58 @@ Return ONLY raw JSON:
   return parsed
 }
 
+async function repairProtocolAlignment(args: {
+  generated: GeneratedProtocolCompat
+  mealPlan: MealPlanRow[]
+  guardrails: ProtocolGuardrails
+  protocolFrame: string
+  priorProtocolSummary: string
+  violations: string[]
+}) {
+  const prompt = `Repair this FORGE protocol so it fully reconciles continuity, current phase, food rules, movement constraints, and internal coherence.
+
+Hard constraints:
+${args.guardrails.hardConstraintSummary.map((item) => `- ${item}`).join('\n')}
+
+Protocol framing:
+${args.protocolFrame}
+
+Prior protocol continuity summary:
+${args.priorProtocolSummary}
+
+Detected violations that must be fixed:
+${args.violations.map((item) => `- ${item}`).join('\n')}
+
+Rules:
+- Return ONLY valid raw JSON.
+- Preserve the response structure.
+- Honor prior protocol continuity before defaulting to generic templates.
+- If the client is in a gut-health, elimination, testing, or reintroduction phase, the nutrition and meal plan must explicitly reflect that phase, approved foods, excluded foods, test foods, and symptom-tracking purpose.
+- If the dietary pattern is pescatarian, vegetarian, or vegan, do not use disallowed protein sources anywhere in the protocol or meal plan.
+- Ensure coach intelligence explicitly states whether the change is progression, regression, or lateral change.
+
+SOURCE JSON:
+${JSON.stringify({ ...args.generated, mealPlan: args.mealPlan }, null, 2)}`
+
+  const response = await anthropic.messages.create({
+    model: getAnthropicModel(),
+    max_tokens: 2600,
+    system: 'You repair FORGE protocol alignment issues. Return only valid raw JSON.',
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const raw = collectTextContent(response.content as Array<{ type: string; text?: string }>)
+  if (!raw) return null
+
+  let parsed = tryParseJsonObject<GeneratedProtocolCompat & { mealPlan?: MealPlanRow[] }>(raw)
+  if (!parsed) {
+    const repaired = await repairProtocolJson(raw)
+    parsed = repaired ? tryParseJsonObject<GeneratedProtocolCompat & { mealPlan?: MealPlanRow[] }>(repaired) : null
+  }
+
+  return parsed
+}
+
 function normalizeGeneratedProtocol(input: GeneratedProtocolCompat): GeneratedProtocolCompat {
   if (!input.rationale) {
     input.rationale = [
@@ -1047,9 +1335,7 @@ export async function POST(
       [params.clientId]
     )
     const priorProtocolSummary = priorProtocols.length > 0
-      ? priorProtocols.map(protocol =>
-          `${protocol.protocol_type}: ${protocol.name}${protocol.notes ? ` | notes: ${protocol.notes.slice(0, 120)}` : ''}${protocol.coach_notes ? ` | coach: ${protocol.coach_notes.slice(0, 120)}` : ''}`
-        ).join(' // ')
+      ? priorProtocols.map(summarizePriorProtocol).join(' // ')
       : 'No prior protocols'
     const overrideIntelligence = buildOverrideIntelligenceSummary(
       priorProtocols.map(protocol => protocol.protocol_payload)
@@ -1124,6 +1410,12 @@ export async function POST(
     const baseCdi = average(allSignals.map(signal => signal.cdi_signal)) ?? 40
 
     const textCorpus = [
+      client.primary_goal ?? '',
+      client.motivation ?? '',
+      client.obstacles ?? '',
+      client.notes ?? '',
+      coachDirectives ?? '',
+      priorProtocolSummary,
       ...journals.map(journal => journal.body ?? ''),
       ...checkins.flatMap(checkin => [
         checkin.what_worked ?? '',
@@ -1187,6 +1479,7 @@ export async function POST(
             cLsi: resolvedBie.lsi,
           }).state
     const bieSource = hasStoredSnapshot ? 'snapshot' : 'estimated'
+    const guardrails = buildProtocolGuardrails(textCorpus)
     const physiqueCorpus = buildSearchCorpus([
       client.primary_goal,
       client.motivation,
@@ -1198,13 +1491,18 @@ export async function POST(
       checkinSummary,
     ])
     const isPhysiqueFocused = detectPhysiqueFocus(physiqueCorpus)
+    const clientType: CanonicalClientType = guardrails.clientTypeProvided
+      ? guardrails.clientType
+      : (isPhysiqueFocused ? 'competitor' : 'general_population')
     const requiresBridgePhase =
-      isPhysiqueFocused &&
+      clientType === 'competitor' &&
       (resolvedBie.bar < 75 || resolvedBie.dbi >= 45 || resolvedBie.bli >= 45 || resolvedBie.lsi < 65)
     const protocolFrame = requiresBridgePhase
       ? 'Restoration-to-Development bridge'
-      : currentStage
-    const sportSpecificPriorities = isPhysiqueFocused
+      : guardrails.phaseFocus !== 'general'
+        ? guardrails.currentPhase
+        : currentStage
+    const sportSpecificPriorities = clientType === 'competitor'
       ? 'Glute and hamstring density, capped delts, upper-back shaping, waist illusion, performance-supportive carbs, and protective protein.'
       : 'No special physique-sport emphasis detected.'
     const healthCoachingPhase = resolveHealthCoachingPhase({
@@ -1250,9 +1548,14 @@ export async function POST(
       'Full Gym': 'bodyweight,dumbbell,barbell,cable,kettlebell,machine,trx,band',
       'Bodyweight Only': 'bodyweight',
     }
-    const normalizedEquipment = rawEquipment.length === 0
+    let normalizedEquipment = rawEquipment.length === 0
       ? ['bodyweight', 'dumbbell', 'barbell', 'cable', 'kettlebell', 'band', 'machine', 'trx']
       : Array.from(new Set(rawEquipment.flatMap((equipment) => (equipmentMap[equipment] || 'other').split(','))))
+    if (guardrails.movementConstraints.includes('bodyweight only')) {
+      normalizedEquipment = ['bodyweight', 'mat']
+    } else if (guardrails.movementConstraints.includes('machine only')) {
+      normalizedEquipment = ['machine']
+    }
     const injuryPatterns = Array.isArray(client.injuries) &&
       client.injuries.some((injury: string) => injury.toLowerCase().includes('knee'))
       ? ['Lunge', 'Squat']
@@ -1316,8 +1619,15 @@ GOAL PROBABILITY SCORE: ${snapshot?.gps ?? 'not calculated'}% — ${typeof snaps
 
 MEASUREMENTS: Weight ${measurements?.weight_lbs ?? 'unknown'}lb | BF% ${measurements?.body_fat_pct ?? 'unknown'} | Lean mass ${measurements?.lean_mass_lbs ?? 'unknown'}lb | Waist ${measurements?.waist_in ?? 'unknown'}in
 
+MODULE ROUTING:
+client_type explicitly provided: ${guardrails.clientTypeProvided ? 'yes' : 'no'}
+selected client type: ${clientType}
+selected module: ${guardrails.moduleName}
+active phase: ${guardrails.currentPhase}
+behavioral capacity (BAR): ${resolvedBie.bar}
+
 SPORT CONTEXT:
-Physique athlete focus detected: ${isPhysiqueFocused ? 'yes' : 'no'}
+Physique athlete focus detected: ${clientType === 'competitor' ? 'yes' : 'no'}
 Sport-specific priorities: ${sportSpecificPriorities}
 If physique athlete focus is detected with unstable adherence, use a Restoration-to-Development bridge instead of a generic Foundations reset.
 ${formatHealthPhaseForPrompt(healthCoachingPhase)}
@@ -1441,6 +1751,9 @@ EXECUTION RULES:
 - Apply the health coaching phase ladder Regulation -> Restoration -> Optimization and justify the active phase.
 - Use the health coaching output template for coach-facing intelligence: red flags, ranked drivers, phase + intent, minimal intervention set, monitoring plan, decision rules, and disclaimer.
 - Nutrition must pass the mandatory QA layer before finalization. Do not leave meal-plan macros, targets, phase rules, or restriction logic internally inconsistent.
+- Use AGENTS-level routing before writing: determine whether client_type was explicitly provided, classify competitor vs general_population, identify the active phase, and keep the entire output aligned to the selected module.
+- Hard constraints override defaults. Do not use default omnivore proteins, generic wellness phase language, or generic movement templates when the client record contains a dietary pattern, approved foods, excluded foods, test foods, gut-health phase, or movement constraint.
+- The final protocol must reconcile prior protocol continuity, active phase, hard food rules, movement constraints, sample meal plan, and coach intelligence into one internally aligned output.
 
 HEALTH COACHING TEMPLATE:
 ${buildCoachInsightTemplateInstructions()}
@@ -1452,6 +1765,9 @@ OUTPUT REQUIREMENTS:
 - Also include these richer fields when possible: stateAnalysis, protocolRationale, movementProtocol, nutritionProtocol, recoveryProtocol, monitoringMetrics, decisionRules, phaseProgressionCriteria, coachIntelligence.
 - When coachIntelligence is present, include coachIntelligence.healthCoachingLens using the DFitFactor template.
 - Include "override_summary" and "influenced_by_overrides" in the JSON output.
+
+HARD CONSTRAINT SUMMARY:
+${guardrails.hardConstraintSummary.map((item) => `- ${item}`).join('\n')}
 
 SOURCE CONTEXT:
 ${prompt}`
@@ -1506,7 +1822,10 @@ ${prompt}`
         carbG: generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG ?? null,
         fatG: generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG ?? null,
         mealFrequency: generated.nutritionStructure?.mealFrequency ?? generated.nutritionProtocol?.mealFrequency ?? null,
-        physiqueFocus: isPhysiqueFocused,
+        physiqueFocus: clientType === 'competitor',
+        dietaryPattern: guardrails.dietaryPattern,
+        excludedFoodKeywords: guardrails.excludedFoodKeywords,
+        phaseFocus: guardrails.phaseFocus,
       })
       usdaFoodContext = formatFoodsForPrompt(selectedFoods)
     }
@@ -1521,12 +1840,17 @@ Client: ${client.full_name}
 Goal: ${client.primary_goal ?? 'General fitness'}
 Weight: ${measurements?.weight_lbs ?? 'unknown'} lbs
 Stage: ${currentStage}
+Active Phase: ${guardrails.currentPhase}
+Dietary Pattern: ${guardrails.dietaryPattern}
+Excluded Foods / Proteins: ${guardrails.excludedFoodKeywords.length > 0 ? guardrails.excludedFoodKeywords.join(', ') : 'None recorded'}
+Approved Foods: ${guardrails.approvedFoods.length > 0 ? guardrails.approvedFoods.join(', ') : 'Not explicitly recorded'}
+Test Foods: ${guardrails.testFoods.length > 0 ? guardrails.testFoods.join(', ') : 'None recorded'}
 Daily Targets: ${generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories} cal | ${generated.nutritionStructure?.proteinG ?? generated.nutritionProtocol?.proteinG}g protein | ${generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG}g carbs | ${generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG}g fat
 Meal Frequency: ${generated.nutritionStructure?.mealFrequency ?? generated.nutritionProtocol?.mealFrequency} meals
 Meal Timing: ${generated.nutritionStructure?.mealTiming ?? generated.nutritionProtocol?.mealTiming}
 Injuries: ${Array.isArray(client.injuries) && client.injuries.length > 0 ? client.injuries.join(', ') : 'None'}
 ${coachDirectives ? 'Coach notes: ' + coachDirectives : ''}
-Physique athlete focus: ${isPhysiqueFocused ? 'yes' : 'no'}
+Physique athlete focus: ${clientType === 'competitor' ? 'yes' : 'no'}
 Protocol framing: ${protocolFrame}
 
 SELECTED FOODS FROM USDA FOODDATA CENTRAL:
@@ -1551,10 +1875,12 @@ Use REAL foods and EXACT gram/oz portions based on the macro targets above.
 Use the USDA-selected foods listed above as the primary ingredient pool.
 Do not invent a completely different food list when USDA foods are available.
 Vary meal choices across the selected USDA foods so plans do not feel repetitive.
+Do not use foods or protein sources that violate the recorded dietary pattern, excluded foods, approved foods list, or test-food sequence.
 If meal timing says dinner is carb-free or carb-reduced, do not place starches or fruit at dinner.
 For carb-free dinner, dinner must be protein + non-starchy vegetables only.
 Breakfast and lunch should hold the majority of structured carbs when front-loading is requested.
 For physique-athlete clients, preserve bodybuilding specificity with performance-supportive carbs, protective protein, and a coherent BSLDS translation that still feels easy to execute.
+If the active phase is gut-health, elimination, testing, or reintroduction, make the meal plan explicitly phase-specific and include notes that clarify symptom-tracking or test-food intent.
 Run a QA self-check before returning: phase appropriateness, active food and clinical constraints, behavioral realism, macro and calorie alignment, and internal consistency across all sections.
 If the sample day cannot match targets within reasonable tolerance, revise the portions, revise the meals, revise the targets, or explicitly label the day as a phase-constrained compliance example.
 Every meal row must include calories, proteinG, carbG, and fatG, and the full day must reconcile with the displayed daily targets unless you explicitly label it as a phase-constrained compliance example.
@@ -1802,6 +2128,46 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       }
     }
 
+    try {
+      const violations = detectConstraintViolations({
+        generated,
+        mealPlan,
+        guardrails,
+      })
+
+      if (violations.length > 0) {
+        const repairedProtocol = await repairProtocolAlignment({
+          generated,
+          mealPlan,
+          guardrails,
+          protocolFrame,
+          priorProtocolSummary,
+          violations,
+        })
+
+        if (repairedProtocol) {
+          const repairedMealPlan = Array.isArray(repairedProtocol.mealPlan) ? repairedProtocol.mealPlan : mealPlan
+          const normalizedRepaired = normalizeGeneratedProtocol(repairedProtocol)
+          const realigned = alignGeneratedSessionToSelectedExercises(normalizedRepaired, exerciseBlocks)
+
+          Object.assign(generated, realigned)
+          mealPlan = repairedMealPlan
+
+          if (generated.nutritionStructure) {
+            generated.nutritionStructure.mealPlan = mealPlan
+          }
+          if (generated.nutritionProtocol) {
+            generated.nutritionProtocol.mealPlan = mealPlan
+          }
+          generated.coachNotes = [generated.coachNotes, `Alignment repair applied: ${violations.join(' | ')}`]
+            .filter(Boolean)
+            .join('\n')
+        }
+      }
+    } catch (alignmentError) {
+      console.error('Protocol alignment repair error:', alignmentError)
+    }
+
     return NextResponse.json({
       success: true,
       generated,
@@ -1812,7 +2178,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         healthCoachingPhase,
         stage: currentStage,
         protocolFrame,
-        physiqueFocus: isPhysiqueFocused,
+        physiqueFocus: clientType === 'competitor',
         measurements,
         dataPoints: {
           adherenceRecords: adherenceRecords.length,
