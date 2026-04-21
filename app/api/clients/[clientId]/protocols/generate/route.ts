@@ -18,6 +18,8 @@ import { selectExercisesForSession, type ExerciseBlock as SelectedExerciseBlock 
 import { formatFoodsForPrompt, selectFoodsForMealPlan } from '@/lib/usda-food-selector'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '@/lib/protocol-overrides'
 
+export const maxDuration = 300
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
 const MAX_CONTEXT_DOCS = 2
@@ -1485,21 +1487,34 @@ ${prompt}`
     generated.influenced_by_overrides = overrideIntelligence.hasInfluence
     generated.health_coaching_phase = healthCoachingPhase.phase
 
-    const selectedFoods = await selectFoodsForMealPlan({
-      clientId: params.clientId,
-      primaryGoal: client.primary_goal,
-      dailyCalories: generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories ?? null,
-      proteinG: generated.nutritionStructure?.proteinG ?? generated.nutritionProtocol?.proteinG ?? null,
-      carbG: generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG ?? null,
-      fatG: generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG ?? null,
-      mealFrequency: generated.nutritionStructure?.mealFrequency ?? generated.nutritionProtocol?.mealFrequency ?? null,
-      physiqueFocus: isPhysiqueFocused,
-    })
-    const usdaFoodContext = formatFoodsForPrompt(selectedFoods)
+    const shouldGenerateNutritionArtifacts =
+      normalizedProtocolType === 'nutrition' || normalizedProtocolType === 'composite'
+    const hasNutritionTargets = Boolean(
+      generated.nutritionStructure?.dailyCalories ??
+      generated.nutritionProtocol?.dailyCalories ??
+      generated.nutritionStructure?.mealFrequency ??
+      generated.nutritionProtocol?.mealFrequency
+    )
+
+    let usdaFoodContext = 'No USDA food context selected.'
+    if (shouldGenerateNutritionArtifacts && hasNutritionTargets) {
+      const selectedFoods = await selectFoodsForMealPlan({
+        clientId: params.clientId,
+        primaryGoal: client.primary_goal,
+        dailyCalories: generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories ?? null,
+        proteinG: generated.nutritionStructure?.proteinG ?? generated.nutritionProtocol?.proteinG ?? null,
+        carbG: generated.nutritionStructure?.carbG ?? generated.nutritionProtocol?.carbG ?? null,
+        fatG: generated.nutritionStructure?.fatG ?? generated.nutritionProtocol?.fatG ?? null,
+        mealFrequency: generated.nutritionStructure?.mealFrequency ?? generated.nutritionProtocol?.mealFrequency ?? null,
+        physiqueFocus: isPhysiqueFocused,
+      })
+      usdaFoodContext = formatFoodsForPrompt(selectedFoods)
+    }
 
     // CALL 2 — Meal plan only
     let mealPlan: any[] = []
-    try {
+    if (shouldGenerateNutritionArtifacts && hasNutritionTargets) {
+      try {
       const mealPlanPrompt = `Generate a daily meal plan for this client.
 
 Client: ${client.full_name}
@@ -1607,6 +1622,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       console.error('Meal plan generation error:', e)
       mealPlan = []
     }
+    }
 
     if (generated && generated.nutritionStructure) {
       generated.nutritionStructure.mealPlan = mealPlan
@@ -1629,7 +1645,8 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       generated.nutritionProtocol?.adherenceFallback,
     ])
 
-    try {
+    if (shouldGenerateNutritionArtifacts && hasNutritionTargets) {
+      try {
       const nutritionQaResult = await runNutritionQaValidation({
         clientName: client.full_name,
         stage: currentStage,
@@ -1680,11 +1697,13 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
           .filter(Boolean)
           .join('\n')
       }
-    } catch (qaError) {
-      console.error('Nutrition QA validation error:', qaError)
+      } catch (qaError) {
+        console.error('Nutrition QA validation error:', qaError)
+      }
     }
 
-    try {
+    if (shouldGenerateNutritionArtifacts && hasNutritionTargets) {
+      try {
       const reconciliation = nutritionTargetsNeedReconciliation({
         mealPlan,
         dailyCalories: generated.nutritionStructure?.dailyCalories ?? generated.nutritionProtocol?.dailyCalories,
@@ -1778,8 +1797,9 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
           }
         }
       }
-    } catch (coherenceError) {
-      console.error('Nutrition coherence reconciliation error:', coherenceError)
+      } catch (coherenceError) {
+        console.error('Nutrition coherence reconciliation error:', coherenceError)
+      }
     }
 
     return NextResponse.json({

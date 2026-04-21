@@ -242,7 +242,27 @@ export default function ProtocolsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ protocolType: genType, coachDirectives: coachDirectives || undefined }),
       })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Generation failed'); return }
+      if (!res.ok) {
+        const raw = await res.text().catch(() => '')
+        let message = 'Generation failed'
+
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw)
+            message = parsed.error ?? parsed.message ?? message
+          } catch {
+            const normalized = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+            if (/duration|timed out|max duration|function invocation/i.test(normalized)) {
+              message = 'Protocol generation timed out before the server could finish.'
+            } else if (normalized) {
+              message = normalized.slice(0, 240)
+            }
+          }
+        }
+
+        setError(message)
+        return
+      }
       const data = await res.json()
       setGenerated(data.generated)
       setGenContext(data.context)
