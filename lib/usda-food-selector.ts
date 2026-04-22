@@ -69,6 +69,7 @@ function applyExclusions(searches: string[], excludedFoodKeywords: string[]) {
 }
 
 const FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search'
+const GENERIC_DATA_TYPES = ['Foundation', 'SR Legacy', 'Survey (FNDDS)']
 
 function hashSeed(input: string) {
   let hash = 0
@@ -99,7 +100,7 @@ function findNutrient(
 function normalizeFood(food: NonNullable<FdcFoodSearchResponse['foods']>[number]): USDAFood {
   return {
     fdcId: food.fdcId,
-    description: food.description,
+    description: normalizeFoodDescription(food.description),
     brandOwner: food.brandOwner ?? null,
     dataType: food.dataType ?? null,
     servingSize: food.servingSize ?? null,
@@ -109,6 +110,15 @@ function normalizeFood(food: NonNullable<FdcFoodSearchResponse['foods']>[number]
     carbs: findNutrient(food.foodNutrients, [1005], /carbohydrate/i),
     fat: findNutrient(food.foodNutrients, [1004], /total lipid|fat/i),
   }
+}
+
+function normalizeFoodDescription(description: string) {
+  return description
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\b(?:upc|gtin)\b[:\s-]*\d+/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+,/g, ',')
+    .trim()
 }
 
 async function searchFoods(query: string, pageSize = 6): Promise<USDAFood[]> {
@@ -123,7 +133,7 @@ async function searchFoods(query: string, pageSize = 6): Promise<USDAFood[]> {
     body: JSON.stringify({
       query,
       pageSize,
-      dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)', 'Branded'],
+      dataType: GENERIC_DATA_TYPES,
       sortBy: 'dataType.keyword',
       sortOrder: 'asc',
     }),
@@ -261,8 +271,7 @@ export function formatFoodsForPrompt(slots: USDAFoodSlot[]) {
           typeof food.carbs === 'number' ? `${Math.round(food.carbs)}g carbs` : null,
           typeof food.fat === 'number' ? `${Math.round(food.fat)}g fat` : null,
         ].filter(Boolean).join(', ')
-        const brand = food.brandOwner ? ` | ${food.brandOwner}` : ''
-        return `- ${food.description}${brand}${macros ? ` [${macros}]` : ''}`
+        return `- ${food.description}${macros ? ` [${macros}]` : ''}`
       }).join('\n')
 
       return `${slot.slot} (${slot.focus}):\n${items || '- No foods selected'}`

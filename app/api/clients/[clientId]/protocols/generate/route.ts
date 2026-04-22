@@ -193,6 +193,7 @@ If the sample day does not match targets within reasonable tolerance, revise the
 Sample meals must not violate GI reintroduction rules, elimination rules, medical restrictions, religious fasting practices, coach-assigned test foods, or behavioral capacity limitations.
 If the client is in a restricted or testing phase, symptom clarity and compliance take priority over full macro optimization.
 If nutrition adherence is weak, simplify the protocol rather than increasing complexity.
+Use generic food names only in meal plans. Never include brand owners, manufacturers, importers, holding companies, USDA source labels, UPCs, or company names in food text.
 Priority order: safety, phase compliance, behavioral feasibility, internal consistency, macro accuracy, presentation.`
 
 function roundToWhole(value: number) {
@@ -220,6 +221,23 @@ function sumMealPlanNutrition(mealPlan: MealPlanRow[]) {
     }),
     { calories: 0, proteinG: 0, carbG: 0, fatG: 0, countedMeals: 0 }
   )
+}
+
+function sanitizeMealPlanFoodText(value: string) {
+  return value
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/\b(?:brand|brand owner|manufacturer|company|importer|distributor)\s*:\s*[^,+;]+/gi, '')
+    .replace(/\b(?:upc|gtin)\b[:\s-]*\d+/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+,/g, ',')
+    .trim()
+}
+
+function sanitizeMealPlanRows(mealPlan: MealPlanRow[]) {
+  return mealPlan.map((meal) => ({
+    ...meal,
+    foods: typeof meal.foods === 'string' ? sanitizeMealPlanFoodText(meal.foods) : meal.foods,
+  }))
 }
 
 function isRestrictedNutritionPhase(parts: Array<string | null | undefined>) {
@@ -904,6 +922,7 @@ Repair rules:
 - If phase restrictions prevent exact target matching, revise the displayed targets and clearly label the sample day as a phase-constrained compliance example.
 - Keep the plan behaviorally realistic.
 - Do not leave targets that the sample day cannot actually produce.
+- Use generic food names only. Remove brand owners, manufacturers, importers, holding companies, UPCs, and parenthetical company names from meal foods.
 
 Return ONLY raw JSON:
 {
@@ -993,6 +1012,7 @@ Rules:
 - Honor prior protocol continuity before defaulting to generic templates.
 - If the client is in a gut-health, elimination, testing, or reintroduction phase, the nutrition and meal plan must explicitly reflect that phase, approved foods, excluded foods, test foods, and symptom-tracking purpose.
 - If the dietary pattern is pescatarian, vegetarian, or vegan, do not use disallowed protein sources anywhere in the protocol or meal plan.
+- Meal plan foods must use clean grocery-style names only; remove brand owners, manufacturers, importers, holding companies, UPCs, and parenthetical company names.
 - Ensure coach intelligence explicitly states whether the change is progression, regression, or lateral change.
 
 SOURCE JSON:
@@ -1856,6 +1876,8 @@ Protocol framing: ${protocolFrame}
 SELECTED FOODS FROM USDA FOODDATA CENTRAL:
 ${usdaFoodContext}
 
+Food naming rule: use generic food names only. Do not include brand owners, manufacturers, importers, holding companies, USDA source labels, UPCs, or parenthetical company names in "foods".
+
 Return ONLY a JSON array (no markdown, no wrapper object):
 [
   {
@@ -1873,6 +1895,7 @@ Return ONLY a JSON array (no markdown, no wrapper object):
 Include: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (training days), Dinner, Evening Snack (if applicable).
 Use REAL foods and EXACT gram/oz portions based on the macro targets above.
 Use the USDA-selected foods listed above as the primary ingredient pool.
+Convert USDA-selected foods into clean grocery-style names (example: "egg white patties", not "egg white patties (company name)").
 Do not invent a completely different food list when USDA foods are available.
 Vary meal choices across the selected USDA foods so plans do not feel repetitive.
 Do not use foods or protein sources that violate the recorded dietary pattern, excluded foods, approved foods list, or test-food sequence.
@@ -1911,7 +1934,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         try {
           const parsed = JSON.parse(mpRaw)
           if (Array.isArray(parsed)) {
-            mealPlan = parsed as MealPlanRow[]
+            mealPlan = sanitizeMealPlanRows(parsed as MealPlanRow[])
           }
         } catch {
           console.error('Meal plan parse failed, falling back to empty array')
@@ -1937,7 +1960,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
           try {
             const repairedParsed = JSON.parse(candidate)
             if (Array.isArray(repairedParsed)) {
-              mealPlan = repairedParsed as MealPlanRow[]
+              mealPlan = sanitizeMealPlanRows(repairedParsed as MealPlanRow[])
             }
           } catch {
             console.error('Meal plan carb-timing repair parse failed, keeping original meal plan')
@@ -2004,11 +2027,11 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       }
 
       if (Array.isArray(nutritionQaResult?.mealPlan) && nutritionQaResult.mealPlan.length > 0) {
-        mealPlan = nutritionQaResult.mealPlan
+        mealPlan = sanitizeMealPlanRows(nutritionQaResult.mealPlan)
       } else if (Array.isArray(nutritionQaResult?.nutritionStructure?.mealPlan) && nutritionQaResult.nutritionStructure.mealPlan.length > 0) {
-        mealPlan = nutritionQaResult.nutritionStructure.mealPlan as MealPlanRow[]
+        mealPlan = sanitizeMealPlanRows(nutritionQaResult.nutritionStructure.mealPlan as MealPlanRow[])
       } else if (Array.isArray(nutritionQaResult?.nutritionProtocol?.mealPlan) && nutritionQaResult.nutritionProtocol.mealPlan.length > 0) {
-        mealPlan = nutritionQaResult.nutritionProtocol.mealPlan as MealPlanRow[]
+        mealPlan = sanitizeMealPlanRows(nutritionQaResult.nutritionProtocol.mealPlan as MealPlanRow[])
       }
 
       if (generated.nutritionStructure) {
@@ -2072,7 +2095,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
           }
         }
         if (Array.isArray(repaired?.mealPlan) && repaired.mealPlan.length > 0) {
-          mealPlan = repaired.mealPlan
+          mealPlan = sanitizeMealPlanRows(repaired.mealPlan)
         }
       }
 
@@ -2128,6 +2151,14 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       }
     }
 
+    mealPlan = sanitizeMealPlanRows(mealPlan)
+    if (generated.nutritionStructure) {
+      generated.nutritionStructure.mealPlan = mealPlan
+    }
+    if (generated.nutritionProtocol) {
+      generated.nutritionProtocol.mealPlan = mealPlan
+    }
+
     try {
       const violations = detectConstraintViolations({
         generated,
@@ -2146,7 +2177,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         })
 
         if (repairedProtocol) {
-          const repairedMealPlan = Array.isArray(repairedProtocol.mealPlan) ? repairedProtocol.mealPlan : mealPlan
+          const repairedMealPlan = Array.isArray(repairedProtocol.mealPlan) ? sanitizeMealPlanRows(repairedProtocol.mealPlan) : mealPlan
           const normalizedRepaired = normalizeGeneratedProtocol(repairedProtocol)
           const realigned = alignGeneratedSessionToSelectedExercises(normalizedRepaired, exerciseBlocks)
 
@@ -2166,6 +2197,14 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
       }
     } catch (alignmentError) {
       console.error('Protocol alignment repair error:', alignmentError)
+    }
+
+    mealPlan = sanitizeMealPlanRows(mealPlan)
+    if (generated.nutritionStructure) {
+      generated.nutritionStructure.mealPlan = mealPlan
+    }
+    if (generated.nutritionProtocol) {
+      generated.nutritionProtocol.mealPlan = mealPlan
     }
 
     return NextResponse.json({
