@@ -296,9 +296,6 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                   </div>
                 </div>
                 <div className="flex gap-2 flex-shrink-0 items-center">
-                  <Link href={`/clients/${client.id}/protocols/new`} className="forge-btn-gold text-sm flex items-center gap-2">
-                    <Zap className="w-4 h-4" /> Generate Protocol
-                  </Link>
                   <Link href={`/clients/${client.id}/edit`} className="forge-btn-secondary text-sm flex items-center gap-2">
                     <Edit className="w-4 h-4" /> Edit Profile
                   </Link>
@@ -388,9 +385,6 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
                   <div className="mt-3 flex items-center gap-3">
                     <Link href={`/clients/${client.id}/protocols`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
                       Open protocols
-                    </Link>
-                    <Link href={`/clients/${client.id}/protocols/new`} className="text-xs text-forge-text-muted hover:text-forge-gold transition-colors">
-                      Generate new protocol
                     </Link>
                   </div>
                 </div>
