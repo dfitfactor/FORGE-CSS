@@ -19,6 +19,7 @@ const anthropic = new Anthropic({
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514'
 const MAX_PROTOCOL_PDF_ATTACHMENTS = 1
 const MAX_INSIGHT_PDF_ATTACHMENTS = 2
+const MAX_INSIGHT_IMAGE_ATTACHMENTS = 2
 
 type AiDocumentContextRow = {
   title: string | null
@@ -88,12 +89,124 @@ function normalizeHeader(header: string) {
   return header.toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+function getTargetHeaderHits(headers: string[], targetColumns: string[]) {
+  return headers.reduce(
+    (count, header) => count + (targetColumns.some((target) => header.includes(target)) ? 1 : 0),
+    0
+  )
+}
+
+function findBestHeaderRowIndex(rows: Array<Array<string | number | null>>, targetColumns: string[]) {
+  let bestIndex = -1
+  let bestHits = 0
+
+  rows.slice(0, 10).forEach((row, index) => {
+    const hits = getTargetHeaderHits(row.map((cell) => normalizeHeader(String(cell ?? ''))), targetColumns)
+    if (hits > bestHits) {
+      bestHits = hits
+      bestIndex = index
+    }
+  })
+
+  return bestHits >= 2 ? bestIndex : -1
+}
+
+function formatNumber(value: number, digits = 0) {
+  return Number.isFinite(value) ? value.toFixed(digits) : '0'
+}
+
 function parseSpreadsheetNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, '').trim()
   if (!cleaned) return null
   const parsed = Number(cleaned)
   return Number.isFinite(parsed) ? parsed : null
 }
+
+function buildMacroSummaryFromRows(args: {
+  sheetName: string
+  nutritionRows: Array<Array<string | number | null>>
+  dateIndex: number
+  mealIndex: number
+  summaryIndex: number
+  brandIndex: number
+  caloriesIndex: number
+  proteinIndex: number
+  carbsIndex: number
+  fatIndex: number
+}) {
+  const macroRows = args.nutritionRows
+    .map((row) => {
+      const calories = args.caloriesIndex >= 0 ? parseSpreadsheetNumber(String(row[args.caloriesIndex] ?? '')) : null
+      const protein = args.proteinIndex >= 0 ? parseSpreadsheetNumber(String(row[args.proteinIndex] ?? '')) : null
+      const carbs = args.carbsIndex >= 0 ? parseSpreadsheetNumber(String(row[args.carbsIndex] ?? '')) : null
+      const fat = args.fatIndex >= 0 ? parseSpreadsheetNumber(String(row[args.fatIndex] ?? '')) : null
+      const date = args.dateIndex >= 0 ? String(row[args.dateIndex] ?? '').trim() : ''
+
+      if (!date || calories === null) return null
+
+      return {
+        date,
+        meal: args.mealIndex >= 0 ? String(row[args.mealIndex] ?? '').trim() : '',
+        summary: args.summaryIndex >= 0 ? String(row[args.summaryIndex] ?? '').trim() : '',
+        brand: args.brandIndex >= 0 ? String(row[args.brandIndex] ?? '').trim() : '',
+        calories,
+        protein: protein ?? 0,
+        carbs: carbs ?? 0,
+        fat: fat ?? 0,
+      }
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+
+  if (macroRows.length === 0) return ''
+
+  const totals = macroRows.reduce(
+    (sum, row) => ({
+      calories: sum.calories + row.calories,
+      protein: sum.protein + row.protein,
+      carbs: sum.carbs + row.carbs,
+      fat: sum.fat + row.fat,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  )
+  const averages = {
+    calories: totals.calories / macroRows.length,
+    protein: totals.protein / macroRows.length,
+    carbs: totals.carbs / macroRows.length,
+    fat: totals.fat / macroRows.length,
+  }
+  const recentRows = macroRows.slice(-14)
+  const topProteinRows = [...macroRows]
+    .filter((row) => row.protein > 0)
+    .sort((a, b) => b.protein - a.protein)
+    .slice(0, 8)
+
+  return [
+    `[Sheet: ${args.sheetName}] Macro data extracted from ${macroRows.length} rows.`,
+    `Totals: ${formatNumber(totals.calories)} kcal | ${formatNumber(totals.protein)}g protein | ${formatNumber(totals.carbs)}g carbs | ${formatNumber(totals.fat)}g fat.`,
+    `Averages per logged row/day: ${formatNumber(averages.calories)} kcal | ${formatNumber(averages.protein, 1)}g protein | ${formatNumber(averages.carbs, 1)}g carbs | ${formatNumber(averages.fat, 1)}g fat.`,
+    `Recent macro rows: ${recentRows
+      .map((row) =>
+        `${row.date}: ${formatNumber(row.calories)} kcal, ${formatNumber(row.protein, 1)}g P, ${formatNumber(row.carbs, 1)}g C, ${formatNumber(row.fat, 1)}g F${row.summary ? ` (${row.summary}${row.brand ? `, ${row.brand}` : ''})` : ''}`
+      )
+      .join(' | ')}`,
+    topProteinRows.length > 0
+      ? `Highest protein entries: ${topProteinRows
+          .map((row) => `${row.date}${row.meal ? ` ${row.meal}` : ''}: ${row.summary || 'entry'} ${formatNumber(row.protein, 1)}g P`)
+          .join(' | ')}`
+      : '',
+  ].filter(Boolean).join('\n')
+}
+
+function getImageMediaType(doc: Pick<AiDocumentContextRow, 'file_type' | 'file_name'>) {
+  const fileType = doc.file_type?.toLowerCase() ?? ''
+  const fileName = doc.file_name?.toLowerCase() ?? ''
+
+  if (fileType.includes('png') || fileName.endsWith('.png')) return 'image/png'
+  if (fileType.includes('webp') || fileName.endsWith('.webp')) return 'image/webp'
+  if (fileType.includes('gif') || fileName.endsWith('.gif')) return 'image/gif'
+  return 'image/jpeg'
+}
+
 
 function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
   const fileType = doc.file_type?.toLowerCase() ?? ''
@@ -163,9 +276,7 @@ function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
 
         if (!rows.length) return ''
 
-        const headerRowIndex = rows.findIndex((row) =>
-          row.some((cell) => String(cell).trim().length > 0)
-        )
+        const headerRowIndex = findBestHeaderRowIndex(rows, targetColumns)
         if (headerRowIndex === -1) return ''
 
         const headerRow = rows[headerRowIndex].map((cell) => String(cell).trim())
@@ -186,14 +297,15 @@ function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
         const entryRows = rows
           .slice(headerRowIndex + 1)
           .filter((row) => row.some((cell) => String(cell).trim().length > 0))
-          .slice(0, 12)
 
         const caloriesIndex = normalizedHeaders.findIndex((header) => header.includes('calories'))
         const proteinIndex = normalizedHeaders.findIndex((header) => header.includes('protein'))
         const carbsIndex = normalizedHeaders.findIndex((header) => header.includes('carb'))
         const fatIndex = normalizedHeaders.findIndex((header) => header === 'fat' || header.includes('fat '))
+        const dateIndex = normalizedHeaders.findIndex((header) => header === 'date' || header.includes('entry date'))
         const mealIndex = normalizedHeaders.findIndex((header) => header.includes('meal'))
         const summaryIndex = normalizedHeaders.findIndex((header) => header.includes('summary'))
+        const brandIndex = normalizedHeaders.findIndex((header) => header.includes('brand'))
         const entryTypeIndex = normalizedHeaders.findIndex((header) => header === 'type' || header.includes('entry type'))
 
         if (!entryRows.length) {
@@ -206,6 +318,21 @@ function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
               return !typeValue || typeValue.includes('food intake') || typeValue.includes('meal') || typeValue.includes('food')
             })
           : entryRows
+
+        const macroSummary = caloriesIndex >= 0 && proteinIndex >= 0
+          ? buildMacroSummaryFromRows({
+              sheetName,
+              nutritionRows,
+              dateIndex,
+              mealIndex,
+              summaryIndex,
+              brandIndex,
+              caloriesIndex,
+              proteinIndex,
+              carbsIndex,
+              fatIndex,
+            })
+          : ''
 
         const macroTotals = nutritionHint
           ? nutritionRows.reduce(
@@ -227,7 +354,10 @@ function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
             ))
           : []
 
-        const summarizedRows = entryRows.map((row) =>
+        const displayRows = entryRows.length > 18
+          ? [...entryRows.slice(0, 6), ...entryRows.slice(-12)]
+          : entryRows
+        const summarizedRows = displayRows.map((row) =>
           effectiveIndexes
             .map((index) => {
               const header = headerRow[index]
@@ -249,14 +379,14 @@ function buildDocumentSummary(doc: AiDocumentContextRow, charLimit: number) {
             ].filter(Boolean).join(' | ')
           : ''
 
-        return [`[Sheet: ${sheetName}]`, nutritionSummaryLine, ...summarizedRows].filter(Boolean).join('\n')
+        return [`[Sheet: ${sheetName}]`, nutritionSummaryLine, macroSummary, ...summarizedRows].filter(Boolean).join('\n')
       }).filter(Boolean)
 
       if (sheetSummaries.length > 0) {
         return [label, noteText, nutritionContext, ...sheetSummaries]
           .filter(Boolean)
           .join('\n')
-          .slice(0, Math.max(charLimit * 3, 1200))
+          .slice(0, Math.max(charLimit * 4, 5000))
       }
     } catch {
       // Fall through to metadata-only spreadsheet summary.
@@ -315,10 +445,21 @@ async function fetchAiDocumentContext(clientId: string, summaryCharLimit: number
     const fileType = doc.file_type?.toLowerCase() ?? ''
     return Boolean(doc.file_data) && (fileType.includes('pdf') || (doc.file_name?.toLowerCase().endsWith('.pdf') ?? false))
   })
+  const imageDocs = prioritizedDocs.filter(doc => {
+    const fileType = doc.file_type?.toLowerCase() ?? ''
+    return Boolean(doc.file_data) && (
+      fileType.includes('image') ||
+      fileType.includes('jpeg') ||
+      fileType.includes('png') ||
+      fileType.includes('webp') ||
+      (doc.file_name?.toLowerCase().match(/\.(jpe?g|png|webp|gif)$/) ?? false)
+    )
+  })
 
   return {
     summary: docContexts.length > 0 ? docContexts.join('\n\n') : 'None',
     pdfDocs,
+    imageDocs,
     hasNutritionLog: prioritizedDocs.some(doc => getDocumentPriority(doc) === 0),
   }
 }
@@ -684,9 +825,10 @@ export async function generateWeeklyInsight(
     currentVsPreviousBAR: { current: number; previous: number }
   }
 ): Promise<CoachInsight> {
-  const documentContext = await fetchAiDocumentContext(client.clientId, 350)
+  const documentContext = await fetchAiDocumentContext(client.clientId, 1600)
   const docSummary = documentContext.summary
   const pdfDocs = documentContext.pdfDocs
+  const imageDocs = documentContext.imageDocs
   const healthPhase = resolveHealthCoachingPhase({
     bie: client.currentBIE,
     generationState: client.generationState,
@@ -748,6 +890,19 @@ Output ONLY JSON:
                 type: 'base64',
                 media_type: 'application/pdf',
                 data: pdfB64,
+              },
+            })
+          }
+          for (const doc of imageDocs.slice(0, MAX_INSIGHT_IMAGE_ATTACHMENTS)) {
+            if (!doc.file_data) continue
+            const imageB64 = normalizeBase64(doc.file_data)
+            if (!imageB64) continue
+            userMessageContent.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: getImageMediaType(doc),
+                data: imageB64,
               },
             })
           }
