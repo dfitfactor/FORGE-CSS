@@ -7,6 +7,9 @@ type Enrollment = {
   id: string
   client_id: string
   status: string
+  package_id: string | null
+  package_name: string | null
+  billing_type: string | null
 }
 
 export async function GET(
@@ -18,10 +21,16 @@ export async function GET(
 
   try {
     const enrollment = await db.queryOne<Enrollment>(
-      `SELECT id, client_id, status
-       FROM package_enrollments
-       WHERE client_id = $1 AND status = 'active'
-       ORDER BY created_at DESC
+      `SELECT pe.id,
+              pe.client_id,
+              pe.status,
+              pe.package_id,
+              p.name AS package_name,
+              p.billing_type
+       FROM package_enrollments pe
+       LEFT JOIN packages p ON p.id = pe.package_id
+       WHERE pe.client_id = $1 AND pe.status = 'active'
+       ORDER BY pe.created_at DESC
        LIMIT 1`,
       [params.clientId]
     )
