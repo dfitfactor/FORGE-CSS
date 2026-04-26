@@ -1175,7 +1175,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { protocolType, coachDirectives } = body
+    const { protocolType, coachDirectives, movementDirectives } = body
     const currentStage: ForgeStage =
       client.current_stage === 'optimization' ||
       client.current_stage === 'resilience' ||
@@ -1439,8 +1439,9 @@ export async function POST(
       client.motivation ?? '',
       client.obstacles ?? '',
       client.notes ?? '',
-      coachDirectives ?? '',
-      priorProtocolSummary,
+        coachDirectives ?? '',
+        movementDirectives ?? '',
+        priorProtocolSummary,
       ...journals.map(journal => journal.body ?? ''),
       ...checkins.flatMap(checkin => [
         checkin.what_worked ?? '',
@@ -1665,6 +1666,7 @@ ${coachAdjustmentSummary}
     ═══ CLIENT DOCUMENTS (AI-enabled) ═══
     ${docSummary}
 ${coachDirectives ? 'COACH DIRECTIVES: ' + coachDirectives : ''}
+${movementDirectives ? 'MOVEMENT ADJUSTMENT DIRECTIVES: ' + movementDirectives : ''}
 
 ${exerciseContext}
 
@@ -1674,6 +1676,9 @@ Simplify execution by reducing decision burden and recovery cost, not by strippi
 For physique athletes, macros and meal structure must translate coherently into the meal plan and BSLDS structure.
 ${NUTRITION_QA_RULES}
 Build the session using the exercises listed in SELECTED EXERCISES above.
+If movement adjustment directives are provided, use them to tailor exercise selection, swap movements, adjust emphasis, or replace parts of the prior protocol when appropriate.
+Do not cling to the original movement list when coach movement directives justify a better-fit option.
+When you replace original movements, keep the progression logic explicit and explain why the updated movement choice is a better fit for the client right now.
 Use the DFitFactor hierarchy: Safety -> Feasibility -> Recovery capacity -> Adherence/constraints -> Optimization.
 If the signal does not support Optimization, stay in Regulation or Restoration.
 Before recommending supplements or aggressive nutrition changes, check for contraindications, interactions, pregnancy considerations, and major comorbidities when relevant.
@@ -1875,6 +1880,7 @@ Meal Frequency: ${generated.nutritionStructure?.mealFrequency ?? generated.nutri
 Meal Timing: ${generated.nutritionStructure?.mealTiming ?? generated.nutritionProtocol?.mealTiming}
 Injuries: ${Array.isArray(client.injuries) && client.injuries.length > 0 ? client.injuries.join(', ') : 'None'}
 ${coachDirectives ? 'Coach notes: ' + coachDirectives : ''}
+${movementDirectives ? 'Movement adjustment directives: ' + movementDirectives : ''}
 Physique athlete focus: ${clientType === 'competitor' ? 'yes' : 'no'}
 Protocol framing: ${protocolFrame}
 
@@ -2012,7 +2018,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
         nutritionStructure: generated.nutritionStructure,
         nutritionProtocol: generated.nutritionProtocol,
         mealPlan,
-        coachDirectives,
+        coachDirectives: [coachDirectives, movementDirectives].filter(Boolean).join(' | '),
         clientNotes: client.notes,
         journalSummary,
         checkinSummary,
@@ -2082,6 +2088,7 @@ The meal plan must match ${client.full_name}'s goal of "${client.primary_goal ??
           mismatchReason: reconciliation.reason ?? 'Nutrition targets and sample day do not reconcile.',
           constraintSummary: [
             coachDirectives ? `Coach directives: ${coachDirectives}` : null,
+            movementDirectives ? `Movement adjustment directives: ${movementDirectives}` : null,
             client.notes ? `Client notes: ${client.notes}` : null,
             journalSummary ? `Journals: ${journalSummary}` : null,
             checkinSummary ? `Check-ins: ${checkinSummary}` : null,

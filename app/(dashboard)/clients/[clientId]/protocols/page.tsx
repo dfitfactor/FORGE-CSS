@@ -143,6 +143,7 @@ export default function ProtocolsPage() {
   // Generation state
   const [genType, setGenType] = useState('composite')
   const [coachDirectives, setCoachDirectives] = useState('')
+  const [movementDirectives, setMovementDirectives] = useState('')
   const [generated, setGenerated] = useState<GeneratedProtocol | null>(null)
   const [genContext, setGenContext] = useState<GenerationContext | null>(null)
   const [editedNotes, setEditedNotes] = useState('')
@@ -240,7 +241,11 @@ export default function ProtocolsPage() {
       const res = await fetch('/api/clients/' + clientId + '/protocols/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ protocolType: genType, coachDirectives: coachDirectives || undefined }),
+        body: JSON.stringify({
+          protocolType: genType,
+          coachDirectives: coachDirectives || undefined,
+          movementDirectives: movementDirectives || undefined,
+        }),
       })
       if (!res.ok) {
         const raw = await res.text().catch(() => '')
@@ -312,6 +317,7 @@ export default function ProtocolsPage() {
       setGenerated(null)
       setGenContext(null)
       setCoachDirectives('')
+      setMovementDirectives('')
       loadProtocols()
       setTimeout(() => setSuccess(''), 3000)
     } catch { setError('Network error') } finally { setSaving(false) }
@@ -628,14 +634,28 @@ export default function ProtocolsPage() {
                   </div>
                 </div>
 
-                {/* Coach directives */}
-                <div>
-                  <label className="forge-label">Coach Directives (optional)</label>
-                  <p className="text-xs text-white/30 mb-2">Specific instructions, focus areas, or constraints for this protocol</p>
-                  <textarea rows={3} value={coachDirectives} onChange={e => setCoachDirectives(e.target.value)}
-                    className="forge-input resize-none"
-                    placeholder="e.g. Focus on gut healing, client has knee pain avoid deep squats, traveling 2x per month, prioritize simplicity..." />
-                </div>
+                  {/* Coach directives */}
+                  <div>
+                    <label className="forge-label">Coach Directives (optional)</label>
+                    <p className="text-xs text-white/30 mb-2">Specific instructions, focus areas, or constraints for this protocol</p>
+                    <textarea rows={3} value={coachDirectives} onChange={e => setCoachDirectives(e.target.value)}
+                      className="forge-input resize-none"
+                      placeholder="e.g. Focus on gut healing, client has knee pain avoid deep squats, traveling 2x per month, prioritize simplicity..." />
+                  </div>
+
+                  {(genType === 'movement' || genType === 'composite') && (
+                    <div>
+                      <label className="forge-label">Movement Adjustment Prompt (optional)</label>
+                      <p className="text-xs text-white/30 mb-2">Tell AI when to swap, replace, or tailor movements more specifically than the original protocol.</p>
+                      <textarea
+                        rows={4}
+                        value={movementDirectives}
+                        onChange={e => setMovementDirectives(e.target.value)}
+                        className="forge-input resize-none"
+                        placeholder="e.g. Replace barbell RDLs with a dumbbell hinge progression, bias more glute med work, avoid movements that irritate the left knee, and give more athletic unilateral options than the prior plan."
+                      />
+                    </div>
+                  )}
 
                 <button onClick={handleGenerate} disabled={generating}
                   className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3.5 disabled:opacity-50">
