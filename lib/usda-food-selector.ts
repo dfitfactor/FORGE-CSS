@@ -121,6 +121,26 @@ function normalizeFoodDescription(description: string) {
     .trim()
 }
 
+function isMealReadyFoodDescription(description: string) {
+  const normalized = description.toLowerCase()
+
+  // Keep client-facing meal suggestions anchored to actual foods, not baking ingredients or supplement raws.
+  const blockedPatterns = [
+    /\bflour\b/,
+    /\bpowder\b/,
+    /\bmix\b/,
+    /\bconcentrate\b/,
+    /\bisolate\b/,
+    /\boil\b/,
+    /\bshortening\b/,
+    /\bsyrup\b/,
+    /\bformula\b/,
+    /\bsupplement\b/,
+  ]
+
+  return !blockedPatterns.some((pattern) => pattern.test(normalized))
+}
+
 async function searchFoods(query: string, pageSize = 6): Promise<USDAFood[]> {
   const apiKey = process.env.USDA_FOODDATA_API_KEY?.trim()
   if (!apiKey) return []
@@ -145,7 +165,9 @@ async function searchFoods(query: string, pageSize = 6): Promise<USDAFood[]> {
   }
 
   const data = (await response.json()) as FdcFoodSearchResponse
-  return (data.foods ?? []).map(normalizeFood)
+  return (data.foods ?? [])
+    .map(normalizeFood)
+    .filter((food) => isMealReadyFoodDescription(food.description))
 }
 
 function getSlotDefinitions(params: USDAFoodSelectionParams): SlotDefinition[] {

@@ -194,6 +194,7 @@ Sample meals must not violate GI reintroduction rules, elimination rules, medica
 If the client is in a restricted or testing phase, symptom clarity and compliance take priority over full macro optimization.
 If nutrition adherence is weak, simplify the protocol rather than increasing complexity.
 Use generic food names only in meal plans. Never include brand owners, manufacturers, importers, holding companies, USDA source labels, UPCs, or company names in food text.
+Use meal-ready foods only. Never list raw baking ingredients or ingredient placeholders such as rice flour, potato flour, almond flour, oat flour, protein powder, oils by themselves, or dry mix items as if they are standalone foods.
 Priority order: safety, phase compliance, behavioral feasibility, internal consistency, macro accuracy, presentation.`
 
 function roundToWhole(value: number) {
@@ -225,6 +226,10 @@ function sumMealPlanNutrition(mealPlan: MealPlanRow[]) {
 
 function sanitizeMealPlanFoodText(value: string) {
   return value
+    .replace(/\brice flour\b/gi, 'cream of rice')
+    .replace(/\bpotato flour\b/gi, 'potato')
+    .replace(/\balmond flour\b/gi, 'almonds')
+    .replace(/\boat flour\b/gi, 'oats')
     .replace(/\s*\([^)]*\)/g, '')
     .replace(/\b(?:brand|brand owner|manufacturer|company|importer|distributor)\s*:\s*[^,+;]+/gi, '')
     .replace(/\b(?:upc|gtin)\b[:\s-]*\d+/gi, '')
@@ -1894,11 +1899,13 @@ Return ONLY a JSON array (no markdown, no wrapper object):
 
 Include: Breakfast, Morning Snack (if applicable), Lunch, Afternoon Snack (if applicable), Training Carbs (training days), Dinner, Evening Snack (if applicable).
 Use REAL foods and EXACT gram/oz portions based on the macro targets above.
-Use the USDA-selected foods listed above as the primary ingredient pool.
-Convert USDA-selected foods into clean grocery-style names (example: "egg white patties", not "egg white patties (company name)").
-Do not invent a completely different food list when USDA foods are available.
-Vary meal choices across the selected USDA foods so plans do not feel repetitive.
-Do not use foods or protein sources that violate the recorded dietary pattern, excluded foods, approved foods list, or test-food sequence.
+  Use the USDA-selected foods listed above as the primary ingredient pool.
+  Convert USDA-selected foods into clean grocery-style names (example: "egg white patties", not "egg white patties (company name)").
+  Do not invent a completely different food list when USDA foods are available.
+  Vary meal choices across the selected USDA foods so plans do not feel repetitive.
+  Use only meal-ready foods a client would realistically eat.
+  Never write raw ingredient placeholders like rice flour, potato flour, almond flour, oat flour, dry mix items, isolated oils, or powder entries as standalone meal foods.
+  Do not use foods or protein sources that violate the recorded dietary pattern, excluded foods, approved foods list, or test-food sequence.
 If meal timing says dinner is carb-free or carb-reduced, do not place starches or fruit at dinner.
 For carb-free dinner, dinner must be protein + non-starchy vegetables only.
 Breakfast and lunch should hold the majority of structured carbs when front-loading is requested.
