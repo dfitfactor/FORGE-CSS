@@ -17,6 +17,7 @@ import { getGPSLabel } from '@/lib/bie-calculator'
 import { selectExercisesForSession, type ExerciseBlock as SelectedExerciseBlock } from '@/lib/exercise-selector'
 import { formatFoodsForPrompt, selectFoodsForMealPlan } from '@/lib/usda-food-selector'
 import { buildOverrideIntelligenceSummary, normalizeLoad } from '@/lib/protocol-overrides'
+import { listAiClientDocuments, normalizeBase64, readStoredDocumentTextPreview } from '@/lib/client-documents'
 
 export const maxDuration = 300
 
@@ -314,23 +315,6 @@ function nutritionTargetsNeedReconciliation(args: {
 
 function getAnthropicModel() {
   return process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL
-}
-
-function normalizeBase64(input: string | null | undefined): string | null {
-  if (input === null || input === undefined) return null
-  let s = String(input).trim()
-  // Strip common data-URL prefix if present
-  s = s.replace(/^data:.*?;base64,/i, '')
-  // Remove whitespace/newlines
-  s = s.replace(/\s+/g, '')
-  // Accept base64url variants
-  s = s.replace(/-/g, '+').replace(/_/g, '/')
-
-  if (s.length === 0) return null
-  // Basic structural validation
-  if (s.length % 4 !== 0) return null
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
-  return s
 }
 
 function clampScore(value: number) {
@@ -1255,20 +1239,7 @@ export async function POST(
       [params.clientId]
     )
 
-    const aiDocs = await db.query<{
-      title: string | null
-      document_type: string | null
-      file_data: string | null
-      file_type: string | null
-      file_name: string | null
-    }>(
-      `SELECT title, document_type, file_type, file_name,
-              encode(file_data, 'base64') as file_data
-       FROM client_documents
-       WHERE client_id = $1 AND include_in_ai = true
-       ORDER BY created_at DESC LIMIT 5`,
-      [params.clientId]
-    )
+    const aiDocs = await listAiClientDocuments(params.clientId, 5)
 
     // Extract text content from documents for AI context
     const docContexts: string[] = []
@@ -1289,13 +1260,8 @@ export async function POST(
         (doc.file_name?.endsWith('.csv') ?? false)
       ) {
         try {
-          const normalized = normalizeBase64(doc.file_data)
-          if (!normalized) throw new Error('Invalid base64')
-          const text = Buffer.from(normalized, 'base64')
-            .toString('utf-8')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, MAX_CONTEXT_DOC_CHARS)
+          const text = await readStoredDocumentTextPreview(doc, MAX_CONTEXT_DOC_CHARS)
+          if (!text) throw new Error('Empty preview')
           docContexts.push(`${label}\n${text}`)
         } catch {
           docContexts.push(`${label}\n[Could not read content]`)

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { upload } from '@vercel/blob/client'
 import {
   ArrowLeft, Plus, BookOpen, Loader2, CheckCircle,
   AlertCircle, X, Trash2, ChevronDown, ChevronUp, Pencil,
@@ -228,16 +229,27 @@ export default function JournalsPage() {
     setError('')
 
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('documentType', 'questionnaire')
-      formData.append('title', uploadTitle || selectedFile.name)
-      formData.append('notes', uploadNotes || 'Weekly check-in questionnaire uploaded from the Journal page.')
-      formData.append('includeInAi', 'true')
+      const blob = await upload(selectedFile.name, selectedFile, {
+        access: 'private',
+        contentType: selectedFile.type || 'application/octet-stream',
+        handleUploadUrl: `/api/clients/${clientId}/documents/upload`,
+        multipart: selectedFile.size > 5 * 1024 * 1024,
+      })
 
       const res = await fetch(`/api/clients/${clientId}/documents`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          fileType: selectedFile.type || 'application/octet-stream',
+          fileSize: selectedFile.size,
+          documentType: 'questionnaire',
+          title: uploadTitle || selectedFile.name,
+          notes: uploadNotes || 'Weekly check-in questionnaire uploaded from the Journal page.',
+          includeInAi: true,
+          blobUrl: blob.url,
+          storageProvider: 'vercel_blob',
+        }),
       })
 
       const data = await res.json().catch(() => ({}))

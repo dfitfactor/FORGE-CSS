@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { upload } from '@vercel/blob/client'
 import { ClientDocumentInsightPanel } from '@/components/modules/clients/ClientDocumentInsightPanel'
 import {
   ArrowLeft, Upload, FileText, File, Trash2, Brain, Eye,
@@ -99,23 +100,30 @@ export default function DocumentsPage() {
     if (!selectedFile) { setError('Please select a file'); return }
     setUploading(true); setError('')
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('documentType', docType)
-      formData.append('title', title || selectedFile.name)
-      if (notes) formData.append('notes', notes)
-      formData.append('includeInAi', String(includeInAi))
+      const blob = await upload(selectedFile.name, selectedFile, {
+        access: 'private',
+        contentType: selectedFile.type || 'application/octet-stream',
+        handleUploadUrl: `/api/clients/${clientId}/documents/upload`,
+        multipart: selectedFile.size > 5 * 1024 * 1024,
+      })
 
       const res = await fetch('/api/clients/' + clientId + '/documents', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          fileType: selectedFile.type || 'application/octet-stream',
+          fileSize: selectedFile.size,
+          documentType: docType,
+          title: title || selectedFile.name,
+          notes: notes || undefined,
+          includeInAi,
+          blobUrl: blob.url,
+          storageProvider: 'vercel_blob',
+        }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        if (res.status === 413) {
-          setError('This file is too large for the current upload path. Try a smaller file or compress the PDF.')
-          return
-        }
         setError(d.error ?? 'Upload failed')
         return
       }
@@ -129,21 +137,7 @@ export default function DocumentsPage() {
   }
 
   async function handleView(doc: Doc) {
-    try {
-      const res = await fetch(`/api/clients/${clientId}/documents?id=${doc.id}`)
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.document?.file_data) {
-        alert(data.error ?? 'No file data available')
-        return
-      }
-
-      const byteChars = atob(data.document.file_data)
-      const byteArr = new Uint8Array(byteChars.length)
-      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i)
-      const blob = new Blob([byteArr], { type: data.document.file_type ?? 'application/octet-stream' })
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-    } catch { alert('Could not open file') }
+    window.open(`/api/clients/${clientId}/documents/file?id=${doc.id}`, '_blank')
   }
 
   async function handleDelete(docId: string, fileName: string) {

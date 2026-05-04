@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useRef, useState } from 'react'
+import { upload } from '@vercel/blob/client'
 import { FileText, Upload, X } from 'lucide-react'
 
 type SubmissionSummary = {
@@ -56,16 +57,27 @@ export default function ClientCompletedFormsPanel({ clientId, submissions }: Pro
     setSuccess('')
 
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('documentType', 'questionnaire')
-      formData.append('title', title || selectedFile.name)
-      formData.append('notes', notes || 'Uploaded from completed forms archive.')
-      formData.append('includeInAi', 'true')
+      const blob = await upload(selectedFile.name, selectedFile, {
+        access: 'private',
+        contentType: selectedFile.type || 'application/octet-stream',
+        handleUploadUrl: `/api/clients/${clientId}/documents/upload`,
+        multipart: selectedFile.size > 5 * 1024 * 1024,
+      })
 
       const response = await fetch(`/api/clients/${clientId}/documents`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          fileType: selectedFile.type || 'application/octet-stream',
+          fileSize: selectedFile.size,
+          documentType: 'questionnaire',
+          title: title || selectedFile.name,
+          notes: notes || 'Uploaded from completed forms archive.',
+          includeInAi: true,
+          blobUrl: blob.url,
+          storageProvider: 'vercel_blob',
+        }),
       })
 
       const data = await response.json().catch(() => ({}))

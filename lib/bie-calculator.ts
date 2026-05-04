@@ -1,5 +1,12 @@
 import * as XLSX from 'xlsx'
 import { db } from '@/lib/db'
+import {
+  listAiClientDocuments,
+  normalizeBase64,
+  parseSpreadsheetNumber,
+  readStoredDocumentTextPreview,
+  type StoredClientDocument,
+} from '@/lib/client-documents'
 
 export type BIEScoresResult = {
   bar: number | null
@@ -47,14 +54,7 @@ type JournalRow = {
   entry_date: string
 }
 
-type DocumentRow = {
-  document_type: string | null
-  title: string | null
-  notes: string | null
-  file_type: string | null
-  file_name: string | null
-  file_data: string | null
-}
+type DocumentRow = StoredClientDocument
 
 type SnapshotTrendRow = {
   bar_score: number | null
@@ -95,116 +95,12 @@ function parseDate(d: string): Date {
   return new Date(`${d}T12:00:00`)
 }
 
-function normalizeBase64(input: string | null | undefined): string | null {
-  if (input == null) return null
-
-  let s = String(input).trim()
-  s = s.replace(/^data:.*?;base64,/i, '')
-  s = s.replace(/\s+/g, '')
-  s = s.replace(/-/g, '+').replace(/_/g, '/')
-
-  if (!s) return null
-
-  const padding = s.length % 4
-  if (padding !== 0) {
-    s = s.padEnd(s.length + (4 - padding), '=')
-  }
-
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null
-  return s
-}
-
-function normalizeHeader(header: string) {
-  return header.toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-function parseSpreadsheetNumber(value: unknown) {
-  const cleaned = String(value ?? '').replace(/[^0-9.\-]/g, '').trim()
-  if (!cleaned) return null
-  const parsed = Number(cleaned)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
 function countKeywordHits(text: string, patterns: RegExp[]) {
   const corpus = text.toLowerCase()
   return patterns.reduce((count, pattern) => count + (pattern.test(corpus) ? 1 : 0), 0)
 }
 
-function readDocumentTextPreview(doc: DocumentRow, charLimit = 2500) {
-  const fileType = doc.file_type?.toLowerCase() ?? ''
-  const fileName = doc.file_name?.toLowerCase() ?? ''
-  const normalized = normalizeBase64(doc.file_data)
-  if (!normalized) return ''
-
-  try {
-    if (
-      fileType.includes('text') ||
-      fileType.includes('plain') ||
-      fileType.includes('csv') ||
-      fileName.endsWith('.txt') ||
-      fileName.endsWith('.md') ||
-      fileName.endsWith('.csv')
-    ) {
-      return Buffer.from(normalized, 'base64')
-        .toString('utf-8')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, charLimit)
-    }
-
-    const isSpreadsheet =
-      fileType.includes('spreadsheet') ||
-      fileType.includes('excel') ||
-      fileType.includes('sheet') ||
-      fileName.endsWith('.xls') ||
-      fileName.endsWith('.xlsx')
-
-    if (!isSpreadsheet) return ''
-
-    const workbook = XLSX.read(Buffer.from(normalized, 'base64'), { type: 'buffer' })
-    const previews = workbook.SheetNames.slice(0, 2).map((sheetName) => {
-      const worksheet = workbook.Sheets[sheetName]
-      const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(worksheet, {
-        header: 1,
-        blankrows: false,
-        raw: false,
-        defval: '',
-      })
-
-      if (!rows.length) return ''
-
-      const headerIndex = rows.findIndex((row) =>
-        row.some((cell) => String(cell).trim().length > 0)
-      )
-      if (headerIndex === -1) return ''
-
-      const headerRow = rows[headerIndex].map((cell) => String(cell).trim())
-      const bodyRows = rows
-        .slice(headerIndex + 1)
-        .filter((row) => row.some((cell) => String(cell).trim().length > 0))
-        .slice(0, 10)
-
-      const lineItems = bodyRows.map((row) =>
-        headerRow
-          .slice(0, 8)
-          .map((header, index) => {
-            const value = String(row[index] ?? '').trim()
-            return header && value ? `${header}: ${value}` : ''
-          })
-          .filter(Boolean)
-          .join(' | ')
-      )
-
-      return [`[Sheet: ${sheetName}]`, ...lineItems].filter(Boolean).join('\n')
-    })
-
-    return previews.filter(Boolean).join('\n').slice(0, charLimit)
-  } catch {
-    return ''
-  }
-}
-
-function analyzeDocuments(documents: DocumentRow[]): DocumentEvidence {
+async function analyzeDocuments(documents: DocumentRow[]): Promise<DocumentEvidence> {
   if (documents.length === 0) {
     return {
       adherenceScore: null,
@@ -230,7 +126,7 @@ function analyzeDocuments(documents: DocumentRow[]): DocumentEvidence {
       doc.notes ?? '',
       doc.file_name ?? '',
     ].join(' ')
-    const preview = readDocumentTextPreview(doc)
+    const preview = await readStoredDocumentTextPreview(doc)
     const docCorpus = [descriptor, preview].filter(Boolean).join('\n')
     corpusParts.push(docCorpus)
 
@@ -280,7 +176,7 @@ function analyzeDocuments(documents: DocumentRow[]): DocumentEvidence {
         )
         if (headerIndex === -1) continue
 
-        const headers = rows[headerIndex].map((cell) => normalizeHeader(String(cell)))
+        const headers = rows[headerIndex].map((cell) => String(cell).toLowerCase().replace(/\s+/g, ' ').trim())
         const entryRows = rows
           .slice(headerIndex + 1)
           .filter((row) => row.some((cell) => String(cell).trim().length > 0))
@@ -468,11 +364,11 @@ export function getGPSLabel(gps: number): string {
 }
 
 export async function calculateBIEScores(clientId: string): Promise<BIEScoresResult> {
+  const aiDocumentsPromise = listAiClientDocuments(clientId, 8)
   const [
     adherenceRows,
     checkinRows,
     journalRows,
-    documentRows,
     barTrendRows,
     clientMeta,
   ] = await Promise.all([
@@ -511,16 +407,6 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
        ORDER BY entry_date DESC`,
       [clientId]
     ),
-    db.query<DocumentRow>(
-      `SELECT document_type, title, notes, file_type, file_name,
-              encode(file_data, 'base64') AS file_data
-       FROM client_documents
-       WHERE client_id = $1
-         AND include_in_ai = true
-       ORDER BY created_at DESC
-       LIMIT 8`,
-      [clientId]
-    ),
     db.query<SnapshotTrendRow>(
       `SELECT bar_score, snapshot_date::text AS snapshot_date
        FROM behavioral_snapshots
@@ -537,9 +423,11 @@ export async function calculateBIEScores(clientId: string): Promise<BIEScoresRes
     ),
   ])
 
+  const documentRows = await aiDocumentsPromise
+
   const checkinCount = checkinRows.length
   const journalCount = journalRows.length
-  const docEvidence = analyzeDocuments(documentRows)
+  const docEvidence = await analyzeDocuments(documentRows)
 
   let data_quality: BIEScoresResult['data_quality']
   if (checkinCount >= 1 && journalCount >= 1) data_quality = 'full'
