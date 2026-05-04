@@ -228,26 +228,16 @@ export default function JournalsPage() {
     setError('')
 
     try {
-      const fileData = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve((reader.result as string).split(',')[1])
-        reader.onerror = () => reject(new Error('Failed to read file'))
-        reader.readAsDataURL(selectedFile)
-      })
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('documentType', 'questionnaire')
+      formData.append('title', uploadTitle || selectedFile.name)
+      formData.append('notes', uploadNotes || 'Weekly check-in questionnaire uploaded from the Journal page.')
+      formData.append('includeInAi', 'true')
 
       const res = await fetch(`/api/clients/${clientId}/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: selectedFile.name,
-          fileType: selectedFile.type,
-          fileSize: selectedFile.size,
-          fileData,
-          documentType: 'questionnaire',
-          title: uploadTitle || selectedFile.name,
-          notes: uploadNotes || 'Weekly check-in questionnaire uploaded from the Journal page.',
-          includeInAi: true,
-        }),
+        body: formData,
       })
 
       const data = await res.json().catch(() => ({}))

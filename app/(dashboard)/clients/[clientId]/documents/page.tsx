@@ -99,23 +99,26 @@ export default function DocumentsPage() {
     if (!selectedFile) { setError('Please select a file'); return }
     setUploading(true); setError('')
     try {
-      const fileData = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve((reader.result as string).split(',')[1])
-        reader.onerror = () => reject(new Error('Failed to read file'))
-        reader.readAsDataURL(selectedFile)
-      })
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('documentType', docType)
+      formData.append('title', title || selectedFile.name)
+      if (notes) formData.append('notes', notes)
+      formData.append('includeInAi', String(includeInAi))
+
       const res = await fetch('/api/clients/' + clientId + '/documents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: selectedFile.name, fileType: selectedFile.type,
-          fileSize: selectedFile.size, fileData,
-          documentType: docType, title: title || selectedFile.name,
-          notes: notes || undefined, includeInAi,
-        }),
+        body: formData,
       })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Upload failed'); return }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        if (res.status === 413) {
+          setError('This file is too large for the current upload path. Try a smaller file or compress the PDF.')
+          return
+        }
+        setError(d.error ?? 'Upload failed')
+        return
+      }
       setSuccess('Document uploaded')
       setShowUpload(false); setSelectedFile(null); setTitle(''); setNotes(''); setDocType('general'); setIncludeInAi(true)
       loadDocs()

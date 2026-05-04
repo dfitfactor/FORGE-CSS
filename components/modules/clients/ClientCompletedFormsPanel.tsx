@@ -56,26 +56,16 @@ export default function ClientCompletedFormsPanel({ clientId, submissions }: Pro
     setSuccess('')
 
     try {
-      const fileData = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
-        reader.onerror = () => reject(new Error('Failed to read file'))
-        reader.readAsDataURL(selectedFile)
-      })
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('documentType', 'questionnaire')
+      formData.append('title', title || selectedFile.name)
+      formData.append('notes', notes || 'Uploaded from completed forms archive.')
+      formData.append('includeInAi', 'true')
 
       const response = await fetch(`/api/clients/${clientId}/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: selectedFile.name,
-          fileType: selectedFile.type || 'application/octet-stream',
-          fileSize: selectedFile.size,
-          fileData,
-          documentType: 'questionnaire',
-          title: title || selectedFile.name,
-          notes: notes || 'Uploaded from completed forms archive.',
-          includeInAi: true,
-        }),
+        body: formData,
       })
 
       const data = await response.json().catch(() => ({}))
