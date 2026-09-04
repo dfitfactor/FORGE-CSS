@@ -289,23 +289,24 @@ export default function PublicBookingDetailPage() {
     setCheckoutLoading(true)
     setCheckoutError('')
     try {
-      const res = await fetch('/api/stripe/checkout', {
+      const res = await fetch('/api/public/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          serviceId: selectedTarget?.kind === 'service' ? selectedTarget.id : undefined,
-          packageId: selectedTarget?.kind === 'package' ? selectedTarget.id : undefined,
-          clientName: form.clientName,
-          clientEmail: form.clientEmail,
-          clientPhone: form.clientPhone,
-          bookingDate: form.bookingDate,
-          bookingTime: form.bookingTime,
+          service_id: selectedTarget?.kind === 'service' ? selectedTarget.id : undefined,
+          package_id: selectedTarget?.kind === 'package' ? selectedTarget.id : undefined,
+          client_name: form.clientName,
+          client_email: form.clientEmail,
+          client_phone: form.clientPhone,
+          booking_date: form.bookingDate,
+          booking_time: form.bookingTime,
           notes: buildPurchaserNote(form.notes, clientProfile, purchasingForSomeoneElse),
+          slug: selectedTarget.slug,
         })
       })
       const data = await res.json().catch(() => ({}))
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl
+      if (data.url) {
+        window.location.href = data.url
       } else {
         setCheckoutError(data.error || 'Checkout failed')
       }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession, requireRole } from '@/lib/auth'
+import { DEFAULT_AISHA_WEBHOOK_URL } from '@/lib/aisha'
 import { getIntegrationSetting, maskApiKey, upsertIntegrationSetting } from '@/lib/integration-settings'
 
 const AishaIntegrationSchema = z.object({
@@ -18,7 +19,7 @@ function serializeSetting(setting: Awaited<ReturnType<typeof getIntegrationSetti
     integration_type: setting?.integration_type ?? 'other',
     api_key_masked: maskApiKey(setting?.api_key),
     has_api_key: Boolean(setting?.api_key),
-    base_url: setting?.base_url ?? '',
+    base_url: setting?.base_url ?? DEFAULT_AISHA_WEBHOOK_URL,
     is_enabled: setting?.is_enabled ?? false,
     last_test_status: setting?.last_test_status ?? null,
     last_test_message: setting?.last_test_message ?? null,

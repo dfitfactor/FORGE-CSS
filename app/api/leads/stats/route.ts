@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, requireRole } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { ensureLeadsSchema } from '@/lib/leads-schema'
 
 type StatsRow = {
   total_leads: string
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await ensureLeadsSchema()
+
     const row = await db.queryOne<StatsRow>(
       `SELECT
          COUNT(*)::text AS total_leads,

@@ -1,4 +1,5 @@
 import IntegrationsHubCard from '@/components/modules/settings/IntegrationsHubCard'
+import SquareIntegrationCard from '@/components/modules/settings/SquareIntegrationCard'
 
 export default function IntegrationsPage() {
   return (
@@ -12,6 +13,7 @@ export default function IntegrationsPage() {
         </div>
 
         <IntegrationsHubCard />
+        <SquareIntegrationCard />
       </div>
     </div>
   )

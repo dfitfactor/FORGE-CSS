@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, requireRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { convertLeadToClient } from '@/lib/lead-conversion'
+import { ensureLeadsSchema } from '@/lib/leads-schema'
 
 export async function POST(request: NextRequest, { params }: { params: { leadId: string } }) {
   const session = await getSession(request)
@@ -14,6 +15,8 @@ export async function POST(request: NextRequest, { params }: { params: { leadId:
   }
 
   try {
+    await ensureLeadsSchema()
+
     await db.query(
       `UPDATE leads
        SET status = 'won',

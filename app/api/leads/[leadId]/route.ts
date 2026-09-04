@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { convertLeadToClient } from '@/lib/lead-conversion'
 import { updateAishaLeadStage } from '@/lib/aisha'
 import { LEAD_STATUSES, type LeadRecord } from '@/lib/leads'
+import { ensureLeadsSchema } from '@/lib/leads-schema'
 
 const UpdateLeadSchema = z.object({
   status: z.enum(LEAD_STATUSES).optional(),
@@ -54,6 +55,8 @@ export async function GET(request: NextRequest, { params }: { params: { leadId: 
   }
 
   try {
+    await ensureLeadsSchema()
+
     const lead = await getLead(params.leadId)
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
@@ -77,6 +80,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { leadId
   }
 
   try {
+    await ensureLeadsSchema()
+
     const body = await request.json().catch(() => null)
     const parsed = UpdateLeadSchema.safeParse(body)
 

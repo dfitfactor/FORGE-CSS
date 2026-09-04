@@ -29,12 +29,22 @@ type IntegrationItem = {
 
 const INTEGRATIONS: IntegrationItem[] = [
   {
+    name: 'Square',
+    category: 'Payments',
+    description: 'Hosted checkout option for paid public bookings, webhook reconciliation, and alternate payment routing.',
+    status: 'connected',
+    requirements: ['Access token', 'Location ID', 'Webhook signature key'],
+    notes: 'Configuration is now available below in this Settings view. Use it when you want Square to handle one-time booking payments.',
+    icon: CreditCard,
+    href: '/integrations#square',
+  },
+  {
     name: 'Stripe',
     category: 'Payments',
-    description: 'Primary billing engine for subscriptions, checkout, webhooks, and client payment updates.',
+    description: 'Recurring billing engine for subscriptions, checkout sessions, webhooks, and client payment updates.',
     status: 'connected',
     requirements: ['Live secret key', 'Webhook secret', 'Customer portal'],
-    notes: 'Active in the platform now. Settings hub will become the control center for verification and diagnostics.',
+    notes: 'Still powers the existing subscription lifecycle and remains available even when Square is enabled for public checkout.',
     icon: CreditCard,
   },
   {

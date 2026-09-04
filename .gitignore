@@ -20,3 +20,14 @@ yarn-error.log*
 GIT
 scripts/data/yuhonas-raw.json
 tsconfig.tsbuildinfo
+
+# Local-only marketing/deployment artifacts (not part of the app source)
+.brochure-assets/
+DFitFactor-Free-7-Day-Trial-Brochure-preview.png
+DFitFactor-Free-7-Day-Trial-Brochure.pdf
+create_dfitfactor_brochure.py
+dfitfactor-bluehost-upload-clean/
+dfitfactor-bluehost-upload-current/
+dfitfactor-bluehost-upload.zip
+dfitfactor-landing-page/
+dfitfactor-source-for-claude.zip

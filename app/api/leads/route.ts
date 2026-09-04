@@ -4,6 +4,7 @@ import { getSession, requireRole } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { createAishaLead } from '@/lib/aisha'
 import { LEAD_SOURCES, LEAD_STATUSES, type LeadRecord } from '@/lib/leads'
+import { ensureLeadsSchema } from '@/lib/leads-schema'
 
 const CreateLeadSchema = z.object({
   first_name: z.string().trim().min(1).max(120),
@@ -57,6 +58,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await ensureLeadsSchema()
+
     const [leads, stats] = await Promise.all([
       db.query<LeadRecord>(
         `SELECT id,
@@ -107,6 +110,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await ensureLeadsSchema()
+
     const body = await request.json().catch(() => null)
     const parsed = CreateLeadSchema.safeParse(body)
 

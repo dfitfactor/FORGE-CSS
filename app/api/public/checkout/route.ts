@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getStripe } from '@/lib/stripe'
+import { createSquarePaymentLink, getPreferredCheckoutProvider } from '@/lib/square'
 
 const checkoutSchema = z.object({
   service_id: z.string().uuid().optional(),
@@ -27,6 +28,22 @@ type BookingTarget = {
   duration_minutes: number
   name: string
   price_cents: number
+}
+
+let cachedBookingColumns: Set<string> | null = null
+
+async function getBookingColumns() {
+  if (cachedBookingColumns) return cachedBookingColumns
+
+  const rows = await db.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'bookings'`
+  )
+
+  cachedBookingColumns = new Set(rows.map((row) => row.column_name))
+  return cachedBookingColumns
 }
 
 function getBaseUrl(request: NextRequest) {
@@ -105,11 +122,57 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create pending booking' }, { status: 500 })
     }
 
-    const stripe = getStripe()
     const baseUrl = getBaseUrl(request)
     const successUrl = `${baseUrl}/thank-you?name=${encodeURIComponent(data.client_name)}&payment=paid`
     const cancelUrl = `${baseUrl}/book/${encodeURIComponent(data.slug)}?cancelled=1`
+    const provider = await getPreferredCheckoutProvider()
+    const bookingColumns = await getBookingColumns()
 
+    if (provider === 'square') {
+      const paymentLink = await createSquarePaymentLink({
+        amountCents: priceCents,
+        bookingId: booking.id,
+        bookingName,
+        clientEmail: data.client_email,
+        clientPhone: data.client_phone,
+        description: `${bookingName} on ${data.booking_date} at ${data.booking_time}`,
+        redirectUrl: successUrl,
+      })
+
+      const updates: string[] = []
+      const values: unknown[] = []
+
+      if (bookingColumns.has('payment_provider')) {
+        updates.push(`payment_provider = 'square'`)
+      }
+      if (bookingColumns.has('square_payment_link_id')) {
+        updates.push(`square_payment_link_id = $${values.length + 1}`)
+        values.push(paymentLink.payment_link?.id ?? null)
+      }
+      if (bookingColumns.has('square_order_id')) {
+        updates.push(`square_order_id = $${values.length + 1}`)
+        values.push(paymentLink.payment_link?.order_id ?? null)
+      }
+
+      if (updates.length > 0) {
+        values.push(booking.id)
+        await db.query(
+          `UPDATE bookings
+           SET ${updates.join(', ')}
+           WHERE id = $${values.length}`,
+          values
+        )
+      }
+
+      return NextResponse.json({
+        bookingId: booking.id,
+        provider: 'square',
+        success: true,
+        url: paymentLink.payment_link?.url ?? paymentLink.payment_link?.long_url ?? null,
+      })
+    }
+
+    const stripe = getStripe()
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer_email: data.client_email,
@@ -135,7 +198,16 @@ export async function POST(request: NextRequest) {
       cancel_url: cancelUrl,
     })
 
-    return NextResponse.json({ url: session.url, bookingId: booking.id, success: true })
+    if (bookingColumns.has('payment_provider')) {
+      await db.query(
+        `UPDATE bookings
+         SET payment_provider = 'stripe'
+         WHERE id = $1`,
+        [booking.id]
+      )
+    }
+
+    return NextResponse.json({ url: session.url, bookingId: booking.id, provider: 'stripe', success: true })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' }, { status: 500 })
   }

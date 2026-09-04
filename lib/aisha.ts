@@ -1,6 +1,6 @@
 import { getIntegrationSetting } from '@/lib/integration-settings'
 
-export const AISHA_WEBHOOK_URL =
+export const DEFAULT_AISHA_WEBHOOK_URL =
   'https://api.aishacrm.com/api/workflows/855b8e91-57dc-4084-a3ee-fde8cdb1aba6/webhook'
 
 export type AishaLeadPayload = {
@@ -27,7 +27,7 @@ type SendResult = {
   error: string | null
 }
 
-async function getAishaApiKey() {
+export async function getAishaApiKey() {
   if (process.env.AISHA_API_KEY?.trim()) {
     return process.env.AISHA_API_KEY.trim()
   }
@@ -41,6 +41,20 @@ async function getAishaApiKey() {
   }
 }
 
+export async function getAishaWebhookUrl() {
+  if (process.env.AISHA_WEBHOOK_URL?.trim()) {
+    return process.env.AISHA_WEBHOOK_URL.trim()
+  }
+
+  try {
+    const setting = await getIntegrationSetting('aisha_crm')
+    return setting?.base_url?.trim() || DEFAULT_AISHA_WEBHOOK_URL
+  } catch (error) {
+    console.error('[aisha] failed to read webhook URL setting:', error)
+    return DEFAULT_AISHA_WEBHOOK_URL
+  }
+}
+
 export async function sendToAisha(payload: Record<string, unknown>): Promise<SendResult> {
   try {
     const apiKey = await getAishaApiKey()
@@ -51,7 +65,8 @@ export async function sendToAisha(payload: Record<string, unknown>): Promise<Sen
       return { success: false, error: message }
     }
 
-    const response = await fetch(AISHA_WEBHOOK_URL, {
+    const webhookUrl = await getAishaWebhookUrl()
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

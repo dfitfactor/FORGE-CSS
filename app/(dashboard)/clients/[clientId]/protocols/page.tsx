@@ -643,19 +643,22 @@ export default function ProtocolsPage() {
                       placeholder="e.g. Focus on gut healing, client has knee pain avoid deep squats, traveling 2x per month, prioritize simplicity..." />
                   </div>
 
-                  {(genType === 'movement' || genType === 'composite') && (
-                    <div>
-                      <label className="forge-label">Movement Adjustment Prompt (optional)</label>
-                      <p className="text-xs text-white/30 mb-2">Tell AI when to swap, replace, or tailor movements more specifically than the original protocol.</p>
-                      <textarea
-                        rows={4}
-                        value={movementDirectives}
-                        onChange={e => setMovementDirectives(e.target.value)}
-                        className="forge-input resize-none"
-                        placeholder="e.g. Replace barbell RDLs with a dumbbell hinge progression, bias more glute med work, avoid movements that irritate the left knee, and give more athletic unilateral options than the prior plan."
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <label className="forge-label">Movement Adjustment Prompt</label>
+                    <p className="text-xs text-white/30 mb-2">
+                      Use this to tell AI exactly how to tailor exercise selection, swaps, movement emphasis, or replacements from the original protocol.
+                    </p>
+                    <textarea
+                      rows={4}
+                      value={movementDirectives}
+                      onChange={e => setMovementDirectives(e.target.value)}
+                      className="forge-input resize-none"
+                      placeholder="e.g. Replace barbell RDLs with a dumbbell hinge progression, bias more glute med work, avoid movements that irritate the left knee, and give more athletic unilateral options than the prior plan."
+                    />
+                    <p className="mt-2 text-[11px] text-white/25">
+                      Best used with Movement or Composite generation.
+                    </p>
+                  </div>
 
                 <button onClick={handleGenerate} disabled={generating}
                   className="forge-btn-gold w-full flex items-center justify-center gap-2 py-3.5 disabled:opacity-50">

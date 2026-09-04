@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, requireRole } from '@/lib/auth'
+import { getAishaWebhookUrl } from '@/lib/aisha'
 import { getIntegrationSetting, recordIntegrationTestResult } from '@/lib/integration-settings'
 
 export async function POST(request: NextRequest) {
@@ -15,20 +16,24 @@ export async function POST(request: NextRequest) {
   try {
     const setting = await getIntegrationSetting('aisha_crm')
 
-    if (!setting?.base_url) {
-      return NextResponse.json({ error: 'Add the AI-SHA CRM base URL first' }, { status: 400 })
-    }
-
-    if (!setting.api_key) {
+    if (!setting?.api_key) {
       return NextResponse.json({ error: 'Add the AI-SHA CRM API key first' }, { status: 400 })
     }
 
-    const response = await fetch(setting.base_url, {
-      method: 'GET',
+    const webhookUrl = await getAishaWebhookUrl()
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${setting.api_key}`,
         Accept: 'application/json',
       },
+      body: JSON.stringify({
+        event_type: 'connection.test',
+        source_system: 'FORGE_CSS',
+        test: true,
+        tested_at: new Date().toISOString(),
+      }),
       cache: 'no-store',
     })
 
